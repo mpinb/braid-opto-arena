@@ -1,0 +1,72 @@
+import multiprocessing as mp
+import logging
+import serial
+import threading
+from csv_writer import CsvWriter
+from queue import Queue
+import time
+import copy
+
+
+def opto_trigger(
+    trigger_event: mp.Event,
+    kill_event: mp.Event,
+    data_dict: mp.Manager.dict,
+    barrier: mp.Barrier,
+    params: dict,
+):
+    # start csv writer
+    csv_queue = Queue()
+    csv_kill = threading.Event()
+    csv_writer = CsvWriter(
+        csv_file=params["folder"] + "opto.csv",
+        queue=csv_queue,
+        kill_event=csv_kill,
+    ).start()
+
+    # connect to arduino
+    board = serial.Serial(params["arduino_devices"]["opto_trigger"], 9600)
+
+    # get parameters from dict
+    duration = params["opto_params"]["duration"]
+    intensity = params["opto_params"]["intensity"]
+    frequency = params["opto_params"]["frequency"]
+
+    # wait for all processes to start
+    barrier.wait()
+    logging.info("opto_trigger started.")
+
+    # start main loop
+    while True:
+        # check for kill event
+        if kill_event.is_set():
+            break
+
+        # wait for trigger event
+        if trigger_event.is_set():
+            # if the trigger event got set, trigger the arduino
+            logging.debug("OptoTrigger triggered.")
+
+            # get data from mp dict
+            data = copy.deepcopy(data_dict)
+            logging.debug(f"Got data: {data}")
+
+            # send trigger to arduino
+            board.write(f"<{duration},{intensity},{frequency}>".encode())
+            data["opto_trigger_to_arduino_send_time"] = time.time()
+            logging.debug("Sending trigger to arduino")
+
+            # add information regarding the trigger to the data dict
+            data["duration"] = duration
+            data["intensity"] = intensity
+            data["frequency"] = frequency
+            data["opto_trigger_to_csv_send_time"] = time.time()
+
+            # send to csv writer
+            csv_queue.put(data)
+            logging.debug("Writing data to csv")
+
+    board.close()
+    csv_kill.set()
+    csv_writer.join()
+    logging.info("opto_trigger stopped.")

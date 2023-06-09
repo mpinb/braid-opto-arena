@@ -1,0 +1,58 @@
+[arduino_devices]
+opto_trigger = '/dev/opto_trigger'
+camera_trigger = '/dev/camera_trigger'
+
+[trigger_params]
+min_trajec_time = 1.0   # minimum trajectory time (in seconds)
+refractory_time = 5     # minimum time between activations (in seconds)
+radius_min = 0.025      # minimum radius for activation (in meters)
+zmin = 0.15              # minimum z for activation (in meters)
+zmax = 0.25             # maximum z for activation (in meters)
+center_x = 0       # arena center x in meters (in meters)
+center_y = 0       # arena center y in meters (in meters)
+
+[opto_params]
+active = true
+duration = 300         # in milliseconds
+intensity = 255        # in 0-255 range
+frequency = 0          # in Hz
+
+[stim_params]
+    [stim_params.window]
+    size = [640, 128]
+    pos = [0, 0]
+    fullscr = false
+    screen = 1
+    color = [1, 1, 1]
+    units = "pix"
+    
+    [stim_params.static]
+    active = true
+    image = "./resources/static.jpg"
+
+    [stim_params.grating]
+    active = false
+    frequency = 0
+    orientation = 0
+    direction = 0
+    color = "black"
+
+    [stim_params.looming]
+    active = true
+    position = "random"
+    max_radius = 64
+    duration = 300
+    color = "black"
+
+[highspeed_params]
+    [highspeed_params.cameras]
+    camera1 = "23047980"
+    camera2 = "23096298"
+    camera3 = "23088879"
+
+    [highspeed_params.parameters]
+    fps = 500
+    exposure_time = 1500
+    gain = 0
+    sensor_readout_mode = "Fast"
+
