@@ -44,15 +44,17 @@ frequency = 0          # in Hz
     duration = 300
     color = "black"
 
-[highspeed_params]
-    [highspeed_params.cameras]
+[highspeed]
+    active = true
+
+    [highspeed.cameras]
     camera1 = "23047980"
     camera2 = "23096298"
     camera3 = "23088879"
 
-    [highspeed_params.parameters]
+    [highspeed.parameters]
     fps = 500
-    exposure_time = 1500
+    exposure_time = 1900
     gain = 0
     sensor_readout_mode = "Fast"
 

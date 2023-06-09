@@ -6,7 +6,9 @@ import shutil
 import pathlib
 import time
 import git
+import serial
 
+from highspeed_cameras import start_highspeed_cameras
 from flydra_proxy import flydra_proxy
 from position_trigger import position_trigger
 from stimuli import stimuli
@@ -37,6 +39,7 @@ def BraidTrigger(params_file: str, root_folder: str):
 
     # check if the braid folder exists
     folder = check_braid_folder(root_folder)
+    params["folder"] = folder
 
     # copy the params file and commit info to the braid folder
     shutil.copyfile(params_file, folder + "/params.toml")
@@ -76,8 +79,41 @@ def BraidTrigger(params_file: str, root_folder: str):
         target=stimuli, args=(trigger_event, kill_event, mp_dict, barrier, params)
     ).start()
 
-    while not kill_event.is_set():
-        time.sleep(1)
+    # if highspeed cameras are active, start them
+    if params["highspeed_cameras"]["active"]:
+        # connect to highspeed trigger
+        highspeed_board = serial.Serial(
+            params["arduino_devices"]["camera_trigger"], 9600
+        )
+
+        # start highspeed camera processes
+        highspeed_cameras = start_highspeed_cameras(
+            trigger_event,
+            kill_event,
+            mp_dict,
+            barrier,
+            params,
+        )
+
+    # wait until all processes finish intializing
+    barrier.wait()
+
+    # start camera trigger
+    if params["highspeed_cameras"]["active"]:
+        highspeed_board.write(b"H")
+
+    # start main loop
+    while True:
+        if kill_event.is_set():
+            break
+
+    # stop camera trigger
+    if params["highspeed_cameras"]["active"]:
+        highspeed_board.write(b"L")
+
+    # join all processes
+    [p.join() for p in highspeed_cameras]
+    [p.join() for p in process_dict.values()]
 
 
 if __name__ == "__main__":
