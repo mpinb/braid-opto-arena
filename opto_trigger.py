@@ -1,17 +1,19 @@
-import multiprocessing as mp
-import logging
-import serial
-import threading
-from csv_writer import CsvWriter
-from queue import Queue
-import time
 import copy
+import logging
+import multiprocessing as mp
+import threading
+import time
+from queue import Queue
+
+import serial
+
+from csv_writer import CsvWriter
 
 
 def opto_trigger(
     trigger_event: mp.Event,
     kill_event: mp.Event,
-    data_dict: mp.Manager.dict,
+    data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
     params: dict,
 ):

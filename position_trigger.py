@@ -1,6 +1,6 @@
 import logging
-import time
 import multiprocessing as mp
+import time
 from queue import Queue
 
 
@@ -8,7 +8,7 @@ def position_trigger(
     in_queue: mp.Queue,
     trigger_event: mp.Event,
     kill_event: mp.Event,
-    mp_data_dict: mp.Manager.dict,
+    mp_data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
     params: dict,
 ):

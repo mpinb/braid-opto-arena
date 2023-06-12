@@ -1,18 +1,19 @@
-import multiprocessing as mp
 import logging
-import signal
-import tomllib
-import shutil
+import multiprocessing as mp
 import pathlib
+import shutil
+import signal
 import time
+
 import git
 import serial
+import toml
 
-from highspeed_cameras import start_highspeed_cameras
 from flydra_proxy import flydra_proxy
+from highspeed_cameras import start_highspeed_cameras
+from opto_trigger import opto_trigger
 from position_trigger import position_trigger
 from stimuli import stimuli
-from opto_trigger import opto_trigger
 
 
 def check_braid_folder(root_folder: str) -> str:
@@ -38,8 +39,7 @@ def BraidTrigger(
     root_folder: str = "/media/benyishay_la/Data/Experiments/",
 ):
     # load the params
-    with open(params_file, "rb") as pf:
-        params = tomllib.load(pf)
+    params = toml.load(params_file)
 
     # check if the braid folder exists
     folder = check_braid_folder(root_folder)
@@ -60,7 +60,7 @@ def BraidTrigger(
     trigger_event = manager.Event()
 
     # create a barrier to sync processes
-    if params["highspeed_cameras"]["active"]:
+    if params["highspeed"]["active"]:
         n_barriers = 5 + len(params["highspeed"]["cameras"])
     barrier = manager.Barrier(n_barriers)
 
@@ -68,28 +68,36 @@ def BraidTrigger(
     process_dict = {}
 
     # start flydra proxy process
+    flydra2_url = "http://0.0.0.0:8397/"
     process_dict["flydra_proxy"] = mp.Process(
-        target=flydra_proxy, args=(params["flydra2_url"], queue, kill_event, barrier)
+        target=flydra_proxy,
+        args=(flydra2_url, queue, kill_event, barrier),
+        name="flydra_proxy",
     ).start()
 
     # start position trigger process
     process_dict["position_trigger"] = mp.Process(
         target=position_trigger,
         args=(queue, trigger_event, kill_event, mp_dict, barrier, params),
+        name="position_trigger",
     ).start()
 
     # start opto trigger process
     process_dict["opto_trigger"] = mp.Process(
-        target=opto_trigger, args=(trigger_event, kill_event, mp_dict, barrier, params)
+        target=opto_trigger,
+        args=(trigger_event, kill_event, mp_dict, barrier, params),
+        name="opto_trigger",
     ).start()
 
     # start stimuli process
     process_dict["stimuli"] = mp.Process(
-        target=stimuli, args=(trigger_event, kill_event, mp_dict, barrier, params)
+        target=stimuli,
+        args=(trigger_event, kill_event, mp_dict, barrier, params),
+        name="stimuli",
     ).start()
 
     # if highspeed cameras are active, start them
-    if params["highspeed_cameras"]["active"]:
+    if params["highspeed"]["active"]:
         # connect to highspeed trigger
         highspeed_board = serial.Serial(
             params["arduino_devices"]["camera_trigger"], 9600
@@ -126,7 +134,7 @@ def BraidTrigger(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.info, format="%(asctime)s - %(message)s")
+    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(message)s")
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     BraidTrigger(
         params_file="./params.toml", root_folder="/media/benyishay_la/Data/Experiments/"

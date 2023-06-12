@@ -1,15 +1,18 @@
-from psychopy import visual, core
-import multiprocessing as mp
-import logging
-from csv_writer import CsvWriter
-import threading
-from queue import Queue
-import numpy as np
-import time
 import copy
+import logging
+import multiprocessing as mp
+import threading
+import time
+from queue import Queue
+
+import numpy as np
+from psychopy.visual.circle import Circle
+from psychopy.visual.grating import GratingStim
+
+from csv_writer import CsvWriter
 
 
-class LoomingStimulus(visual.Circle):
+class LoomingStimulus(Circle):
     def __init__(
         self, position: list | int, max_radius: int, duration: int, *args, **kwargs
     ) -> None:
@@ -48,7 +51,7 @@ class LoomingStimulus(visual.Circle):
         return (np.random.randint(-self.win.size[0] / 2, self.win.size[0] / 2), 0)
 
 
-class DriftingGratingStimulus(visual.GratingStim):
+class DriftingGratingStimulus(GratingStim):
     def __init__(
         self,
         frequency: int,
@@ -76,18 +79,25 @@ class DriftingGratingStimulus(visual.GratingStim):
 def stimuli(
     trigger_event: mp.Event,
     kill_event: mp.Event,
-    data_dict: mp.Manager.dict,
+    data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
     params: dict,
 ):
+    # import psychopy locally
+    from psychopy import core, visual
+
     # start csv writer
     csv_queue = Queue()
     csv_kill = threading.Event()
-    csv_writer = CsvWriter(
-        csv_file=params["folder"] + "stim.csv",
-        queue=csv_queue,
-        kill_event=csv_kill,
-    ).start()
+    try:
+        csv_writer = CsvWriter(
+            csv_file=params["folder"] + "stim.csv",
+            queue=csv_queue,
+            kill_event=csv_kill,
+        ).start()
+    except KeyError as e:
+        logging.error(f"Could not start csv writer: {e}")
+        pass
 
     # get which stimuli are active
     show_static = params["stim_params"]["static"]["active"]
@@ -95,15 +105,24 @@ def stimuli(
     show_grating = params["stim_params"]["grating"]["active"]
 
     # create window
-    win = visual.Window(**params["stim_params"]["window_params"], allowGUI=False)
+    win = visual.Window(
+        size=[640, 128],
+        pos=[0, 0],
+        fullscr=False,
+        screen=1,
+        color=[1, 1, 1],
+        units="pix",
+        allowGUI=False,
+    )
 
     # create stimuli
     if show_static:
         static_params = params["stim_params"]["static"]
         static_stim = visual.ImageStim(
             win=win,
+            image=static_params["image"],
             size=win.size,
-            pos=static_params["pos"],
+            pos=[0, 0],
             units="pix",
         )
 
@@ -188,3 +207,18 @@ def stimuli(
     csv_kill.set()
     csv_writer.join()
     logging.info("stimuli process ended.")
+
+
+if __name__ == "__main__":
+    import multiprocessing
+
+    import toml
+
+    params = toml.load("params.toml")
+    s = stimuli(
+        trigger_event=mp.Event(),
+        kill_event=mp.Event(),
+        data_dict=mp.Manager().dict(),
+        barrier=mp.Barrier(2),
+        params=params,
+    )

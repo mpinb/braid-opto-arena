@@ -1,21 +1,21 @@
+import copy
 import logging
 import multiprocessing as mp
 import os
 import threading
 import time
 from collections import deque
-import copy
+from queue import Queue
 
 import cv2
 import pypylon.pylon as py
 from vidgear.gears import WriteGear
-from queue import Queue
 
 
 def start_highspeed_cameras(
     trigger_event: mp.Event,
     kill_event: mp.Event,
-    mp_dict: mp.Manager.dict,
+    mp_dict: mp.Manager().dict,
     barrier: mp.Barrier,
     params: dict,
 ):
@@ -43,8 +43,8 @@ def start_highspeed_cameras(
                     params,
                 ),
                 name=f"camera_{camera_serial}",
-            )
-        ).start()
+            ).start()
+        )
         time.sleep(3)
 
     return cameras_processes
@@ -96,8 +96,8 @@ def highspeed_camera(
     save_folder: str,
     trigger_event: mp.Event,
     kill_event: mp.Event,
-    mp_dict: mp.Manager.dict,
-    barrier: mp.Manager.Barrier,
+    mp_dict: mp.Manager().dict,
+    barrier: mp.Manager().Barrier,
     params,
 ):
     logging.info(f"Initializing camera {camera_serial}")
