@@ -1,7 +1,7 @@
 import logging
 import multiprocessing as mp
+import queue
 import time
-from queue import Queue
 
 
 def position_trigger(
@@ -10,6 +10,7 @@ def position_trigger(
     kill_event: mp.Event,
     mp_data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
+    trigger_barrier: mp.Barrier,
     params: dict,
 ):
     # tracking control
@@ -36,7 +37,7 @@ def position_trigger(
         # get chunk from queue if possible
         try:
             data = in_queue.get(block=False, timeout=0.01)
-        except Queue.Empty:
+        except queue.Empty:
             # if queue is empty, continue
             continue
 
@@ -79,7 +80,7 @@ def position_trigger(
             continue
 
         # get positional data
-        pos = data["Update"]["pos"]
+        pos = data["Update"]
         radius = _get_radius_fast(pos, params["trigger_params"])
 
         # check for trigger conditions
@@ -109,7 +110,16 @@ def position_trigger(
             )
 
             # set trigger event
+            trigger_time = time.time()
+
             trigger_event.set()
+
+            trigger_barrier.wait()
+
+            trigger_event.clear()
+
+            trigger_barrier.reset()
+            print(f"Barrier time {time.time() - trigger_time:.3f}s")
 
     logging.info("PositionTrigger stopped.")
 

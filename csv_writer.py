@@ -1,8 +1,8 @@
 import csv
 import logging
-import threading
 import os
 import queue
+import threading
 import time
 
 
@@ -40,25 +40,25 @@ class CsvWriter(threading.Thread):
             data["csv_writer_receive_time"] = time.time()
 
             # write data to file
-            logging.debug(f"Writing data {data} to {self.filename}")
+            # logging.debug(f"Writing data {data} to {self.filename}")
             self.write_row(data)
 
         self.csv_file.close()
 
     def write_row(self, data: list):
-        logging.debug(f"Writing row {data} to {self.filename}")
+        # logging.debug(f"Writing row {data} to {self.filename}")
 
         data["csv_writer_write_time"] = time.time()
 
         # if the file is empty, write the header
-        if self._get_file_size() == 0:
+        if self._get_file_size == 0:
             self.csv_writer.writerow(list(data.keys()))
 
         # write line
-        self.csv_writer.writerow(list(data.values))
+        self.csv_writer.writerow(list(data.values()))
 
         # flush to disk
-        self.csv_writer.flush()
+        self.csv_file.flush()
 
     @property
     def _get_file_size(self):

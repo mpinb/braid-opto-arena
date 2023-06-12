@@ -15,13 +15,14 @@ def opto_trigger(
     kill_event: mp.Event,
     data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
+    trigger_barrier: mp.Barrier,
     params: dict,
 ):
     # start csv writer
     csv_queue = Queue()
     csv_kill = threading.Event()
     csv_writer = CsvWriter(
-        csv_file=params["folder"] + "opto.csv",
+        csv_file=params["folder"] + "/opto.csv",
         queue=csv_queue,
         kill_event=csv_kill,
     ).start()
@@ -70,8 +71,8 @@ def opto_trigger(
             # send to csv writer
             csv_queue.put(data)
             logging.debug("Writing data to csv")
+            trigger_barrier.wait()
 
     board.close()
     csv_kill.set()
-    csv_writer.join()
     logging.info("opto_trigger stopped.")

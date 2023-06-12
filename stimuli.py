@@ -4,6 +4,7 @@ import multiprocessing as mp
 import threading
 import time
 from queue import Queue
+
 from csv_writer import CsvWriter
 
 
@@ -12,6 +13,7 @@ def stimuli(
     kill_event: mp.Event,
     data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
+    trigger_barrier: mp.Barrier,
     params: dict,
 ):
     # import psychopy locally
@@ -22,7 +24,7 @@ def stimuli(
     csv_kill = threading.Event()
     try:
         csv_writer = CsvWriter(
-            csv_file=params["folder"] + "stim.csv",
+            csv_file=params["folder"] + "/stim.csv",
             queue=csv_queue,
             kill_event=csv_kill,
         ).start()
@@ -102,8 +104,8 @@ def stimuli(
                 logging.debug("Looming stimulus going.")
                 data["looming_pos_x"] = looming_stim.pos[0]
                 data["looming_pos_y"] = looming_stim.pos[1]
-                data["looming_radius"] = looming_stim.max_radius
-                data["looming_duration"] = looming_stim.duration
+                data["looming_radius"] = looming_params["max_radius"]
+                data["looming_duration"] = looming_params["duration"]
                 looming_ongoing = True
 
             if show_grating and not grating_ongoing:
@@ -113,11 +115,12 @@ def stimuli(
             data["stimulus_to_csv_writer"] = time.time()
             # send to csv writer
             csv_queue.put(data)
+            trigger_barrier.wait()
 
         # update stimuli
         if show_looming and looming_ongoing:
             looming_stim.radius += 1
-            if looming_stim.radius >= looming_stim.max_radius:
+            if looming_stim.radius >= looming_params["max_radius"]:
                 looming_stim.radius = 0
                 show_looming = False
                 looming_ongoing = False
@@ -134,7 +137,6 @@ def stimuli(
 
     # end csv writer
     csv_kill.set()
-    csv_writer.join()
     logging.info("stimuli process ended.")
 
 

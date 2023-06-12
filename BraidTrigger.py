@@ -1,5 +1,6 @@
 import logging
 import multiprocessing as mp
+import os
 import pathlib
 import shutil
 import signal
@@ -10,7 +11,7 @@ import serial
 import toml
 
 from flydra_proxy import flydra_proxy
-from highspeed_cameras import start_highspeed_cameras
+from highspeed_cameras import highspeed_camera
 from opto_trigger import opto_trigger
 from position_trigger import position_trigger
 from stimuli import stimuli
@@ -38,6 +39,13 @@ def BraidTrigger(
     params_file: str = "./params.toml",
     root_folder: str = "/media/benyishay_la/Data/Experiments/",
 ):
+    # a signal handler to kill the process
+    def signal_handler(signum, frame):
+        print("Killing all processes...")
+        kill_event.set()
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     # load the params
     params = toml.load(params_file)
 
@@ -63,6 +71,7 @@ def BraidTrigger(
     if params["highspeed"]["active"]:
         n_barriers = 5 + len(params["highspeed"]["cameras"])
     barrier = manager.Barrier(n_barriers)
+    trigger_barrier = manager.Barrier(n_barriers - 2)
 
     # create a dictionary to hold all processes
     process_dict = {}
@@ -78,21 +87,29 @@ def BraidTrigger(
     # start position trigger process
     process_dict["position_trigger"] = mp.Process(
         target=position_trigger,
-        args=(queue, trigger_event, kill_event, mp_dict, barrier, params),
+        args=(
+            queue,
+            trigger_event,
+            kill_event,
+            mp_dict,
+            barrier,
+            trigger_barrier,
+            params,
+        ),
         name="position_trigger",
     ).start()
 
     # start opto trigger process
     process_dict["opto_trigger"] = mp.Process(
         target=opto_trigger,
-        args=(trigger_event, kill_event, mp_dict, barrier, params),
+        args=(trigger_event, kill_event, mp_dict, barrier, trigger_barrier, params),
         name="opto_trigger",
     ).start()
 
     # start stimuli process
     process_dict["stimuli"] = mp.Process(
         target=stimuli,
-        args=(trigger_event, kill_event, mp_dict, barrier, params),
+        args=(trigger_event, kill_event, mp_dict, barrier, trigger_barrier, params),
         name="stimuli",
     ).start()
 
@@ -103,39 +120,55 @@ def BraidTrigger(
             params["arduino_devices"]["camera_trigger"], 9600
         )
 
-        # start highspeed camera processes
-        highspeed_cameras = start_highspeed_cameras(
-            trigger_event,
-            kill_event,
-            mp_dict,
-            barrier,
-            params,
-        )
+        # setup video save folder
+        save_folder = os.path.basename(params["folder"])[:-6]
+        if not os.path.exists(f"/home/benyishay_la/Videos/{save_folder}"):
+            os.mkdir(f"/home/benyishay_la/Videos/{save_folder}")
 
+        # initialize all camera processes
+        camera_processes = []
+        for _, camera_serial in params["highspeed"]["cameras"].items():
+            camera_processes.append(
+                mp.Process(
+                    target=highspeed_camera,
+                    args=(
+                        camera_serial,
+                        save_folder,
+                        trigger_event,
+                        kill_event,
+                        mp_dict,
+                        barrier,
+                        trigger_barrier,
+                        params,
+                    ),
+                    name=f"highspeed_camera_{camera_serial}",
+                ).start()
+            )
+            time.sleep(3)
+
+    logging.info("Reached barrier")
     # wait until all processes finish intializing
     barrier.wait()
 
     # start camera trigger
-    if params["highspeed_cameras"]["active"]:
+    if params["highspeed"]["active"]:
         highspeed_board.write(b"H")
 
+    logging.info("All proceeses initialized...")
     # start main loop
     while True:
         if kill_event.is_set():
             break
 
     # stop camera trigger
-    if params["highspeed_cameras"]["active"]:
+    if params["highspeed"]["active"]:
         highspeed_board.write(b"L")
-
-    # join all processes
-    [p.join() for p in highspeed_cameras]
-    [p.join() for p in process_dict.values()]
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(message)s")
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    logging.basicConfig(
+        level=logging.INFO, format="%(processName)s: %(asctime)s - %(message)s"
+    )
     BraidTrigger(
         params_file="./params.toml", root_folder="/media/benyishay_la/Data/Experiments/"
     )

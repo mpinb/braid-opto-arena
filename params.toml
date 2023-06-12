@@ -28,7 +28,7 @@ frequency = 0          # in Hz
     
     [stim_params.static]
     active = true
-    image = "./resources/static.jpg"
+    image = "./static.jpg"
 
     [stim_params.grating]
     active = false
