@@ -4,76 +4,7 @@ import multiprocessing as mp
 import threading
 import time
 from queue import Queue
-
-import numpy as np
-from psychopy.visual.circle import Circle
-from psychopy.visual.grating import GratingStim
-
 from csv_writer import CsvWriter
-
-
-class LoomingStimulus(Circle):
-    def __init__(
-        self, position: list | int, max_radius: int, duration: int, *args, **kwargs
-    ) -> None:
-        super().__init__(*args, **kwargs)
-
-        if type(position) is int:
-            self.pos = (position, 0)
-        elif type(position) is str:
-            if position == "random":
-                self.random = True
-            else:
-                raise ValueError("position must be 'random' or an integer")
-        else:
-            self.pos = position
-
-        self.max_radius = max_radius
-        self.duration = duration
-        self.do_loom = False
-
-    def init_loom(self):
-        if self.random:
-            self.pos = self._get_random_position()
-        self.do_loom = True
-
-    def loom(self):
-        # if the radius is smaller than the max radius, increase it
-        if self.radius < self.max_radius:
-            self.radius += int(self.max_radius / ((self.duration * 1e-3) / (1 / 60)))
-
-        # otherwise, stop the loom
-        else:
-            self.radius = 0
-            self.do_loom = False
-
-    def _get_random_position(self):
-        return (np.random.randint(-self.win.size[0] / 2, self.win.size[0] / 2), 0)
-
-
-class DriftingGratingStimulus(GratingStim):
-    def __init__(
-        self,
-        frequency: int,
-        orientation: int,
-        direction: int,
-        duration: int | None = None,
-        *args,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-
-        self.sf = frequency
-        self.ori = orientation
-        self.direction = direction
-        self.do_drift = False
-
-    def init_drift(self):
-        pass
-
-    def drift(self):
-        self.do_drift = True
-        self.phase += self.direction * self.sf * (1 / 60)
 
 
 def stimuli(
@@ -128,30 +59,25 @@ def stimuli(
 
     if show_looming:
         looming_params = params["stim_params"]["looming"]
-        looming_stim = LoomingStimulus(
+        looming_stim = visual.Circle(
             win=win,
-            position=looming_params["position"],
-            max_radius=looming_params["max_radius"],
-            duration=looming_params["duration"],
-            lineColor=looming_params["color"],
-            fillColor=looming_params["color"],
-            radius=0.0,
+            pos=[0, 0],
+            radius=0,
             edges=100,
             units="pix",
+            fillColor="black",
+            lineColor="black",
             autoDraw=True,
         )
 
     if show_grating:
         grating_params = params["stim_params"]["grating"]
-        grating_stim = DriftingGratingStimulus(
-            win=win,
-            frequency=grating_params["frequency"],
-            orientation=grating_params["orientation"],
-            direction=grating_params["direction"],
-            tex="sqr",
-            units="pix",
-            autoDraw=True,
+        grating_stim = visual.GratingStim(
+            win=win, tex="sqr", units="pix", autoDraw=True
         )
+
+    looming_ongoing = False
+    grating_ongoing = False
 
     # wait for all processes to start
     barrier.wait()
@@ -172,16 +98,15 @@ def stimuli(
             data["stimulus_start_time"] = time.time()
 
             # initialize stimuli
-            if show_looming and not looming_stim.do_loom:
+            if show_looming and not looming_ongoing:
                 logging.debug("Looming stimulus going.")
-                looming_stim.init_loom()
-
                 data["looming_pos_x"] = looming_stim.pos[0]
                 data["looming_pos_y"] = looming_stim.pos[1]
                 data["looming_radius"] = looming_stim.max_radius
                 data["looming_duration"] = looming_stim.duration
+                looming_ongoing = True
 
-            if show_grating and not grating_stim.do_drift:
+            if show_grating and not grating_ongoing:
                 logging.debug("Grating stimulus going.")
                 grating_stim.init_drift()
 
@@ -190,8 +115,12 @@ def stimuli(
             csv_queue.put(data)
 
         # update stimuli
-        if show_looming:
-            looming_stim.loom()
+        if show_looming and looming_ongoing:
+            looming_stim.radius += 1
+            if looming_stim.radius >= looming_stim.max_radius:
+                looming_stim.radius = 0
+                show_looming = False
+                looming_ongoing = False
 
         if show_grating:
             grating_stim.drift()
@@ -222,3 +151,67 @@ if __name__ == "__main__":
         barrier=mp.Barrier(2),
         params=params,
     )
+
+
+# class LoomingStimulus(Circle):
+#     def __init__(
+#         self, position: list | int, max_radius: int, duration: int, *args, **kwargs
+#     ) -> None:
+#         super().__init__(*args, **kwargs)
+
+#         if type(position) is int:
+#             self.pos = (position, 0)
+#         elif type(position) is str:
+#             if position == "random":
+#                 self.random = True
+#             else:
+#                 raise ValueError("position must be 'random' or an integer")
+#         else:
+#             self.pos = position
+
+#         self.max_radius = max_radius
+#         self.duration = duration
+#         self.do_loom = False
+
+#     def init_loom(self):
+#         if self.random:
+#             self.pos = self._get_random_position()
+#         self.do_loom = True
+
+#     def loom(self):
+#         # if the radius is smaller than the max radius, increase it
+#         if self.radius < self.max_radius:
+#             self.radius += int(self.max_radius / ((self.duration * 1e-3) / (1 / 60)))
+
+#         # otherwise, stop the loom
+#         else:
+#             self.radius = 0
+#             self.do_loom = False
+
+#     def _get_random_position(self):
+#         return (np.random.randint(-self.win.size[0] / 2, self.win.size[0] / 2), 0)
+
+
+# class DriftingGratingStimulus(GratingStim):
+#     def __init__(
+#         self,
+#         frequency: int,
+#         orientation: int,
+#         direction: int,
+#         duration: int | None = None,
+#         *args,
+#         **kwargs,
+#     ) -> None:
+#         super().__init__(*args, **kwargs)
+
+#         self.sf = frequency
+#         self.ori = orientation
+#         self.direction = direction
+#         self.do_drift = False
+
+#     def init_drift(self):
+#         pass
+
+#     def drift(self):
+#         self.do_drift = True
+#         self.phase += self.direction * self.sf * (1 / 60)
