@@ -1,7 +1,7 @@
 import multiprocessing as mp
 import logging
 import signal
-import toml
+import tomllib
 import shutil
 import pathlib
 import time
@@ -33,9 +33,13 @@ def check_braid_folder(root_folder: str) -> str:
     return curr_braid_folder[0].as_posix()
 
 
-def BraidTrigger(params_file: str, root_folder: str):
+def BraidTrigger(
+    params_file: str = "./params.toml",
+    root_folder: str = "/media/benyishay_la/Data/Experiments/",
+):
     # load the params
-    params = toml.load(params_file)
+    with open(params_file, "rb") as pf:
+        params = tomllib.load(pf)
 
     # check if the braid folder exists
     folder = check_braid_folder(root_folder)
@@ -54,8 +58,13 @@ def BraidTrigger(params_file: str, root_folder: str):
     mp_dict = manager.dict()
     kill_event = manager.Event()
     trigger_event = manager.Event()
-    barrier = manager.Barrier(9)
 
+    # create a barrier to sync processes
+    if params["highspeed_cameras"]["active"]:
+        n_barriers = 5 + len(params["highspeed"]["cameras"])
+    barrier = manager.Barrier(n_barriers)
+
+    # create a dictionary to hold all processes
     process_dict = {}
 
     # start flydra proxy process

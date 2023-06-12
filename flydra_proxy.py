@@ -18,12 +18,16 @@ def _parse_chunk(chunk):
 
 
 def flydra_proxy(
-    flydra2_url, out_queue: mp.Queue, kill_event: mp.Event, barrier: mp.Barrier
+    flydra2_url: str,
+    out_queue: mp.Queue,
+    kill_event: mp.Event,
+    barrier: mp.Barrier,
 ):
     session = requests.session()
     r = session.get(flydra2_url)
     assert r.status_code == requests.codes.ok
 
+    # connect to the event stream
     events_url = flydra2_url + "events"
     r = session.get(
         events_url,
@@ -41,10 +45,6 @@ def flydra_proxy(
             break
 
         stime = time.time()
-
-        # check for kill event
-        if kill_event.is_set():
-            break
 
         data = _parse_chunk(chunk)
 

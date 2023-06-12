@@ -36,10 +36,11 @@ def start_highspeed_cameras(
                 args=(
                     camera_serial,
                     save_folder,
-                    params["highspeed"]["parameters"],
                     trigger_event,
+                    kill_event,
                     mp_dict,
                     barrier,
+                    params,
                 ),
                 name=f"camera_{camera_serial}",
             )
@@ -97,11 +98,7 @@ def highspeed_camera(
     kill_event: mp.Event,
     mp_dict: mp.Manager.dict,
     barrier: mp.Manager.Barrier,
-    pre_trigger_recording: bool = False,
-    total_time: int | None = 3,
-    time_ratio: float | None = 0.3,
-    exposure_time: int = 5000,
-    gain: int = 0,
+    params,
 ):
     logging.info(f"Initializing camera {camera_serial}")
 
@@ -117,22 +114,29 @@ def highspeed_camera(
     cam.TriggerSource = "Line1"
     cam.TriggerActivation = "RisingEdge"
     cam.TriggerMode = "On"
-    cam.ExposureTime = exposure_time
-    cam.Gain = gain
-    cam.SensorReadoutMode = "Fast"
+    cam.ExposureTime = params["highspeed"]["parameters"]["exposure_time"]
+    cam.Gain = params["highspeed"]["parameters"]["gain"]
+    cam.SensorReadoutMode = params["highspeed"]["parameters"]["sensor_readout_mode"]
 
     # fps
-    fps = cam.ResultingFrameRate.GetValue()
+    if params["highspeed"]["parameters"]["fps"] is not None:
+        fps = params["highspeed"]["parameters"]["fps"]
+    else:
+        fps = cam.ResultingFrameRate.GetValue()
 
     # buffer setup
+    time_before = params["highspeed"]["parameters"]["time_before"]
+    time_after = params["highspeed"]["parameters"]["time_after"]
+    total_time = time_before + time_after
     if total_time is None:
         frame_buffer = []
     else:
         frame_buffer = deque(maxlen=int(fps * total_time))
 
     # time_ratio means how much time before the trigger we want to record
-    frames_before = int(fps * total_time * time_ratio)  # noqa: F841
-    frames_after = int(fps * total_time * (1 - time_ratio))
+    frames_before = int(fps * time_before)  # noqa: F841
+    frames_after = int(fps * time_after)
+    data = {}
 
     # start video writer process
     frames_packet = Queue()
@@ -158,7 +162,10 @@ def highspeed_camera(
             frame_buffer.append(grabResult.GetArray())
 
         # check if the trigger event was set
-        if trigger_event.is_set() and pre_trigger_recording:
+        if (
+            trigger_event.is_set()
+            and params["highspeed"]["parameters"]["pre_trigger_mode"]
+        ):
             # get data from mp_dict
             data = copy.deepcopy(mp_dict)
 
@@ -177,8 +184,16 @@ def highspeed_camera(
             # and send it to the video writer thread
             frames_packet.put(data)
 
+        # otherwise, if we still get an event and we are not in pre-trigger mode
+        # just save the last frames and break
+        elif (
+            trigger_event.is_set()
+            and params["highspeed"]["parameters"]["pre_trigger_mode"] is False
+        ):
+            break
+
     # if we are using continous recording
-    if pre_trigger_recording is False:
+    if params["highspeed"]["parameters"]["pre_trigger_mode"] is False:
         data["ntrig"] = 0
         data["obj_id"] = 0
         data["frame"] = 0

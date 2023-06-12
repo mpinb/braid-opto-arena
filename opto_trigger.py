@@ -46,10 +46,13 @@ def opto_trigger(
         if trigger_event.is_set():
             # if the trigger event got set, trigger the arduino
             logging.debug("OptoTrigger triggered.")
+            event_time = time.time()
 
             # get data from mp dict
             data = copy.deepcopy(data_dict)
             logging.debug(f"Got data: {data}")
+            data["opto_trigger_event_set_time"] = event_time
+            data["opto_trigger_data_copy_time"] = time.time()
 
             # send trigger to arduino
             board.write(f"<{duration},{intensity},{frequency}>".encode())
