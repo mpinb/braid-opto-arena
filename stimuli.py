@@ -1,219 +1,172 @@
 import copy
 import logging
 import multiprocessing as mp
+import os
+import random
 import threading
 import time
+import tomllib
 from queue import Queue
 
+import pygame
+
 from csv_writer import CsvWriter
+
+os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
 
 
 def stimuli(
     trigger_event: mp.Event,
     kill_event: mp.Event,
-    data_dict: mp.Manager().dict,
+    mp_dict: mp.Manager().dict,
     barrier: mp.Barrier,
     trigger_barrier: mp.Barrier,
     params: dict,
 ):
-    # import psychopy locally
-    from psychopy import core, visual
-
     # start csv writer
     csv_queue = Queue()
     csv_kill = threading.Event()
-    try:
-        csv_writer = CsvWriter(
-            csv_file=params["folder"] + "/stim.csv",
-            queue=csv_queue,
-            kill_event=csv_kill,
-        ).start()
-    except KeyError as e:
-        logging.error(f"Could not start csv writer: {e}")
-        pass
-
-    # get which stimuli are active
-    show_static = params["stim_params"]["static"]["active"]
-    show_looming = params["stim_params"]["looming"]["active"]
-    show_grating = params["stim_params"]["grating"]["active"]
-
-    # create window
-    win = visual.Window(
-        size=[640, 128],
-        pos=[0, 0],
-        fullscr=False,
-        screen=1,
-        color=[1, 1, 1],
-        units="pix",
-        allowGUI=False,
+    csv_writer = CsvWriter(
+        csv_file=params["folder"] + "/opto.csv",
+        queue=csv_queue,
+        kill_event=csv_kill,
     )
 
-    # create stimuli
-    if show_static:
-        static_params = params["stim_params"]["static"]
-        static_stim = visual.ImageStim(
-            win=win,
-            image=static_params["image"],
-            size=win.size,
-            pos=[0, 0],
-            units="pix",
-        )
+    # initialize pygame
+    pygame.init()
 
-    if show_looming:
-        looming_params = params["stim_params"]["looming"]
-        looming_stim = visual.Circle(
-            win=win,
-            pos=[0, 0],
-            radius=0,
-            edges=100,
-            units="pix",
-            fillColor="black",
-            lineColor="black",
-            autoDraw=True,
-        )
+    # initialize screen
+    WIDTH, HEIGHT = 640, 128
+    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
 
-    if show_grating:
-        grating_params = params["stim_params"]["grating"]
-        grating_stim = visual.GratingStim(
-            win=win, tex="sqr", units="pix", autoDraw=True
-        )
+    # initialize clock
+    clock = pygame.time.Clock()
 
-    looming_ongoing = False
-    grating_ongoing = False
+    # background image
+    if params["stim_params"]["static"]["active"]:
+        bg = pygame.image.load(params["stim_params"]["static"]["image"])
+        bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
+    else:
+        bg = pygame.Surface((WIDTH, HEIGHT))
+        bg.fill("white")
 
-    # wait for all processes to start
-    barrier.wait()
-    logging.info("stimuli process started.")
+    # looming stimulus
+    if params["stim_params"]["looming"]["active"]:
+        circle_color = params["stim_params"]["looming"]["color"]
 
-    # start main loop
+        # convert the max radius to pixels
+        circle_max_radius = params["stim_params"]["looming"]["max_radius"] / 2
+        circle_max_radius = int(circle_max_radius * HEIGHT)
+        circle_duration = params["stim_params"]["looming"]["duration"]
+
+        # check if the circle position is random
+        circle_position = params["stim_params"]["looming"]["position"]
+        if circle_position == "random":
+            random_position = True
+        else:
+            random_position = False
+
+        # calculate the change in radius per frame
+        F = circle_duration / (1000 / 60)
+        dR = circle_max_radius / F
+
+    radius = 0
+    start_loom = False
+
     while True:
-        # check if kill event is set
         if kill_event.is_set():
             break
 
-        # check if trigger event is set
-        if trigger_event.is_set():
-            # copy data from mp_dict
-            data = copy.deepcopy(data_dict)
-            logging.debug(f"Got data: {data}")
+        # fill the screen with image/color
+        screen.blit(bg, (0, 0))
+
+        # test if the trigger event is set
+        if trigger_event.is_set() and not start_loom:
+            start_loom = True  # set the start_loom flag to True
+            data = copy.deepcopy(mp_dict)  # copy data from the shared dictionary
+            logging.debug("Got data from trigger event")
 
             data["stimulus_start_time"] = time.time()
 
-            # initialize stimuli
-            if show_looming and not looming_ongoing:
-                logging.debug("Looming stimulus going.")
-                data["looming_pos_x"] = looming_stim.pos[0]
-                data["looming_pos_y"] = looming_stim.pos[1]
-                data["looming_radius"] = looming_params["max_radius"]
-                data["looming_duration"] = looming_params["duration"]
-                looming_ongoing = True
+            # if the position is random, generate a random position
+            if random_position:
+                x = random.randint(0, WIDTH)
+                y = random.randint(circle_max_radius, HEIGHT - circle_max_radius)
+            else:
+                x = WIDTH // 2
+                y = HEIGHT // 2
 
-            if show_grating and not grating_ongoing:
-                logging.debug("Grating stimulus going.")
-                grating_stim.init_drift()
+            data["looming_pos_x"] = x
+            data["looming_pos_y"] = y
+            data["looming_radius"] = circle_max_radius
+            data["looming_duration"] = circle_duration
 
-            data["stimulus_to_csv_writer"] = time.time()
-            # send to csv writer
+            # wait for all other processes to process the trigger
             csv_queue.put(data)
             trigger_barrier.wait()
+            trigger_event.clear()
 
-        # update stimuli
-        if show_looming and looming_ongoing:
-            looming_stim.radius += 1
-            if looming_stim.radius >= looming_params["max_radius"]:
-                looming_stim.radius = 0
-                show_looming = False
-                looming_ongoing = False
+        # if the start_loom flag is set, draw the circle
+        if start_loom:
+            radius += dR
 
-        if show_grating:
-            grating_stim.drift()
+            # once the circle reaches the max radius, reset the radius and set the start_loom flag to False
+            if radius > circle_max_radius:
+                radius = 0
+                start_loom = False
 
-        if show_static:
-            static_stim.draw()
+            # draw the circle
+            pygame.draw.circle(screen, circle_color, (x, y), radius)
 
-        # update window
-        win.update()
-        core.wait(1 / 60)
+            # wraparound the x position if the circle goes off the screen
+            if x - radius < 0:
+                pygame.draw.circle(screen, circle_color, (x + WIDTH, y), radius)
+            elif x + radius > WIDTH:
+                pygame.draw.circle(screen, circle_color, (x - WIDTH, y), radius)
 
-    # end csv writer
-    csv_kill.set()
-    logging.info("stimuli process ended.")
+        pygame.display.flip()
+        clock.tick(60)
+
+    pygame.quit()
+    try:
+        csv_writer.join()
+    except RuntimeError:
+        pass
 
 
 if __name__ == "__main__":
-    import multiprocessing
+    trigger_event = mp.Event()
+    kill_event = mp.Event()
+    mp_dict = mp.Manager().dict()
+    barrier = mp.Barrier(1)
+    trigger_barrier = mp.Barrier(1)
 
-    import toml
-
-    params = toml.load("params.toml")
-    s = stimuli(
-        trigger_event=mp.Event(),
-        kill_event=mp.Event(),
-        data_dict=mp.Manager().dict(),
-        barrier=mp.Barrier(2),
-        params=params,
+    with open("params.toml", "rb") as f:
+        params = tomllib.load(f)
+    params["folder"] = "./test/"
+    p = mp.Process(
+        target=stimuli,
+        args=(
+            trigger_event,
+            kill_event,
+            mp_dict,
+            barrier,
+            trigger_barrier,
+            params,
+        ),
     )
 
+    p.start()
 
-# class LoomingStimulus(Circle):
-#     def __init__(
-#         self, position: list | int, max_radius: int, duration: int, *args, **kwargs
-#     ) -> None:
-#         super().__init__(*args, **kwargs)
+    while not kill_event.is_set():
+        user_input = input("Press e to trigger stimulus, q to quit: ")
+        if user_input == "e":
+            trigger_event.set()
+            trigger_barrier.wait()
+        elif user_input == "q":
+            kill_event.set()
+            break
+        else:
+            print("Invalid input.")
 
-#         if type(position) is int:
-#             self.pos = (position, 0)
-#         elif type(position) is str:
-#             if position == "random":
-#                 self.random = True
-#             else:
-#                 raise ValueError("position must be 'random' or an integer")
-#         else:
-#             self.pos = position
-
-#         self.max_radius = max_radius
-#         self.duration = duration
-#         self.do_loom = False
-
-#     def init_loom(self):
-#         if self.random:
-#             self.pos = self._get_random_position()
-#         self.do_loom = True
-
-#     def loom(self):
-#         # if the radius is smaller than the max radius, increase it
-#         if self.radius < self.max_radius:
-#             self.radius += int(self.max_radius / ((self.duration * 1e-3) / (1 / 60)))
-
-#         # otherwise, stop the loom
-#         else:
-#             self.radius = 0
-#             self.do_loom = False
-
-#     def _get_random_position(self):
-#         return (np.random.randint(-self.win.size[0] / 2, self.win.size[0] / 2), 0)
-
-
-# class DriftingGratingStimulus(GratingStim):
-#     def __init__(
-#         self,
-#         frequency: int,
-#         orientation: int,
-#         direction: int,
-#         duration: int | None = None,
-#         *args,
-#         **kwargs,
-#     ) -> None:
-#         super().__init__(*args, **kwargs)
-
-#         self.sf = frequency
-#         self.ori = orientation
-#         self.direction = direction
-#         self.do_drift = False
-
-#     def init_drift(self):
-#         pass
-
-#     def drift(self):
-#         self.do_drift = True
-#         self.phase += self.direction * self.sf * (1 / 60)
+    p.join()
