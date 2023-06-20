@@ -113,11 +113,11 @@ def position_trigger(
             trigger_time = time.time()
 
             trigger_event.set()
-
+            logging.debug("Trigger event set. Waiting for trigger_barrier.")
             trigger_barrier.wait()
-
+            logging.debug("Trigger barrier passed. Clearing trigger_event.")
             trigger_event.clear()
-
+            logging.debug("Trigger event cleared. resdeting trigger_barrier.")
             trigger_barrier.reset()
             print(f"Barrier time {time.time() - trigger_time:.3f}s")
 

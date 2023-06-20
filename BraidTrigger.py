@@ -5,10 +5,10 @@ import pathlib
 import shutil
 import signal
 import time
+import tomllib
 
 import git
 import serial
-import toml
 
 from flydra_proxy import flydra_proxy
 from highspeed_cameras import highspeed_camera
@@ -47,7 +47,8 @@ def BraidTrigger(
     signal.signal(signal.SIGINT, signal_handler)
 
     # load the params
-    params = toml.load(params_file)
+    with open(params_file, "rb") as pf:
+        params = tomllib.load(pf)
 
     # check if the braid folder exists
     folder = check_braid_folder(root_folder)
@@ -67,11 +68,38 @@ def BraidTrigger(
     kill_event = manager.Event()
     trigger_event = manager.Event()
 
-    # create a barrier to sync processes
-    if params["highspeed"]["active"]:
-        n_barriers = 5 + len(params["highspeed"]["cameras"])
+    # count number of barriers
+    n_barriers = 3  # for main process, flydra_proxy, and position_trigger
+    n_trigger_barrier = 1  # for position_trigger
+
+    if params["opto_params"]["active"]:  # opto trigger
+        n_barriers += 1
+        n_trigger_barrier += 1
+
+    if params["highspeed"]["active"]:  # highspeed camera(s)
+        n_barriers += len(params["highspeed"]["cameras"])
+        n_trigger_barrier += 1
+
+    # check if the static stimulus is active
+    # if so, we don't actually need to add a barrier object, since it's static
+    stim_active = False
+    if params["stim_params"]["static"]["active"]:
+        stim_active = True
+
+    # but also check if any of the dynamic stimuli are active, cause then we need a barrier
+    if (
+        params["stim_params"]["grating"]["active"]
+        or params["stim_params"]["looming"]["active"]
+    ):
+        n_barriers += 1
+        n_trigger_barrier += 1
+        stim_active = True
+
+    # initialize barrier
     barrier = manager.Barrier(n_barriers)
-    trigger_barrier = manager.Barrier(n_barriers - 2)
+
+    # initialize trigger barrier
+    trigger_barrier = manager.Barrier(n_trigger_barrier)
 
     # create a dictionary to hold all processes
     process_dict = {}
@@ -99,19 +127,21 @@ def BraidTrigger(
         name="position_trigger",
     ).start()
 
-    # start opto trigger process
-    process_dict["opto_trigger"] = mp.Process(
-        target=opto_trigger,
-        args=(trigger_event, kill_event, mp_dict, barrier, trigger_barrier, params),
-        name="opto_trigger",
-    ).start()
+    if params["opto_params"]["active"]:
+        # start opto trigger process
+        process_dict["opto_trigger"] = mp.Process(
+            target=opto_trigger,
+            args=(trigger_event, kill_event, mp_dict, barrier, trigger_barrier, params),
+            name="opto_trigger",
+        ).start()
 
-    # start stimuli process
-    process_dict["stimuli"] = mp.Process(
-        target=stimuli,
-        args=(trigger_event, kill_event, mp_dict, barrier, trigger_barrier, params),
-        name="stimuli",
-    ).start()
+    if stim_active:
+        # start stimuli process
+        process_dict["stimuli"] = mp.Process(
+            target=stimuli,
+            args=(trigger_event, kill_event, mp_dict, barrier, trigger_barrier, params),
+            name="stimuli",
+        ).start()
 
     # if highspeed cameras are active, start them
     if params["highspeed"]["active"]:
@@ -155,6 +185,7 @@ def BraidTrigger(
         highspeed_board.write(b"H")
 
     logging.info("All proceeses initialized...")
+
     # start main loop
     while True:
         if kill_event.is_set():
@@ -163,6 +194,14 @@ def BraidTrigger(
     # stop camera trigger
     if params["highspeed"]["active"]:
         highspeed_board.write(b"L")
+
+    # wait for all processes to finish
+    for _, process in process_dict.items():
+        process.join()
+
+    # close the highspeed board
+    if params["highspeed"]["active"]:
+        highspeed_board.close()
 
 
 if __name__ == "__main__":

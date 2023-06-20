@@ -75,4 +75,8 @@ def opto_trigger(
 
     board.close()
     csv_kill.set()
+    try:
+        csv_writer.join()
+    except AttributeError:
+        pass
     logging.info("opto_trigger stopped.")

@@ -92,7 +92,7 @@ def video_writer(frames_packet: Queue):
             logging=False,
             **output_params,
         )
-        logging.info(
+        logging.debug(
             f"Started writing {len(data['frame_buffer'])} frames to {output_filename}"
         )
         # write the frames
@@ -161,11 +161,12 @@ def highspeed_camera(
     )
     video_writer_process.start()
 
-    # start grabbing and looping
-
     # wait until main script and all other cameras reached the barrier
     logging.info(f"Camera {camera_serial} waiting for barrier.")
     barrier.wait()
+
+    # start grabbing and looping
+
     cam.StartGrabbing(py.GrabStrategy_OneByOne)
     logging.info(f"Camera {camera_serial} passed barrier.")
 
