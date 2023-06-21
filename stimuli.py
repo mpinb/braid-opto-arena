@@ -20,7 +20,8 @@ def stimuli(
     kill_event: mp.Event,
     mp_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    trigger_barrier: mp.Barrier,
+    lock: mp.Lock,
+    got_trigger_counter: mp.Value,
     params: dict,
 ):
     # start csv writer
@@ -104,6 +105,8 @@ def stimuli(
         if loom_stim:
             # test if the trigger event is set
             if trigger_event.is_set() and not start_loom:
+                with lock:
+                    got_trigger_counter.value += 1  # increment the trigger counter
                 start_loom = True  # set the start_loom flag to True
                 data = copy.deepcopy(mp_dict)  # copy data from the shared dictionary
                 logging.debug("Got data from trigger event")

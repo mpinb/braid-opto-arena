@@ -10,9 +10,9 @@ def position_trigger(
     kill_event: mp.Event,
     mp_data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    clear_event: mp.Event,
-    counter: mp.Value,
     lock: mp.Lock,
+    got_trigger_counter: mp.Value,
+    n_processes: int,
     params: dict,
 ):
     # tracking control
@@ -116,16 +116,14 @@ def position_trigger(
 
             # set the trigger event
             trigger_event.set()
-            
-            # and wait until all other processes finished processing it
-            clear_event.wait() 
 
-            # and then reset the values
-            with lock:  
-                trigger_event.clear()
-                clear_event.clear()
-                counter.value = 0
+            # wait until the trigger event is processes by all proceeses
+            while got_trigger_counter.value < n_processes:
+                time.sleep(0.01)
 
+            # wait for all processes to finish
+            with lock:
+                got_trigger_counter.value = 0
             trigger_event.clear()
 
             print(f"Barrier time {time.time() - trigger_time:.3f}s")

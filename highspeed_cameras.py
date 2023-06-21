@@ -113,8 +113,9 @@ def highspeed_camera(
     trigger_event: mp.Event,
     kill_event: mp.Event,
     mp_dict: mp.Manager().dict,
-    barrier: mp.Manager().Barrier,
-    trigger_barrier: mp.Manager().Barrier,
+    barrier: mp.Barrier,
+    lock: mp.Lock,
+    got_trigger_counter: mp.Value,
     params,
 ):
     logging.info(f"Initializing camera {camera_serial}")
@@ -166,7 +167,6 @@ def highspeed_camera(
     barrier.wait()
 
     # start grabbing and looping
-
     cam.StartGrabbing(py.GrabStrategy_OneByOne)
     logging.info(f"Camera {camera_serial} passed barrier.")
 
@@ -180,9 +180,10 @@ def highspeed_camera(
 
         # if trigger and we didn't get data yet
         if trigger and not got_trigger_data:
+            with lock:
+                got_trigger_counter.value += 1
             data = copy.deepcopy(mp_dict)
             got_trigger_data = True
-            trigger_barrier.wait()
 
         # now get the icoming frame and add to buffer
         with cam.RetrieveResult(2000, py.TimeoutHandling_ThrowException) as grabResult:

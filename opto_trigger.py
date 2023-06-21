@@ -15,9 +15,8 @@ def opto_trigger(
     kill_event: mp.Event,
     data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    clear_event: mp.Event,
-    counter: mp.Value,
     lock: mp.Lock,
+    got_trigger_counter: mp.Value,
     params: dict,
 ):
     # start csv writer
@@ -49,11 +48,8 @@ def opto_trigger(
 
         # wait for trigger event
         if trigger_event.is_set():
-
-            # let the other processes know that we got the trigger
             with lock:
-                counter.value += 1
-
+                got_trigger_counter.value += 1
             # if the trigger event got set, trigger the arduino
             logging.debug("OptoTrigger triggered.")
             event_time = time.time()
@@ -78,12 +74,6 @@ def opto_trigger(
             # send to csv writer
             csv_queue.put(data)
             logging.debug("Writing data to csv")
-
-            # and then 
-            with lock:
-                if counter.value >= num_processes:
-                    clear_event.set()
-            
 
     board.close()
     csv_kill.set()

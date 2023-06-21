@@ -16,6 +16,8 @@ from opto_trigger import opto_trigger
 from position_trigger import position_trigger
 from stimuli import stimuli
 
+from ReusableBarrier import ReusableBarrier
+
 
 def check_braid_folder(root_folder: str) -> str:
     p = pathlib.Path(root_folder)
@@ -63,13 +65,16 @@ def BraidTrigger(
 
     # create a manager for the shared variables
     manager = mp.Manager()
-    queue = manager.Queue() # main queue to pass messages between braid proxy and position trigger
-    mp_dict = manager.dict() # a shared dict that gets updated with positional and debug information on trigger
-    kill_event = manager.Event() # the main event to kill all processes
-    trigger_event = manager.Event() # the main event to trigger the processes
-    clear_event = manager.Event() # event to make sure all processes finished processing the event
-    counter = manager.Value('i', 0)
-    lock = manager.Lock()
+    queue = (
+        manager.Queue()
+    )  # main queue to pass messages between braid proxy and position trigger
+    mp_dict = (
+        manager.dict()
+    )  # a shared dict that gets updated with positional and debug information on trigger
+    kill_event = manager.Event()  # the main event to kill all processes
+    trigger_event = manager.Event()  # the main event to trigger the processes
+    got_trigger_counter = mp.Value("i", 0)
+    lock = mp.Lock()
 
     # count number of barriers
     n_barriers = 3  # for main process, flydra_proxy, and position_trigger
@@ -96,6 +101,7 @@ def BraidTrigger(
 
     # initialize barrier
     barrier = manager.Barrier(n_barriers)
+    n_processes = n_barriers - 2  # ignoring the main process and the flydra proxy
 
     # create a dictionary to hold all processes
     process_dict = {}
@@ -117,9 +123,9 @@ def BraidTrigger(
             kill_event,
             mp_dict,
             barrier,
-            clear_event,
-            counter,
             lock,
+            got_trigger_counter,
+            n_processes,
             params,
         ),
         name="position_trigger",
@@ -129,7 +135,15 @@ def BraidTrigger(
         # start opto trigger process
         process_dict["opto_trigger"] = mp.Process(
             target=opto_trigger,
-            args=(trigger_event, kill_event, mp_dict, barrier, clear_event, counter, lock, params),
+            args=(
+                trigger_event,
+                kill_event,
+                mp_dict,
+                barrier,
+                lock,
+                got_trigger_counter,
+                params,
+            ),
             name="opto_trigger",
         ).start()
 
@@ -137,7 +151,15 @@ def BraidTrigger(
         # start stimuli process
         process_dict["stimuli"] = mp.Process(
             target=stimuli,
-            args=(trigger_event, kill_event, mp_dict, barrier, clear_event, counter, lock, params),
+            args=(
+                trigger_event,
+                kill_event,
+                mp_dict,
+                barrier,
+                lock,
+                got_trigger_counter,
+                params,
+            ),
             name="stimuli",
         ).start()
 
@@ -166,9 +188,8 @@ def BraidTrigger(
                         kill_event,
                         mp_dict,
                         barrier,
-                        clear_event,
-                        counter,
                         lock,
+                        got_trigger_counter,
                         params,
                     ),
                     name=f"highspeed_camera_{camera_serial}",
