@@ -250,9 +250,9 @@ def highspeed_camera(
         frames_packet.put(data)
 
     # wait for the video writer to finish
-    while frames_packet.qsize() > 0:
-        time.sleep(1)
+    frames_packet.join()
 
+    # join the video writer thread
     video_writer_thread.join()
 
     logging.info(f"Camera {camera_serial} finished.")
