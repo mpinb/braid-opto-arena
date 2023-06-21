@@ -75,10 +75,14 @@ def video_writer(frames_packet: Queue):
 
     # always loop, waiting for data to arrive from main process
     while True:
+        logging.info("Waiting for data to arrive...")
         data = frames_packet.get()
+        logging.info("Data arrived, starting to write video...")
 
         write_start_time = time.time()
+
         # setup the output filename
+        logging.info("Setting up output filename...")
         output_filename = "/home/benyishay_la/Videos/{}/{:d}_obj_id_{:d}_cam_{}_frame_{:d}.mp4".format(
             data["save_folder"],
             data["ntrig"],
@@ -88,6 +92,7 @@ def video_writer(frames_packet: Queue):
         )
 
         # setup the video writer
+        logging.info("Setting up video writer...")
         video_writer = WriteGear(
             output=output_filename,
             logging=False,
@@ -97,6 +102,7 @@ def video_writer(frames_packet: Queue):
             f"Started writing {len(data['frame_buffer'])} frames to {output_filename}"
         )
         # write the frames
+        logging.info("Writing frames...")
         for frame in data["frame_buffer"]:
             video_writer.write(frame)
 
@@ -104,7 +110,9 @@ def video_writer(frames_packet: Queue):
             f"Finished writing {len(data['frame_buffer'])} frames to {os.path.basename(output_filename)} in {time.time()-write_start_time} seconds."
         )
         # close the video writer
+        logging.info("Closing video writer...")
         video_writer.close()
+        logging.info("Video writer closed.")
 
 
 def highspeed_camera(
