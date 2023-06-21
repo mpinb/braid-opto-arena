@@ -113,6 +113,8 @@ def video_writer(frames_packet: Queue):
         logging.info("Closing video writer...")
         video_writer.close()
         logging.info("Video writer closed.")
+        frames_packet.task_done()
+        logging.info("Task done.")
 
 
 def highspeed_camera(
