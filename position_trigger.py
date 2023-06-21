@@ -10,9 +10,7 @@ def position_trigger(
     kill_event: mp.Event,
     mp_data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    lock: mp.Lock,
-    got_trigger_counter: mp.Value,
-    n_processes: int,
+    reusable_barrier,
     params: dict,
 ):
     # tracking control
@@ -41,6 +39,9 @@ def position_trigger(
             data = in_queue.get(block=False, timeout=0.01)
         except queue.Empty:
             # if queue is empty, continue
+            continue
+
+        if type(data) is bool:
             continue
 
         # check for birth event
@@ -117,15 +118,10 @@ def position_trigger(
             # set the trigger event
             trigger_event.set()
 
-            # wait until the trigger event is processes by all proceeses
-            while got_trigger_counter.value < n_processes:
-                time.sleep(0.01)
+            reusable_barrier.wait()
 
-            # wait for all processes to finish
-            with lock:
-                got_trigger_counter.value = 0
+            # clear the trigger event
             trigger_event.clear()
-
             print(f"Barrier time {time.time() - trigger_time:.3f}s")
 
     logging.info("PositionTrigger stopped.")

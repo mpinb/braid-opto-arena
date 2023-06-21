@@ -15,8 +15,7 @@ def opto_trigger(
     kill_event: mp.Event,
     data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    lock: mp.Lock,
-    got_trigger_counter: mp.Value,
+    reusable_barrier,
     params: dict,
 ):
     # start csv writer
@@ -48,8 +47,7 @@ def opto_trigger(
 
         # wait for trigger event
         if trigger_event.is_set():
-            with lock:
-                got_trigger_counter.value += 1
+            reusable_barrier.wait()
             # if the trigger event got set, trigger the arduino
             logging.debug("OptoTrigger triggered.")
             event_time = time.time()

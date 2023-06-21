@@ -69,7 +69,7 @@ def video_writer(frames_packet: Queue):
         "-input_framerate": 25,
         "-vcodec": "h264_nvenc",
         "-preset": "fast",
-        "-cq": "18",
+        "-rc": "cbr_ld_hq",
         "-disable_force_termination": True,
     }
 
@@ -77,6 +77,7 @@ def video_writer(frames_packet: Queue):
     while True:
         data = frames_packet.get()
 
+        write_start_time = time.time()
         # setup the output filename
         output_filename = "/home/benyishay_la/Videos/{}/{:d}_obj_id_{:d}_cam_{}_frame_{:d}.mp4".format(
             data["save_folder"],
@@ -97,11 +98,10 @@ def video_writer(frames_packet: Queue):
         )
         # write the frames
         for frame in data["frame_buffer"]:
-            bgr_frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            video_writer.write(bgr_frame)
+            video_writer.write(frame)
 
         logging.info(
-            f"Finished writing {len(data['frame_buffer'])} frames to {output_filename}"
+            f"Finished writing {len(data['frame_buffer'])} frames to {os.path.basename(output_filename)} in {time.time()-write_start_time} seconds."
         )
         # close the video writer
         video_writer.close()
@@ -114,8 +114,7 @@ def highspeed_camera(
     kill_event: mp.Event,
     mp_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    lock: mp.Lock,
-    got_trigger_counter: mp.Value,
+    reusable_barrier,
     params,
 ):
     logging.info(f"Initializing camera {camera_serial}")
@@ -152,15 +151,23 @@ def highspeed_camera(
     # buffers
     pre_buffer = deque(maxlen=int(fps * time_before))
     post_buffer = deque(maxlen=int(fps * time_after))
+
+    logging.debug(f"pre_buffer size is {pre_buffer.maxlen}")
+    logging.debug(f"post_buffer size is {post_buffer.maxlen}")
+
     switch_buffer = False
     got_trigger_data = False
 
     # start video writer process
     frames_packet = Queue()
-    video_writer_process = threading.Thread(
-        target=video_writer, args=(frames_packet,), daemon=True
+    video_writer_thread = threading.Thread(
+        target=video_writer, args=(frames_packet,), daemon=False
     )
-    video_writer_process.start()
+    video_writer_thread.start()
+
+    converter = py.ImageFormatConverter()
+    converter.OutputPixelFormat = py.PixelType_BGR8packed
+    converter.OutputBitAlignment = py.OutputBitAlignment_MsbAligned
 
     # wait until main script and all other cameras reached the barrier
     logging.info(f"Camera {camera_serial} waiting for barrier.")
@@ -180,14 +187,14 @@ def highspeed_camera(
 
         # if trigger and we didn't get data yet
         if trigger and not got_trigger_data:
-            with lock:
-                got_trigger_counter.value += 1
+            reusable_barrier.wait()
             data = copy.deepcopy(mp_dict)
             got_trigger_data = True
 
         # now get the icoming frame and add to buffer
         with cam.RetrieveResult(2000, py.TimeoutHandling_ThrowException) as grabResult:
-            frame = grabResult.GetArray()
+            image = converter.Convert(grabResult)
+            frame = image.GetArray()
 
         # if there was no trigger and we didn't switch buffer
         if not trigger and not switch_buffer:
@@ -218,6 +225,10 @@ def highspeed_camera(
         ):
             break
 
+    # clean cameras
+    cam.StopGrabbing()
+    cam.Close()
+
     # if we are using continous recording
     if params["highspeed"]["parameters"]["pre_trigger_mode"] is False:
         data["ntrig"] = 0
@@ -228,6 +239,10 @@ def highspeed_camera(
         data["save_folder"] = save_folder
         frames_packet.put(data)
 
-    cam.StopGrabbing()
-    cam.Close()
+    # wait for the video writer to finish
+    while frames_packet.qsize() > 0:
+        time.sleep(1)
+
+    video_writer_thread.join()
+
     logging.info(f"Camera {camera_serial} finished.")

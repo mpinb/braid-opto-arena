@@ -1,23 +1,27 @@
-from multiprocessing import Barrier, Process, current_process
+import multiprocessing
 import time
+from multiprocessing import Lock, Process, Semaphore, Value
 
 
-class ReusableBarrier(Barrier):
-    def __init__(self, parties, action=None, timeout=None):
-        super().__init__(parties, action, timeout)
-        self.initial_parties = parties
-
-    def reset(self):
-        super().__init__(self.initial_parties)
+class ReusableBarrier:
+    def __init__(self, n):
+        self.n = n
+        self.count = Value("i", 0)
+        self.mutex = Lock()
+        self.barrier = Semaphore(0)
 
     def wait(self):
-        super().wait()
-        if self.n_waiting == 0:
-            self.reset()
+        with self.mutex:
+            self.count.value += 1
+            if self.count.value == self.n:
+                self.barrier.release()
+
+        self.barrier.acquire()
+        self.barrier.release()
 
 
 def worker(barrier):
-    name = current_process().name
+    name = multiprocessing.current_process().name
     while True:
         time.sleep(1)  # simulate work
         print(f"{name} finished work")

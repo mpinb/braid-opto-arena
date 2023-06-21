@@ -3,7 +3,6 @@ import multiprocessing as mp
 import os
 import pathlib
 import shutil
-import signal
 import time
 import tomllib
 
@@ -14,9 +13,8 @@ from flydra_proxy import flydra_proxy
 from highspeed_cameras import highspeed_camera
 from opto_trigger import opto_trigger
 from position_trigger import position_trigger
-from stimuli import stimuli
-
 from ReusableBarrier import ReusableBarrier
+from stimuli import stimuli
 
 
 def check_braid_folder(root_folder: str) -> str:
@@ -41,13 +39,6 @@ def BraidTrigger(
     params_file: str = "./params.toml",
     root_folder: str = "/media/benyishay_la/Data/Experiments/",
 ):
-    # a signal handler to kill the process
-    def signal_handler(signum, frame):
-        print("Killing all processes...")
-        kill_event.set()
-
-    signal.signal(signal.SIGINT, signal_handler)
-
     # load the params
     with open(params_file, "rb") as pf:
         params = tomllib.load(pf)
@@ -73,8 +64,6 @@ def BraidTrigger(
     )  # a shared dict that gets updated with positional and debug information on trigger
     kill_event = manager.Event()  # the main event to kill all processes
     trigger_event = manager.Event()  # the main event to trigger the processes
-    got_trigger_counter = mp.Value("i", 0)
-    lock = mp.Lock()
 
     # count number of barriers
     n_barriers = 3  # for main process, flydra_proxy, and position_trigger
@@ -101,7 +90,11 @@ def BraidTrigger(
 
     # initialize barrier
     barrier = manager.Barrier(n_barriers)
+
     n_processes = n_barriers - 2  # ignoring the main process and the flydra proxy
+    reusable_barrier = ReusableBarrier(
+        n_processes
+    )  # a reusable barrier to sync processes
 
     # create a dictionary to hold all processes
     process_dict = {}
@@ -123,9 +116,7 @@ def BraidTrigger(
             kill_event,
             mp_dict,
             barrier,
-            lock,
-            got_trigger_counter,
-            n_processes,
+            reusable_barrier,
             params,
         ),
         name="position_trigger",
@@ -140,8 +131,7 @@ def BraidTrigger(
                 kill_event,
                 mp_dict,
                 barrier,
-                lock,
-                got_trigger_counter,
+                reusable_barrier,
                 params,
             ),
             name="opto_trigger",
@@ -156,8 +146,7 @@ def BraidTrigger(
                 kill_event,
                 mp_dict,
                 barrier,
-                lock,
-                got_trigger_counter,
+                reusable_barrier,
                 params,
             ),
             name="stimuli",
@@ -188,8 +177,7 @@ def BraidTrigger(
                         kill_event,
                         mp_dict,
                         barrier,
-                        lock,
-                        got_trigger_counter,
+                        reusable_barrier,
                         params,
                     ),
                     name=f"highspeed_camera_{camera_serial}",
@@ -208,21 +196,20 @@ def BraidTrigger(
     logging.info("All proceeses initialized...")
 
     # start main loop
-    while True:
-        if kill_event.is_set():
-            break
+    try:
+        while True:
+            continue
+    except KeyboardInterrupt:
+        kill_event.set()
 
     # stop camera trigger
     if params["highspeed"]["active"]:
         highspeed_board.write(b"L")
+        highspeed_board.close()
 
     # wait for all processes to finish
     for _, process in process_dict.items():
         process.join()
-
-    # close the highspeed board
-    if params["highspeed"]["active"]:
-        highspeed_board.close()
 
 
 if __name__ == "__main__":
