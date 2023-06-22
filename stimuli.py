@@ -20,7 +20,8 @@ def stimuli(
     kill_event: mp.Event,
     mp_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    reusable_barrier,
+    got_trigger_counter: mp.Value,
+    lock: mp.Lock,
     params: dict,
 ):
     # start csv writer
@@ -92,7 +93,7 @@ def stimuli(
     logging.debug("Waiting for barrier")
     barrier.wait()
     logging.info("Barrier passed")
-
+    trigger = False
     while True:
         # check if the kill event is set
         if kill_event.is_set():
@@ -101,12 +102,17 @@ def stimuli(
         # fill the screen with image/color
         screen.blit(bg, (0, 0))
 
+        if trigger_event.is_set():
+            data = copy.deepcopy(mp_dict)
+            with lock:
+                got_trigger_counter.value += 1
+            trigger = True
+            logging.info("Got data from trigger event, set counter+=1")
+
         if loom_stim:
             # test if the trigger event is set
-            if trigger_event.is_set() and not start_loom:
-                reusable_barrier.wait()
+            if trigger and not start_loom:
                 start_loom = True  # set the start_loom flag to True
-                data = copy.deepcopy(mp_dict)  # copy data from the shared dictionary
                 logging.debug("Got data from trigger event")
 
                 data["stimulus_start_time"] = time.time()
@@ -136,6 +142,7 @@ def stimuli(
 
                 # wait for all other processes to process the trigger
                 csv_queue.put(data)
+                trigger = False
 
             # if the start_loom flag is set, draw the circle
             if start_loom:

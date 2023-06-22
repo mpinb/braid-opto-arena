@@ -13,7 +13,6 @@ from flydra_proxy import flydra_proxy
 from highspeed_cameras import highspeed_camera
 from opto_trigger import opto_trigger
 from position_trigger import position_trigger
-from ReusableBarrier import ReusableBarrier
 from stimuli import stimuli
 
 
@@ -92,9 +91,9 @@ def BraidTrigger(
     barrier = manager.Barrier(n_barriers)
 
     n_processes = n_barriers - 2  # ignoring the main process and the flydra proxy
-    reusable_barrier = ReusableBarrier(
-        n_processes
-    )  # a reusable barrier to sync processes
+
+    lock = mp.Lock()
+    got_trigger_counter = mp.Value("i", 0)
 
     # create a dictionary to hold all processes
     process_dict = {}
@@ -116,7 +115,9 @@ def BraidTrigger(
             kill_event,
             mp_dict,
             barrier,
-            reusable_barrier,
+            got_trigger_counter,
+            lock,
+            n_processes,
             params,
         ),
         name="position_trigger",
@@ -131,7 +132,8 @@ def BraidTrigger(
                 kill_event,
                 mp_dict,
                 barrier,
-                reusable_barrier,
+                got_trigger_counter,
+                lock,
                 params,
             ),
             name="opto_trigger",
@@ -146,7 +148,8 @@ def BraidTrigger(
                 kill_event,
                 mp_dict,
                 barrier,
-                reusable_barrier,
+                got_trigger_counter,
+                lock,
                 params,
             ),
             name="stimuli",
@@ -177,7 +180,8 @@ def BraidTrigger(
                         kill_event,
                         mp_dict,
                         barrier,
-                        reusable_barrier,
+                        got_trigger_counter,
+                        lock,
                         params,
                     ),
                     name=f"highspeed_camera_{camera_serial}",

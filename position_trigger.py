@@ -10,7 +10,9 @@ def position_trigger(
     kill_event: mp.Event,
     mp_data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    reusable_barrier,
+    got_trigger_counter: mp.Value,
+    lock: mp.Lock,
+    n_processes: int,
     params: dict,
 ):
     # tracking control
@@ -118,11 +120,15 @@ def position_trigger(
             # set the trigger event
             trigger_event.set()
 
-            reusable_barrier.wait()
+            while got_trigger_counter.value < n_processes:
+                time.sleep(0.01)
+
+            with lock:
+                got_trigger_counter.value = 0
 
             # clear the trigger event
             trigger_event.clear()
-            print(f"Barrier time {time.time() - trigger_time:.3f}s")
+            logging.info(f"Barrier time {time.time() - trigger_time:.3f}s")
 
     logging.info("PositionTrigger stopped.")
 

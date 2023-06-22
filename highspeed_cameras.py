@@ -7,7 +7,7 @@ import time
 from collections import deque
 from queue import Queue
 
-import cv2
+# import cv2
 import pypylon.pylon as py
 from vidgear.gears import WriteGear
 
@@ -107,7 +107,11 @@ def video_writer(frames_packet: Queue):
             video_writer.write(frame)
 
         logging.info(
-            f"Finished writing {len(data['frame_buffer'])} frames to {os.path.basename(output_filename)} in {time.time()-write_start_time} seconds."
+            "Finished writing {} frames to {} in {} seconds.".format(
+                len(data["frame_buffer"]),
+                os.path.basename(output_filename),
+                time.time() - write_start_time,
+            )
         )
         # close the video writer
         logging.info("Closing video writer...")
@@ -124,7 +128,8 @@ def highspeed_camera(
     kill_event: mp.Event,
     mp_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    reusable_barrier,
+    got_trigger_counter: mp.Value,
+    lock: mp.Lock,
     params,
 ):
     logging.info(f"Initializing camera {camera_serial}")
@@ -165,8 +170,7 @@ def highspeed_camera(
     logging.debug(f"pre_buffer size is {pre_buffer.maxlen}")
     logging.debug(f"post_buffer size is {post_buffer.maxlen}")
 
-    switch_buffer = False
-    got_trigger_data = False
+    trigger = False
 
     # start video writer process
     frames_packet = Queue()
@@ -193,13 +197,12 @@ def highspeed_camera(
             break
 
         # get trigger
-        trigger = trigger_event.is_set()
-
-        # if trigger and we didn't get data yet
-        if trigger and not got_trigger_data:
-            reusable_barrier.wait()
+        if trigger_event.is_set():
             data = copy.deepcopy(mp_dict)
-            got_trigger_data = True
+            with lock:
+                got_trigger_counter.value += 1
+            trigger = True
+            logging.info("Got data from trigger event, set counter+=1")
 
         # now get the icoming frame and add to buffer
         with cam.RetrieveResult(2000, py.TimeoutHandling_ThrowException) as grabResult:
@@ -207,13 +210,12 @@ def highspeed_camera(
             frame = image.GetArray()
 
         # if there was no trigger and we didn't switch buffer
-        if not trigger and not switch_buffer:
+        if not trigger:
             pre_buffer.append(frame)
 
         # if there was a trigger or buffer switch
-        if trigger or switch_buffer:
+        if trigger:
             post_buffer.append(frame)
-            switch_buffer = True
 
             # if the post_buffer is full, send the data to the video writer and clear the buffers
             if len(post_buffer) == post_buffer.maxlen:
@@ -224,8 +226,7 @@ def highspeed_camera(
 
                 pre_buffer.clear()
                 post_buffer.clear()
-                got_trigger_data = False
-                switch_buffer = False
+                trigger = False
 
         # otherwise, if we still get an event and we are not in pre-trigger mode
         # just save the last frames and break
@@ -238,16 +239,6 @@ def highspeed_camera(
     # clean cameras
     cam.StopGrabbing()
     cam.Close()
-
-    # if we are using continous recording
-    if params["highspeed"]["parameters"]["pre_trigger_mode"] is False:
-        data["ntrig"] = 0
-        data["obj_id"] = 0
-        data["frame"] = 0
-        data["frame_buffer"] = copy.deepcopy(frame_buffer)
-        data["camera_serial"] = camera_serial
-        data["save_folder"] = save_folder
-        frames_packet.put(data)
 
     # wait for the video writer to finish
     frames_packet.join()

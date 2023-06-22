@@ -15,7 +15,8 @@ def opto_trigger(
     kill_event: mp.Event,
     data_dict: mp.Manager().dict,
     barrier: mp.Barrier,
-    reusable_barrier,
+    got_trigger_counter: mp.Value,
+    lock: mp.Lock,
     params: dict,
 ):
     # start csv writer
@@ -39,21 +40,27 @@ def opto_trigger(
     barrier.wait()
     logging.info("opto_trigger started.")
 
+    trigger = False
     # start main loop
     while True:
         # check for kill event
         if kill_event.is_set():
             break
 
-        # wait for trigger event
         if trigger_event.is_set():
-            reusable_barrier.wait()
+            data = copy.deepcopy(data_dict)
+            with lock:
+                got_trigger_counter.value += 1
+            trigger = True
+            logging.info("Got data from trigger event, set counter+=1")
+
+        # wait for trigger event
+        if trigger:
             # if the trigger event got set, trigger the arduino
             logging.debug("OptoTrigger triggered.")
             event_time = time.time()
 
             # get data from mp dict
-            data = copy.deepcopy(data_dict)
             logging.debug(f"Got data: {data}")
             data["opto_trigger_event_set_time"] = event_time
             data["opto_trigger_data_copy_time"] = time.time()
@@ -61,7 +68,7 @@ def opto_trigger(
             # send trigger to arduino
             board.write(f"<{duration},{intensity},{frequency}>".encode())
             data["opto_trigger_to_arduino_send_time"] = time.time()
-            logging.debug("Sending trigger to arduino")
+            logging.debug(f"trigger arduino with <{duration},{intensity},{frequency}>")
 
             # add information regarding the trigger to the data dict
             data["duration"] = duration
@@ -72,6 +79,7 @@ def opto_trigger(
             # send to csv writer
             csv_queue.put(data)
             logging.debug("Writing data to csv")
+            trigger = False
 
     board.close()
     csv_kill.set()
