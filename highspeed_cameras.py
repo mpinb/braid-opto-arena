@@ -121,6 +121,42 @@ def video_writer(frames_packet: Queue):
         logging.info("Task done.")
 
 
+class BaslerCamera:
+    def __init__(self, serial, **params):
+        self.serial = serial
+
+        for key, value in params.items():
+            setattr(self, key, value)
+
+        self.tlf = py.TlFactory.GetInstance()
+        self.info = py.DeviceInfo()
+        self.info.SetSerialNumber(str(self.serial))
+        self.cam = py.InstantCamera(self.tlf.CreateDevice(self.info))
+        self.configure()
+
+    def configure(self):
+        self.cam.Open()
+        self.cam.TriggerSelector = "FrameStart"
+        self.cam.TriggerSource = "Line1"
+        self.cam.TriggerActivation = "RisingEdge"
+        self.cam.TriggerMode = "On"
+        self.cam.ExposureTime = self.exposure_time
+        self.cam.Gain = self.gain
+        self.cam.SensorReadoutMode = self.sensor_readout_mode
+
+    def grab(self):
+        return self.cam.RetrieveResult(2000, py.TimeoutHandling_ThrowException)
+
+    def start(self):
+        self.cam.StartGrabbing(py.GrabStrategy_OneByOne)
+
+    def stop(self):
+        self.cam.StopGrabbing()
+
+    def close(self):
+        self.cam.Close()
+
+
 def highspeed_camera(
     camera_serial: str,
     save_folder: str,
@@ -134,21 +170,24 @@ def highspeed_camera(
 ):
     logging.info(f"Initializing camera {camera_serial}")
 
-    # initialize camera
-    tlf = py.TlFactory.GetInstance()
-    info = py.DeviceInfo()
-    info.SetSerialNumber(str(camera_serial))
-    cam = py.InstantCamera(tlf.CreateDevice(info))
+    cam = BaslerCamera(serial=camera_serial, **params["highspeed"]["parameters"])
+    cam.configure()
 
-    # set parameters
-    cam.Open()
-    cam.TriggerSelector = "FrameStart"
-    cam.TriggerSource = "Line1"
-    cam.TriggerActivation = "RisingEdge"
-    cam.TriggerMode = "On"
-    cam.ExposureTime = params["highspeed"]["parameters"]["exposure_time"]
-    cam.Gain = params["highspeed"]["parameters"]["gain"]
-    cam.SensorReadoutMode = params["highspeed"]["parameters"]["sensor_readout_mode"]
+    # # initialize camera
+    # tlf = py.TlFactory.GetInstance()
+    # info = py.DeviceInfo()
+    # info.SetSerialNumber(str(camera_serial))
+    # cam = py.InstantCamera(tlf.CreateDevice(info))
+
+    # # set parameters
+    # cam.Open()
+    # cam.TriggerSelector = "FrameStart"
+    # cam.TriggerSource = "Line1"
+    # cam.TriggerActivation = "RisingEdge"
+    # cam.TriggerMode = "On"
+    # cam.ExposureTime = params["highspeed"]["parameters"]["exposure_time"]
+    # cam.Gain = params["highspeed"]["parameters"]["gain"]
+    # cam.SensorReadoutMode = params["highspeed"]["parameters"]["sensor_readout_mode"]
 
     # fps
     if params["highspeed"]["parameters"]["fps"] is not None:
@@ -185,65 +224,66 @@ def highspeed_camera(
 
     # wait until main script and all other cameras reached the barrier
     logging.info(f"Camera {camera_serial} waiting for barrier.")
+    cam.start()
     barrier.wait()
 
     # start grabbing and looping
-    cam.StartGrabbing(py.GrabStrategy_OneByOne)
     logging.info(f"Camera {camera_serial} passed barrier.")
+    try:
+        while True:
+            # check if the kill event was set
+            if kill_event.is_set():
+                break
 
-    while True:
-        # check if the kill event was set
-        if kill_event.is_set():
-            break
+            # get trigger
+            if trigger_event.is_set() and not trigger:
+                data = copy.deepcopy(mp_dict)
+                with lock:
+                    got_trigger_counter.value += 1
+                trigger = True
+                logging.info("Got data from trigger event, set counter+=1")
 
-        # get trigger
-        if trigger_event.is_set():
-            data = copy.deepcopy(mp_dict)
-            with lock:
-                got_trigger_counter.value += 1
-            trigger = True
-            logging.info("Got data from trigger event, set counter+=1")
-
-        # now get the icoming frame and add to buffer
-        with cam.RetrieveResult(2000, py.TimeoutHandling_ThrowException) as grabResult:
+            # now get the icoming frame and add to buffer
+            grabtime = time.time()
+            grabResult = cam.grab()
             image = converter.Convert(grabResult)
             frame = image.GetArray()
+            logging.debug(f"Frame processing time is {time.time() - grabtime}")
 
-        # if there was no trigger and we didn't switch buffer
-        if not trigger:
-            pre_buffer.append(frame)
+            # if there was no trigger and we didn't switch buffer
+            if not trigger:
+                pre_buffer.append(frame)
 
-        # if there was a trigger or buffer switch
-        if trigger:
-            post_buffer.append(frame)
+            # if there was a trigger or buffer switch
+            if trigger:
+                post_buffer.append(frame)
 
-            # if the post_buffer is full, send the data to the video writer and clear the buffers
-            if len(post_buffer) == post_buffer.maxlen:
-                data["frame_buffer"] = list(pre_buffer) + list(post_buffer)
-                data["camera_serial"] = camera_serial
-                data["save_folder"] = save_folder
-                frames_packet.put(data)
+                # if the post_buffer is full, send the data to the video writer and clear the buffers
+                if len(post_buffer) == post_buffer.maxlen:
+                    data["frame_buffer"] = list(pre_buffer) + list(post_buffer)
+                    data["camera_serial"] = camera_serial
+                    data["save_folder"] = save_folder
+                    frames_packet.put(data)
 
-                pre_buffer.clear()
-                post_buffer.clear()
-                trigger = False
+                    pre_buffer.clear()
+                    post_buffer.clear()
+                    trigger = False
 
-        # otherwise, if we still get an event and we are not in pre-trigger mode
-        # just save the last frames and break
-        elif (
-            trigger_event.is_set()
-            and params["highspeed"]["parameters"]["pre_trigger_mode"] is False
-        ):
-            break
+            # otherwise, if we still get an event and we are not in pre-trigger mode
+            # just save the last frames and break
+            elif (
+                trigger_event.is_set()
+                and params["highspeed"]["parameters"]["pre_trigger_mode"] is False
+            ):
+                break
+    except KeyboardInterrupt:
+        pass
 
     # clean cameras
-    cam.StopGrabbing()
-    cam.Close()
+    cam.stop()
+    cam.close()
 
     # wait for the video writer to finish
     frames_packet.join()
-
-    # join the video writer thread
-    video_writer_thread.join()
 
     logging.info(f"Camera {camera_serial} finished.")

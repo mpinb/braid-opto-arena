@@ -187,7 +187,7 @@ def BraidTrigger(
                     name=f"highspeed_camera_{camera_serial}",
                 ).start()
             )
-            time.sleep(3)
+            time.sleep(2)
 
     logging.info("Reached barrier")
     # wait until all processes finish intializing

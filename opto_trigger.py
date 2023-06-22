@@ -42,47 +42,59 @@ def opto_trigger(
 
     trigger = False
     # start main loop
-    while True:
-        # check for kill event
-        if kill_event.is_set():
-            break
+    try:
+        while True:
+            # check for kill event
+            if kill_event.is_set():
+                break
+            try:
+                if trigger_event.is_set() and not trigger:
+                    data = copy.deepcopy(data_dict)
+                    with lock:
+                        got_trigger_counter.value += 1
+                    trigger = True
+                    logging.info("Got data from trigger event, set counter+=1")
+            except KeyboardInterrupt:
+                break
 
-        if trigger_event.is_set():
-            data = copy.deepcopy(data_dict)
-            with lock:
-                got_trigger_counter.value += 1
-            trigger = True
-            logging.info("Got data from trigger event, set counter+=1")
+            # wait for trigger event
+            if trigger:
+                # if the trigger event got set, trigger the arduino
+                logging.debug("OptoTrigger triggered.")
+                event_time = time.time()
 
-        # wait for trigger event
-        if trigger:
-            # if the trigger event got set, trigger the arduino
-            logging.debug("OptoTrigger triggered.")
-            event_time = time.time()
+                # get data from mp dict
+                logging.debug(f"Got data: {data}")
+                data["opto_trigger_event_set_time"] = event_time
+                data["opto_trigger_data_copy_time"] = time.time()
 
-            # get data from mp dict
-            logging.debug(f"Got data: {data}")
-            data["opto_trigger_event_set_time"] = event_time
-            data["opto_trigger_data_copy_time"] = time.time()
+                # send trigger to arduino
+                board.write(f"<{duration},{intensity},{frequency}>".encode())
+                data["opto_trigger_to_arduino_send_time"] = time.time()
+                logging.debug(
+                    f"trigger arduino with <{duration},{intensity},{frequency}>"
+                )
 
-            # send trigger to arduino
-            board.write(f"<{duration},{intensity},{frequency}>".encode())
-            data["opto_trigger_to_arduino_send_time"] = time.time()
-            logging.debug(f"trigger arduino with <{duration},{intensity},{frequency}>")
+                # add information regarding the trigger to the data dict
+                data["duration"] = duration
+                data["intensity"] = intensity
+                data["frequency"] = frequency
+                data["opto_trigger_to_csv_send_time"] = time.time()
 
-            # add information regarding the trigger to the data dict
-            data["duration"] = duration
-            data["intensity"] = intensity
-            data["frequency"] = frequency
-            data["opto_trigger_to_csv_send_time"] = time.time()
+                # send to csv writer
+                csv_queue.put(data)
+                logging.debug("Writing data to csv")
+                # while got_trigger_counter.value > 0:
+                #     time.sleep(0.01)
 
-            # send to csv writer
-            csv_queue.put(data)
-            logging.debug("Writing data to csv")
-            trigger = False
+                trigger = False
+
+    except KeyboardInterrupt:
+        kill_event.set()
 
     board.close()
     csv_kill.set()
+
     try:
         csv_writer.join()
     except AttributeError:

@@ -28,107 +28,113 @@ def position_trigger(
     barrier.wait()
 
     logging.info("PositionTrigger started.")
-    while True:
-        # current start loop time
-        tcall = time.time()
+    try:
+        while True:
+            # current start loop time
+            tcall = time.time()
 
-        # check for kill event
-        if kill_event.is_set():
-            break
+            # check for kill event
+            if kill_event.is_set():
+                break
 
-        # get chunk from queue if possible
-        try:
-            data = in_queue.get(block=False, timeout=0.01)
-        except queue.Empty:
-            # if queue is empty, continue
-            continue
-
-        if type(data) is bool:
-            continue
-
-        # check for birth event
-        if "Birth" in data:
-            cur_obj_id = data["Birth"]["obj_id"]
-            obj_ids.append(cur_obj_id)
-            obj_birth_times[cur_obj_id] = tcall
-            logging.debug(f"Birth event for {curr_obj_id}")
-            continue
-
-        # check for update event
-        if "Update" in data:
-            curr_obj_id = data["Update"]["obj_id"]
-            logging.debug(f"Update event for {curr_obj_id}")
-            if curr_obj_id not in obj_ids:
-                obj_ids.append(curr_obj_id)
-                obj_birth_times[curr_obj_id] = tcall
-                logging.debug(f"Birth (via Update) event for {curr_obj_id}")
+            # get chunk from queue if possible
+            try:
+                data = in_queue.get(block=False, timeout=0.01)
+            except queue.Empty or KeyboardInterrupt:
+                # if queue is empty, continue
                 continue
 
-        # check for death event
-        if "Death" in data:
-            curr_obj_id = data["Death"]
-            logging.debug(f"Death event for {curr_obj_id}")
-            if curr_obj_id in obj_ids:
-                obj_birth_times.pop(curr_obj_id)
+            if type(data) is bool:
                 continue
 
-        # check for trajectory time
-        if (tcall - obj_birth_times[curr_obj_id]) < params["trigger_params"][
-            "min_trajec_time"
-        ]:
-            logging.debug(f"Trajectory time for {curr_obj_id} too short.")
-            continue
+            # check for birth event
+            if "Birth" in data:
+                cur_obj_id = data["Birth"]["obj_id"]
+                obj_ids.append(cur_obj_id)
+                obj_birth_times[cur_obj_id] = tcall
+                logging.debug(f"Birth event for {curr_obj_id}")
+                continue
 
-        # check for refractory time from last trigger
-        if tcall - last_trigger < params["trigger_params"]["refractory_time"]:
-            logging.debug("Refractory time not met.")
-            continue
+            # check for update event
+            if "Update" in data:
+                curr_obj_id = data["Update"]["obj_id"]
+                logging.debug(f"Update event for {curr_obj_id}")
+                if curr_obj_id not in obj_ids:
+                    obj_ids.append(curr_obj_id)
+                    obj_birth_times[curr_obj_id] = tcall
+                    logging.debug(f"Birth (via Update) event for {curr_obj_id}")
+                    continue
 
-        # get positional data
-        pos = data["Update"]
-        radius = _get_radius_fast(pos, params["trigger_params"])
+            # check for death event
+            if "Death" in data:
+                curr_obj_id = data["Death"]
+                logging.debug(f"Death event for {curr_obj_id}")
+                if curr_obj_id in obj_ids:
+                    obj_birth_times.pop(curr_obj_id)
+                    continue
 
-        # check for trigger conditions
-        if (
-            radius <= params["trigger_params"]["radius_min"]
-            and params["trigger_params"]["zmin"]
-            <= pos["z"]
-            <= params["trigger_params"]["zmax"]
-        ):
-            logging.info(f"Triggered at {tcall:.3f}s")
-            ntrig += 1
-            # set trigger event
-            last_trigger = tcall
+            # check for trajectory time
+            if (tcall - obj_birth_times[curr_obj_id]) < params["trigger_params"][
+                "min_trajec_time"
+            ]:
+                logging.debug(f"Trajectory time for {curr_obj_id} too short.")
+                continue
 
-            # copy all data to mp data_dict
-            copy_time = time.time()
-            for key, value in pos.items():
-                mp_data_dict[key] = value
+            # check for refractory time from last trigger
+            if tcall - last_trigger < params["trigger_params"]["refractory_time"]:
+                logging.debug("Refractory time not met.")
+                continue
 
-            # add trigger timing and number
-            mp_data_dict["ntrig"] = ntrig
-            mp_data_dict["position_trigger_time"] = last_trigger
-            mp_data_dict["position_trigger_copy_time"] = time.time()
+            # get positional data
+            pos = data["Update"]
+            radius = _get_radius_fast(pos, params["trigger_params"])
 
-            logging.debug(
-                f"Took {time.time() - copy_time:.3f}s to copy data to mp_dict."
-            )
+            # check for trigger conditions
+            if (
+                radius <= params["trigger_params"]["radius_min"]
+                and params["trigger_params"]["zmin"]
+                <= pos["z"]
+                <= params["trigger_params"]["zmax"]
+            ):
+                logging.info(f"Triggered at {tcall:.3f}s")
+                ntrig += 1
+                # set trigger event
+                last_trigger = tcall
 
-            # set trigger event
-            trigger_time = time.time()
+                # copy all data to mp data_dict
+                copy_time = time.time()
+                for key, value in pos.items():
+                    mp_data_dict[key] = value
 
-            # set the trigger event
-            trigger_event.set()
+                # add trigger timing and number
+                mp_data_dict["ntrig"] = ntrig
+                mp_data_dict["position_trigger_time"] = last_trigger
+                mp_data_dict["position_trigger_copy_time"] = time.time()
 
-            while got_trigger_counter.value < n_processes:
-                time.sleep(0.01)
+                logging.debug(
+                    f"Took {time.time() - copy_time:.3f}s to copy data to mp_dict."
+                )
 
-            with lock:
-                got_trigger_counter.value = 0
+                # set trigger event
+                trigger_time = time.time()
 
-            # clear the trigger event
-            trigger_event.clear()
-            logging.info(f"Barrier time {time.time() - trigger_time:.3f}s")
+                # set the trigger event
+                trigger_event.set()
+
+                while got_trigger_counter.value < n_processes:
+                    time.sleep(0.01)
+
+                trigger_event.clear()
+
+                with lock:
+                    got_trigger_counter.value = 0
+
+                # clear the trigger event
+
+                logging.info(f"Barrier time {time.time() - trigger_time:.3f}s")
+
+    except KeyboardInterrupt:
+        pass
 
     logging.info("PositionTrigger stopped.")
 

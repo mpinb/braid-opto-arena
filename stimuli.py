@@ -94,76 +94,80 @@ def stimuli(
     barrier.wait()
     logging.info("Barrier passed")
     trigger = False
-    while True:
-        # check if the kill event is set
-        if kill_event.is_set():
-            break
 
-        # fill the screen with image/color
-        screen.blit(bg, (0, 0))
+    try:
+        while True:
+            # check if the kill event is set
+            if kill_event.is_set():
+                break
 
-        if trigger_event.is_set():
-            data = copy.deepcopy(mp_dict)
-            with lock:
-                got_trigger_counter.value += 1
-            trigger = True
-            logging.info("Got data from trigger event, set counter+=1")
+            # fill the screen with image/color
+            screen.blit(bg, (0, 0))
+            if trigger_event.is_set() and not trigger:
+                data = copy.deepcopy(mp_dict)
+                with lock:
+                    got_trigger_counter.value += 1
+                trigger = True
+                logging.info("Got data from trigger event, set counter+=1")
 
-        if loom_stim:
-            # test if the trigger event is set
-            if trigger and not start_loom:
-                start_loom = True  # set the start_loom flag to True
-                logging.debug("Got data from trigger event")
+            if loom_stim:
+                # test if the trigger event is set
+                if trigger and not start_loom:
+                    start_loom = True  # set the start_loom flag to True
+                    logging.debug("Got data from trigger event")
 
-                data["stimulus_start_time"] = time.time()
+                    data["stimulus_start_time"] = time.time()
 
-                # check if random duration
-                if random_duration:
-                    circle_duration = random.choice(possible_durations)
+                    # check if random duration
+                    if random_duration:
+                        circle_duration = random.choice(possible_durations)
 
-                # check if random radius
-                if random_radius:
-                    circle_max_radius = random.choice(possible_radius)
-                    F = circle_duration / (1000 / 60)
-                    dR = circle_max_radius / F
+                    # check if random radius
+                    if random_radius:
+                        circle_max_radius = random.choice(possible_radius)
+                        F = circle_duration / (1000 / 60)
+                        dR = circle_max_radius / F
 
-                # if the position is random, generate a random position
-                if random_position:
-                    x = random.randint(0, random.choice(possible_positions))
-                    y = HEIGHT // 2
-                else:
-                    x = WIDTH // 2
-                    y = HEIGHT // 2
+                    # if the position is random, generate a random position
+                    if random_position:
+                        x = random.randint(0, random.choice(possible_positions))
+                        y = HEIGHT // 2
+                    else:
+                        x = WIDTH // 2
+                        y = HEIGHT // 2
 
-                data["looming_pos_x"] = x
-                data["looming_pos_y"] = y
-                data["looming_radius"] = circle_max_radius
-                data["looming_duration"] = circle_duration
+                    data["looming_pos_x"] = x
+                    data["looming_pos_y"] = y
+                    data["looming_radius"] = circle_max_radius
+                    data["looming_duration"] = circle_duration
 
-                # wait for all other processes to process the trigger
-                csv_queue.put(data)
-                trigger = False
+                    # wait for all other processes to process the trigger
+                    csv_queue.put(data)
+                    trigger = False
 
-            # if the start_loom flag is set, draw the circle
-            if start_loom:
-                radius += dR
+                # if the start_loom flag is set, draw the circle
+                if start_loom:
+                    radius += dR
 
-                # once the circle reaches the max radius, reset the radius and set the start_loom flag to False
-                if radius > circle_max_radius:
-                    radius = 0
-                    start_loom = False
+                    # once the circle reaches the max radius, reset the radius and set the start_loom flag to False
+                    if radius > circle_max_radius:
+                        radius = 0
+                        start_loom = False
 
-                # draw the circle
-                pygame.draw.circle(screen, circle_color, (x, y), radius)
+                    # draw the circle
+                    pygame.draw.circle(screen, circle_color, (x, y), radius)
 
-                # wraparound the x position if the circle goes off the screen
-                if x - radius < 0:
-                    pygame.draw.circle(screen, circle_color, (x + WIDTH, y), radius)
-                elif x + radius > WIDTH:
-                    pygame.draw.circle(screen, circle_color, (x - WIDTH, y), radius)
+                    # wraparound the x position if the circle goes off the screen
+                    if x - radius < 0:
+                        pygame.draw.circle(screen, circle_color, (x + WIDTH, y), radius)
+                    elif x + radius > WIDTH:
+                        pygame.draw.circle(screen, circle_color, (x - WIDTH, y), radius)
 
-        pygame.display.flip()
-        clock.tick(60)
+            pygame.display.flip()
+            clock.tick(60)
+
+    except KeyboardInterrupt:
+        kill_event.set()
 
     pygame.quit()
     csv_kill.set()

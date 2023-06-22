@@ -1,8 +1,9 @@
 import json
 import logging
-import time
-import requests
 import multiprocessing as mp
+import time
+
+import requests
 
 DATA_PREFIX = "data: "
 
@@ -39,22 +40,25 @@ def flydra_proxy(
     barrier.wait()
 
     logging.info(f"Connected to {events_url}, strarting event stream.")
-    for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
-        # check for kill event
-        if kill_event.is_set():
-            break
+    try:
+        for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
+            # check for kill event
+            if kill_event.is_set():
+                break
 
-        stime = time.time()
+            stime = time.time()
 
-        data = _parse_chunk(chunk)
+            data = _parse_chunk(chunk)
 
-        version = data.get("v", 1)  # default because missing in first release
-        assert version == 2  # check the data version
+            version = data.get("v", 1)  # default because missing in first release
+            assert version == 2  # check the data version
 
-        try:
-            out_queue.put(data["msg"])
-        except KeyError:
-            continue
+            try:
+                out_queue.put(data["msg"])
+            except KeyError:
+                continue
 
-        logging.debug(f"Queue size: {out_queue.qsize()}")
-        logging.debug(f"Time to process chunk: {time.time() - stime:.3f}s")
+            logging.debug(f"Queue size: {out_queue.qsize()}")
+            logging.debug(f"Time to process chunk: {time.time() - stime:.3f}s")
+    except KeyboardInterrupt:
+        pass
