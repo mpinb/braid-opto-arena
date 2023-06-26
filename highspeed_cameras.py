@@ -170,24 +170,22 @@ def highspeed_camera(
 ):
     logging.info(f"Initializing camera {camera_serial}")
 
-    cam = BaslerCamera(serial=camera_serial, **params["highspeed"]["parameters"])
-    cam.configure()
+    # initialize camera
+    tlf = py.TlFactory.GetInstance()
+    info = py.DeviceInfo()
+    info.SetSerialNumber(str(camera_serial))
+    cam = py.InstantCamera(tlf.CreateDevice(info))
 
-    # # initialize camera
-    # tlf = py.TlFactory.GetInstance()
-    # info = py.DeviceInfo()
-    # info.SetSerialNumber(str(camera_serial))
-    # cam = py.InstantCamera(tlf.CreateDevice(info))
-
-    # # set parameters
-    # cam.Open()
-    # cam.TriggerSelector = "FrameStart"
-    # cam.TriggerSource = "Line1"
-    # cam.TriggerActivation = "RisingEdge"
-    # cam.TriggerMode = "On"
+    # set parameters
+    cam.Open()
+    cam.TriggerSelector = "FrameStart"
+    cam.TriggerSource = "Line1"
+    cam.TriggerActivation = "RisingEdge"
+    cam.TriggerMode = "On"
     # cam.ExposureTime = params["highspeed"]["parameters"]["exposure_time"]
-    # cam.Gain = params["highspeed"]["parameters"]["gain"]
-    # cam.SensorReadoutMode = params["highspeed"]["parameters"]["sensor_readout_mode"]
+    cam.ExposureMode = "TriggerWidth"
+    cam.Gain = params["highspeed"]["parameters"]["gain"]
+    cam.SensorReadoutMode = params["highspeed"]["parameters"]["sensor_readout_mode"]
 
     # fps
     if params["highspeed"]["parameters"]["fps"] is not None:
@@ -224,7 +222,7 @@ def highspeed_camera(
 
     # wait until main script and all other cameras reached the barrier
     logging.info(f"Camera {camera_serial} waiting for barrier.")
-    cam.start()
+    cam.StartGrabbing(py.GrabStrategy_OneByOne)
     barrier.wait()
 
     # start grabbing and looping
@@ -245,9 +243,11 @@ def highspeed_camera(
 
             # now get the icoming frame and add to buffer
             grabtime = time.time()
-            grabResult = cam.grab()
-            image = converter.Convert(grabResult)
-            frame = image.GetArray()
+            with cam.RetrieveResult(
+                2000, py.TimeoutHandling_ThrowException
+            ) as grabResult:
+                image = converter.Convert(grabResult)
+                frame = image.GetArray()
             logging.debug(f"Frame processing time is {time.time() - grabtime}")
 
             # if there was no trigger and we didn't switch buffer
@@ -280,8 +280,8 @@ def highspeed_camera(
         pass
 
     # clean cameras
-    cam.stop()
-    cam.close()
+    cam.StopGrabbing()
+    cam.Close()
 
     # wait for the video writer to finish
     frames_packet.join()

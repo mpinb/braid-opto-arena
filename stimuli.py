@@ -60,7 +60,7 @@ def stimuli(
         circle_duration = params["stim_params"]["looming"]["duration"]
         if circle_duration == "random":
             random_duration = True
-            possible_durations = [300, 500, 700, 900]
+            possible_durations = [300, 500]
         else:
             random_duration = False
 
@@ -69,7 +69,7 @@ def stimuli(
 
         if circle_max_radius == "random":
             random_radius = True
-            possible_radius = [16, 32, 48, 64]
+            possible_radius = [32, 64]
         else:
             random_radius = False
             circle_max_radius = int(circle_max_radius / 2 * HEIGHT)
