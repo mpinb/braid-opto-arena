@@ -6,13 +6,13 @@ camera_trigger = '/dev/camera_trigger'
 min_trajec_time = 1.0   # minimum trajectory time (in seconds)
 refractory_time = 5     # minimum time between activations (in seconds)
 radius_min = 0.025      # minimum radius for activation (in meters)
-zmin = 0.15              # minimum z for activation (in meters)
+zmin = 0.10              # minimum z for activation (in meters)
 zmax = 0.25             # maximum z for activation (in meters)
 center_x = 0       # arena center x in meters (in meters)
 center_y = 0       # arena center y in meters (in meters)
 
 [opto_params]
-active = true
+active = false
 duration = 100      # in milliseconds
 intensity = 255       # in 0-255 range
 frequency = 0          # in Hz

@@ -182,8 +182,8 @@ def highspeed_camera(
     cam.TriggerSource = "Line1"
     cam.TriggerActivation = "RisingEdge"
     cam.TriggerMode = "On"
-    # cam.ExposureTime = params["highspeed"]["parameters"]["exposure_time"]
-    cam.ExposureMode = "TriggerWidth"
+    cam.ExposureTime = params["highspeed"]["parameters"]["exposure_time"]
+    # cam.ExposureMode = "TriggerWidth"
     cam.Gain = params["highspeed"]["parameters"]["gain"]
     cam.SensorReadoutMode = params["highspeed"]["parameters"]["sensor_readout_mode"]
 
