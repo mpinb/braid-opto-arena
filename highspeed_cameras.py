@@ -12,54 +12,6 @@ import pypylon.pylon as py
 from vidgear.gears import WriteGear
 
 
-def start_highspeed_cameras(
-    trigger_event: mp.Event,
-    kill_event: mp.Event,
-    mp_dict: mp.Manager().dict,
-    barrier: mp.Barrier,
-    params: dict,
-):
-    logging.basicConfig(
-        level=logging.DEBUG, format="%(processName)s: %(asctime)s - %(message)s"
-    )
-    # initialize cameras
-    logging.info("Initializing cameras...")
-
-    # setup save folder
-    save_folder = os.path.basename(params["folder"])[:-6]
-    if not os.path.exists(f"/home/benyishay_la/Videos/{save_folder}"):
-        os.mkdir(f"/home/benyishay_la/Videos/{save_folder}")
-
-    # setup cameras
-    cameras_processes = []
-    for _, camera_serial in params["highspeed"]["cameras"].items():
-        cameras_processes.append(
-            mp.Process(
-                target=highspeed_camera,
-                args=(
-                    camera_serial,
-                    save_folder,
-                    trigger_event,
-                    kill_event,
-                    mp_dict,
-                    barrier,
-                    params,
-                ),
-                name=f"camera_{camera_serial}",
-            )
-        )
-        time.sleep(3)
-
-    for camera_process in cameras_processes:
-        camera_process.start()
-
-    while True:
-        if kill_event.is_set():
-            break
-
-    [cp.join() for cp in cameras_processes]
-
-
 def video_writer(frames_packet: Queue):
     logging.basicConfig(
         level=logging.DEBUG, format="%(processName)s: %(asctime)s - %(message)s"
@@ -119,42 +71,6 @@ def video_writer(frames_packet: Queue):
         logging.info("Video writer closed.")
         frames_packet.task_done()
         logging.info("Task done.")
-
-
-class BaslerCamera:
-    def __init__(self, serial, **params):
-        self.serial = serial
-
-        for key, value in params.items():
-            setattr(self, key, value)
-
-        self.tlf = py.TlFactory.GetInstance()
-        self.info = py.DeviceInfo()
-        self.info.SetSerialNumber(str(self.serial))
-        self.cam = py.InstantCamera(self.tlf.CreateDevice(self.info))
-        self.configure()
-
-    def configure(self):
-        self.cam.Open()
-        self.cam.TriggerSelector = "FrameStart"
-        self.cam.TriggerSource = "Line1"
-        self.cam.TriggerActivation = "RisingEdge"
-        self.cam.TriggerMode = "On"
-        self.cam.ExposureTime = self.exposure_time
-        self.cam.Gain = self.gain
-        self.cam.SensorReadoutMode = self.sensor_readout_mode
-
-    def grab(self):
-        return self.cam.RetrieveResult(2000, py.TimeoutHandling_ThrowException)
-
-    def start(self):
-        self.cam.StartGrabbing(py.GrabStrategy_OneByOne)
-
-    def stop(self):
-        self.cam.StopGrabbing()
-
-    def close(self):
-        self.cam.Close()
 
 
 def highspeed_camera(
