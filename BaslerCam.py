@@ -12,9 +12,17 @@ from vidgear.gears import WriteGear
 
 
 @dataclass
+class MetaData:
+    ntrig: int
+    obj_id: int
+    camera_serial: int
+    frame: int
+
+
+@dataclass
 class DataPacket:
     frames: Iterable
-    metadata: Mapping[str, Any]
+    metadata: MetaData
 
 
 class BaslerCam(mp.Process):
