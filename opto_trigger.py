@@ -3,100 +3,114 @@ import logging
 import multiprocessing as mp
 import threading
 import time
-from queue import Queue
+from queue import Queue, Empty
 
+import csv
+import os
 import serial
 
 from csv_writer import CsvWriter
 
 
-def opto_trigger(
-    trigger_event: mp.Event,
-    kill_event: mp.Event,
-    data_dict: mp.Manager().dict,
-    barrier: mp.Barrier,
-    got_trigger_counter: mp.Value,
-    lock: mp.Lock,
-    params: dict,
-):
-    # start csv writer
-    csv_queue = Queue()
-    csv_kill = threading.Event()
-    csv_writer = CsvWriter(
-        csv_file=params["folder"] + "/opto.csv",
-        queue=csv_queue,
-        kill_event=csv_kill,
-    ).start()
+class OptoTrigger:
+    def __init__(
+        self,
+        queue: Queue,
+        kill_event: threading.Event,
+        barrier: threading.Barrier,
+        params: dict,
+    ) -> None:
+        # Threading stuff
+        self.queue = queue
+        self.kill_event = kill_event
+        self.barrier = barrier
 
-    # connect to arduino
-    board = serial.Serial(params["arduino_devices"]["opto_trigger"], 9600)
+        # Get opto parameters
+        self.duration = params["opto_params"]["duration"]
+        self.intensity = params["opto_params"]["intensity"]
+        self.frequency = params["opto_params"]["frequency"]
 
-    # get parameters from dict
-    duration = params["opto_params"]["duration"]
-    intensity = params["opto_params"]["intensity"]
-    frequency = params["opto_params"]["frequency"]
+        # Get arduino parameters
+        self.arduino_device = params["arduino_devices"]["opto_trigger"]
 
-    # wait for all processes to start
-    barrier.wait()
-    logging.info("opto_trigger started.")
+        # Get folder
+        self.folder = params["folder"]
 
-    trigger = False
-    # start main loop
-    try:
-        while True:
-            # check for kill event
-            if kill_event.is_set():
-                break
+    def run(self):
+        # Start csv writer
+        self.start_csv_writer()
+
+        # Start the arduino
+        self.connect_to_arduino()
+
+        # Wait for all processes/threads to start
+        logging.debug("Reached barrier.")
+        self.barrier.wait()
+
+        # Start main loop
+        logging.info("Starting main loop.")
+        while not self.kill_event.is_set():
+            # Get data from queue
             try:
-                if trigger_event.is_set() and not trigger:
-                    data = copy.deepcopy(data_dict)
-                    with lock:
-                        got_trigger_counter.value += 1
-                    trigger = True
-                    logging.info("Got data from trigger event, set counter+=1")
-            except KeyboardInterrupt:
-                break
+                data = self.queue.get(block=False, timeout=0.01)
+            except Empty:
+                continue
 
-            # wait for trigger event
-            if trigger:
-                # if the trigger event got set, trigger the arduino
-                logging.debug("OptoTrigger triggered.")
-                event_time = time.time()
+            data["opto_trigger_get_time"] = time.time()
 
-                # get data from mp dict
-                logging.debug(f"Got data: {data}")
-                data["opto_trigger_event_set_time"] = event_time
-                data["opto_trigger_data_copy_time"] = time.time()
+            # Trigger arduino
+            self.trigger()
+            data["opto_trigger_to_arduino_time"] = time.time()
 
-                # send trigger to arduino
-                board.write(f"<{duration},{intensity},{frequency}>".encode())
-                data["opto_trigger_to_arduino_send_time"] = time.time()
-                logging.debug(
-                    f"trigger arduino with <{duration},{intensity},{frequency}>"
-                )
+            # Save information to csv
+            self.write_to_csv(data)
 
-                # add information regarding the trigger to the data dict
-                data["duration"] = duration
-                data["intensity"] = intensity
-                data["frequency"] = frequency
-                data["opto_trigger_to_csv_send_time"] = time.time()
+        logging.info("Main loop terminated.")
 
-                # send to csv writer
-                csv_queue.put(data)
-                logging.debug("Writing data to csv")
-                # while got_trigger_counter.value > 0:
-                #     time.sleep(0.01)
+        # Empty queue
+        while not self.queue.empty():
+            self.queue.get()
+        logging.debug("Queue emptied.")
 
-                trigger = False
+        # Close arduino
+        self.board.close()
+        logging.debug("Arduino closed.")
 
-    except KeyboardInterrupt:
-        kill_event.set()
+        # Close csv file
+        self.csv_file.close()
+        logging.debug("CSV file closed.")
 
-    board.close()
-    csv_kill.set()
+    def connect_to_arduino(self):
+        self.board = serial.Serial(self.arduino_device, 9600)
 
-    try:
-        csv_writer.join()
-    except AttributeError:
-        pass
-    logging.info("opto_trigger stopped.")
+    def trigger(self):
+        self.board.write(
+            f"<{self.duration},{self.intensity},{self.frequency}>".encode()
+        )
+
+    def start_csv_writer(self):
+        # Set csv file path
+        csv_file_path = os.path.join(self.folder, "opto.csv")
+
+        # Open CSV file and create writer
+        self.csv_file = open(csv_file_path, "a+", newline="")
+        self.csv_writer = csv.writer(self.csv_file)
+
+        # This is a way to check if the file is empty
+        try:
+            header = next(self.csv_writer)  # noqa: F841
+            self.has_header = True
+        except StopIteration:
+            self.has_header = False
+
+    def write_to_csv(self, row):
+        # Write header if needed
+        if not self.has_header:
+            self.csv_writer.writerow(row.keys())
+            self.has_header = True
+
+        # Write row
+        self.csv_writer.writerow(row.values())
+
+        # Flush to file
+        self.csv_file.flush()

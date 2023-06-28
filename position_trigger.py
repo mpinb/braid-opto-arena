@@ -1,145 +1,120 @@
 import logging
-import multiprocessing as mp
-import queue
 import time
+import threading
+from queue import Queue, Empty
 
 
-def position_trigger(
-    in_queue: mp.Queue,
-    trigger_event: mp.Event,
-    kill_event: mp.Event,
-    mp_data_dict: mp.Manager().dict,
-    barrier: mp.Barrier,
-    got_trigger_counter: mp.Value,
-    lock: mp.Lock,
-    n_processes: int,
-    params: dict,
-):
-    # tracking control
-    curr_obj_id = None
-    obj_ids = []
-    obj_birth_times = {}
-    ntrig = 0
+class PositionTrigger:
+    def __init__(
+        self,
+        queue: Queue,
+        kill_event: threading.Event,
+        barrier: threading.Barrier,
+        out_queues: list | Queue,
+        params: dict,
+    ) -> None:
+        # Threading stuff
+        self.queue = queue
+        self.out_queues = out_queues
+        self.barrier = barrier
+        self.kill_event = kill_event
 
-    # last trigger time as current
-    last_trigger = time.time()
+        # Get trajectory parameters
+        self.min_trajec_time = params["min_trajec_time"]
+        self.refractory_time = params["refractory_time"]
+        self.radius_min = params["radius_min"]
+        self.zmin = params["zmin"]
+        self.zmax = params["zmax"]
 
-    # wait for all processes to start
-    barrier.wait()
+    def run(self):
+        # Tracking control stuff
+        curr_obj_id = None
+        obj_ids = []
+        obj_birth_times = {}
+        ntrig = 0
 
-    logging.info("PositionTrigger started.")
-    try:
-        while True:
-            # current start loop time
+        # Wait for all processes/threads to start
+        logging.debug("Reached barrier.")
+        self.barrier.wait()
+
+        # Set last trigger time as current
+        last_trigger = time.time()
+        logging.info("Starting main loop.")
+
+        # Start the main loop
+        while not self.kill_event.is_set():
+            # Get current timestamp
             tcall = time.time()
 
-            # check for kill event
-            if kill_event.is_set():
-                break
-
-            # get chunk from queue if possible
+            # Get data from queue
             try:
-                data = in_queue.get(block=False, timeout=0.01)
-            except queue.Empty or KeyboardInterrupt:
-                # if queue is empty, continue
+                data = self.queue.get(block=False, timeout=0.01)
+            except Empty:
                 continue
 
-            if type(data) is bool:
-                continue
-
-            # check for birth event
+            # Check for birth event
             if "Birth" in data:
+                logging.debug(f"Birth event: {data['Birth']}")
                 cur_obj_id = data["Birth"]["obj_id"]
                 obj_ids.append(cur_obj_id)
                 obj_birth_times[cur_obj_id] = tcall
-                logging.debug(f"Birth event for {curr_obj_id}")
                 continue
 
-            # check for update event
+            # Check for update event
             if "Update" in data:
+                logging.debug(f"Update event: {data['Update']}")
                 curr_obj_id = data["Update"]["obj_id"]
-                logging.debug(f"Update event for {curr_obj_id}")
+
+                # If somehow we missed the "Birth" event, add it now
                 if curr_obj_id not in obj_ids:
+                    logging.debug(f"Adding birth event for Update event {curr_obj_id}")
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall
-                    logging.debug(f"Birth (via Update) event for {curr_obj_id}")
                     continue
 
-            # check for death event
+            # Check for death event
             if "Death" in data:
+                logging.debug(f"Death event: {data['Death']}")
                 curr_obj_id = data["Death"]
-                logging.debug(f"Death event for {curr_obj_id}")
                 if curr_obj_id in obj_ids:
                     obj_birth_times.pop(curr_obj_id)
-                    continue
 
-            # check for trajectory time
-            if (tcall - obj_birth_times[curr_obj_id]) < params["trigger_params"][
-                "min_trajec_time"
-            ]:
+            # Check for trajectory time
+            if (tcall - obj_birth_times[curr_obj_id]) < self.min_trajec_time:
                 logging.debug(f"Trajectory time for {curr_obj_id} too short.")
                 continue
 
-            # check for refractory time from last trigger
-            if tcall - last_trigger < params["trigger_params"]["refractory_time"]:
+            # Check for refractory time from last trigger
+            if tcall - last_trigger < self.refractory_time:
                 logging.debug("Refractory time not met.")
                 continue
 
-            # get positional data
+            # Get positional data
             pos = data["Update"]
-            radius = _get_radius_fast(pos, params["trigger_params"])
+            radius = self._get_radius_fast(
+                pos["x"], pos["y"], self.center_x, self.center_y
+            )
 
-            # check for trigger conditions
-            if (
-                radius <= params["trigger_params"]["radius_min"]
-                and params["trigger_params"]["zmin"]
-                <= pos["z"]
-                <= params["trigger_params"]["zmax"]
-            ):
-                logging.info(f"Triggered at {tcall:.3f}s")
+            # Check for trigger conditions
+            if radius <= self.radius and self.zmin <= pos["z"] <= self.zmax:
+                # Set trigger counter and time
                 ntrig += 1
-                # set trigger event
                 last_trigger = tcall
 
-                # copy all data to mp data_dict
-                copy_time = time.time()
-                for key, value in pos.items():
-                    mp_data_dict[key] = value
-
-                # add trigger timing and number
-                mp_data_dict["ntrig"] = ntrig
-                mp_data_dict["position_trigger_time"] = last_trigger
-                mp_data_dict["position_trigger_copy_time"] = time.time()
-
-                logging.debug(
-                    f"Took {time.time() - copy_time:.3f}s to copy data to mp_dict."
-                )
-
-                # set trigger event
+                # Set trigger event
                 trigger_time = time.time()
+                data["trigger_time"] = trigger_time
 
-                # set the trigger event
-                trigger_event.set()
+                # Send the data to the output queues
+                for q in self.out_queues:
+                    data["queue_send_time"] = time.time()
+                    q.put(data)
 
-                while got_trigger_counter.value < n_processes:
-                    time.sleep(0.01)
+        logging.info("Main loop terminated.")
 
-                trigger_event.clear()
+        while not self.queue.empty():
+            logging.debug("Clearing queue.")
+            self.queue.get()
 
-                with lock:
-                    got_trigger_counter.value = 0
-
-                # clear the trigger event
-
-                logging.info(f"Barrier time {time.time() - trigger_time:.3f}s")
-
-    except KeyboardInterrupt:
-        pass
-
-    logging.info("PositionTrigger stopped.")
-
-
-def _get_radius_fast(pos, params):
-    return (
-        (pos["x"] - params["center_x"]) ** 2 + (pos["y"] - params["center_y"]) ** 2
-    ) ** 0.5
+    def _get_radius_fast(x, y, center_x, center_y):
+        return ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5

@@ -5,11 +5,69 @@ import os
 import threading
 import time
 from collections import deque
-from queue import Queue
+from queue import Queue, Empty
 
 # import cv2
 import pypylon.pylon as py
 from vidgear.gears import WriteGear
+
+
+class CameraManager:
+    def __init__(
+        self,
+        queue: Queue,
+        kill_event: threading.Event,
+        barrier: threading.Barrier,
+        params: dict,
+    ) -> None:
+        # Threading stuff
+        self.queue = queue
+        self.kill_event = kill_event
+        self.barrier = barrier
+        self.params = params
+        self.cameras = params["highspeed"]["cameras"]
+
+    def run(self):
+        # Set mp.Event for the cameras
+        self.cameras_trigger_event = mp.Event()
+
+        # Start all cameras
+        self.start_cameras()
+
+        # Wait for all processes/threads to start
+        logging.debug("Reached barrier.")
+        self.barrier.wait()
+
+        # Start main loop
+        logging.info("Starting main loop.")
+        while not self.kill_event.is_set():
+            # Get data from queue
+            try:
+                data = self.queue.get(block=False, timeout=0.01)
+            except Empty:
+                continue
+
+            self.cameras_trigger_event.set()
+            data["opto_trigger_get_time"] = time.time()
+
+    def start_cameras(self):
+        # initialize all camera processes
+        camera_processes = []
+        for _, camera_serial in self.cameras.items():
+            camera_process = mp.Process(
+                target=highspeed_camera,
+                args=(
+                    camera_serial,
+                    self.cameras_trigger_event,
+                    self.kill_event,
+                    self.params,
+                ),
+            )
+            camera_processes.append(camera_process)
+            time.sleep(2)
+
+        for camera_process in camera_processes:
+            camera_process.start()
 
 
 def video_writer(frames_packet: Queue):
