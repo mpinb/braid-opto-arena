@@ -9,11 +9,11 @@ import tomllib
 import git
 import serial
 
-from flydra_proxy import flydra_proxy
-from highspeed_cameras import highspeed_camera
-from opto_trigger import opto_trigger
-from position_trigger import position_trigger
-from stimuli import stimuli
+from FlydraProxy import flydra_proxy
+from CamerasManager import highspeed_camera
+from OptoTrigger import opto_trigger
+from PositionTrigger import position_trigger
+from VisualStimuli import stimuli
 
 
 def check_braid_folder(root_folder: str) -> str:

@@ -1,23 +1,27 @@
 import logging
 import time
-import threading
+from threading import Event, Barrier
 from queue import Queue, Empty
+from ThreadClass import ThreadClass
 
 
-class PositionTrigger:
+class PositionTrigger(ThreadClass):
     def __init__(
         self,
-        queue: Queue,
-        kill_event: threading.Event,
-        barrier: threading.Barrier,
         out_queues: list | Queue,
+        queue: Queue,
+        kill_event: Event,
+        barrier: Barrier,
         params: dict,
+        *args,
+        **kwargs,
     ) -> None:
+        super(PositionTrigger, self).__init__(
+            queue, kill_event, barrier, params, *args, **kwargs
+        )
+
         # Threading stuff
-        self.queue = queue
         self.out_queues = out_queues
-        self.barrier = barrier
-        self.kill_event = kill_event
 
         # Get trajectory parameters
         self.min_trajec_time = params["min_trajec_time"]
@@ -86,7 +90,7 @@ class PositionTrigger:
 
             # Check for refractory time from last trigger
             if tcall - last_trigger < self.refractory_time:
-                logging.debug("Refractory time not met.")
+                logging.debug(f"Refractory time not met for obj {curr_obj_id}.")
                 continue
 
             # Get positional data
@@ -107,8 +111,11 @@ class PositionTrigger:
 
                 # Send the data to the output queues
                 for q in self.out_queues:
+                    logging.debug(f"Sending data to queue {q}.")
                     data["queue_send_time"] = time.time()
                     q.put(data)
+
+                logging.info(f"Triggered {ntrig} times.")
 
         logging.info("Main loop terminated.")
 

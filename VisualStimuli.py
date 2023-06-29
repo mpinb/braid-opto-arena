@@ -7,12 +7,78 @@ import threading
 import time
 import tomllib
 from queue import Queue
-
+from ThreadClass import ThreadClass
+from threading import Barrier, Event
 import pygame
 
-from csv_writer import CsvWriter
-
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
+
+
+class VisualStimuli(ThreadClass):
+    def __init__(
+        self,
+        queue: Queue,
+        kill_event: Event,
+        barrier: Barrier,
+        params: dict,
+        *args,
+        **kwargs,
+    ) -> None:
+        super(VisualStimuli, self).__init__(
+            queue, kill_event, barrier, params, *args, **kwargs
+        )
+
+    def run(self):
+        # Start the main pygame instance
+        logging.debug("Initializing pygame.")
+        pygame.init()
+        self._define_screen()
+
+        # Initialize clock
+        clock = pygame.time.Clock()
+
+        # Initialize stimuli
+
+        # Wait for barrier
+        logging.debug("Waiting for barrier.")
+        self.barrier.wait()
+
+        # Start main loop
+        logging.info("Starting main loop.")
+        while not self.kill_event.is_set():
+            pass
+
+            # Update window
+            pygame.display.flip()
+
+            # Tick clock (60hz refresh rate)
+            clock.tick(60)
+
+        pygame.quit()
+        logging.info("Main loop terminated.")
+
+    def _define_screen(self):
+        # Define screen size
+        self.screen_size = self.params["screen_size"]
+        self.screen = pygame.display.set_mode(self.screen_size, pygame.NOFRAME)
+
+    def _define_stimuli(self):
+        pass
+
+
+class LoomingCircleStim:
+    def __init__(self) -> None:
+        pass
+
+
+class GratingStim:
+    def __init__(self) -> None:
+        pass
+
+
+class StaticStim:
+    def __init__(self) -> None:
+        pass
 
 
 def stimuli(
