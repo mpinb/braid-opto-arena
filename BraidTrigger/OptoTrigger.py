@@ -10,6 +10,12 @@ from CSVWriter import CSVWriter
 
 
 class OptoTrigger(ThreadClass):
+    """_summary_
+
+    Args:
+        ThreadClass (_type_): _description_
+    """
+
     def __init__(
         self,
         queue: Queue,
@@ -19,6 +25,14 @@ class OptoTrigger(ThreadClass):
         *args,
         **kwargs,
     ) -> None:
+        """_summary_
+
+        Args:
+            queue (Queue): _description_
+            kill_event (Event): _description_
+            barrier (Barrier): _description_
+            params (dict): _description_
+        """
         super(OptoTrigger, self).__init__(
             queue, kill_event, barrier, params, *args, **kwargs
         )
@@ -35,12 +49,13 @@ class OptoTrigger(ThreadClass):
         self.folder = params["folder"]
 
     def run(self):
+        """_summary_"""
         # Define csv writer queue
         csv_queue = Queue()
 
         # Start csv writer
         csv_writer = CSVWriter(
-            self.folder + "/opto_trigger.csv",
+            self.folder + "/opto.csv",
             csv_queue,
             self.kill_event,
         )
@@ -58,7 +73,8 @@ class OptoTrigger(ThreadClass):
         # Start main loop
         logging.info("Starting main loop.")
         while not self.kill_event.is_set():
-            # Get data from queue
+            # Get data from queue. This doesn't actually block,
+            # because we want to be able to capture kill events
             try:
                 data = self.queue.get(block=False, timeout=0.01)
             except Empty:
@@ -67,10 +83,12 @@ class OptoTrigger(ThreadClass):
             data["opto_trigger_get_time"] = time.time()
 
             # Trigger arduino
+            logging.debug("Triggering arduino.")
             self.trigger()
             data["opto_trigger_to_arduino_time"] = time.time()
 
             # Save information to csv
+            logging.debug("Putting data in csv queue.")
             csv_queue.put(data)
 
         logging.info("Main loop terminated.")
@@ -85,9 +103,11 @@ class OptoTrigger(ThreadClass):
         logging.debug("Arduino closed.")
 
     def connect_to_arduino(self):
+        """_summary_"""
         self.board = serial.Serial(self.arduino_device, 9600)
 
     def trigger(self):
+        """_summary_"""
         self.board.write(
             f"<{self.duration},{self.intensity},{self.frequency}>".encode()
         )

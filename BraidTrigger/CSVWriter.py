@@ -6,6 +6,12 @@ from ThreadClass import ThreadClass
 
 
 class CSVWriter(ThreadClass):
+    """_summary_
+
+    Args:
+        ThreadClass (_type_): _description_
+    """
+
     def __init__(
         self,
         filename: str,
@@ -14,12 +20,20 @@ class CSVWriter(ThreadClass):
         *args,
         **kwargs,
     ) -> None:
+        """_summary_
+
+        Args:
+            filename (str): _description_
+            queue (Queue): _description_
+            kill_event (Event): _description_
+        """
         super(CSVWriter, self).__init__(queue, kill_event, *args, **kwargs)
 
         # Set filename
         self.filename = filename
 
     def run(self):
+        """_summary_"""
         # Open/Create file to append data
         logging.debug(f"Opening file {self.filename}")
         with open(self.filename, "a+", newline="") as csvfile:

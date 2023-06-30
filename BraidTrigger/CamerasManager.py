@@ -4,11 +4,17 @@ import time
 from queue import Empty, Queue
 from threading import Barrier, Event
 
-from BaslerCam import TriggeredBaslerCam
+from BraidTrigger.cameras.BaslerCam import TriggeredBaslerCam
 from ThreadClass import ThreadClass
 
 
 class CamerasManager(ThreadClass):
+    """_summary_
+
+    Args:
+        ThreadClass (_type_): _description_
+    """
+
     def __init__(
         self,
         queue: Queue,
@@ -18,6 +24,14 @@ class CamerasManager(ThreadClass):
         *args,
         **kwargs,
     ) -> None:
+        """_summary_
+
+        Args:
+            queue (Queue): _description_
+            kill_event (Event): _description_
+            barrier (Barrier): _description_
+            params (dict): _description_
+        """
         super(CamerasManager, self).__init__(
             queue, barrier, kill_event, params, *args, **kwargs
         )
@@ -26,6 +40,7 @@ class CamerasManager(ThreadClass):
         self.cameras = params["highspeed"]["cameras"]
 
     def run(self):
+        """_summary_"""
         # Set mp.Event for the cameras
         self.cameras_trigger_event = mp.Event()
 
@@ -55,6 +70,7 @@ class CamerasManager(ThreadClass):
         self.mp_cameras_kill_event.set()
 
     def start_cameras(self):
+        """_summary_"""
         # Create dictionary to store camera proceesses
         self.mp_cameras = {}
 

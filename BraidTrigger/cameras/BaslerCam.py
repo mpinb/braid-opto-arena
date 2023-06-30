@@ -15,6 +15,8 @@ from vidgear.gears import WriteGear
 
 @dataclass
 class MetaData:
+    """_summary_"""
+
     ntrig: int
     obj_id: int
     camera_serial: int
@@ -23,11 +25,19 @@ class MetaData:
 
 @dataclass
 class DataPacket:
+    """_summary_"""
+
     frames: Iterable
     metadata: MetaData
 
 
 class VideoWriter(Thread):
+    """_summary_
+
+    Args:
+        Thread (_type_): _description_
+    """
+
     def __init__(
         self,
         params: dict,
@@ -35,6 +45,14 @@ class VideoWriter(Thread):
         filename: str | None = None,
         kill_event: Event | None = None,
     ) -> None:
+        """_summary_
+
+        Args:
+            params (dict): _description_
+            incoming_data (Queue | None | list | np.ndarray, optional): _description_. Defaults to None.
+            filename (str | None, optional): _description_. Defaults to None.
+            kill_event (Event | None, optional): _description_. Defaults to None.
+        """
         # Configure parameters
         self.params = params
         self.incoming_data = incoming_data
@@ -42,6 +60,13 @@ class VideoWriter(Thread):
         self.kill_event = kill_event
 
     def _check_mp(self):
+        """_summary_
+
+        Raises:
+            ValueError: _description_
+            ValueError: _description_
+            ValueError: _description_
+        """
         """Check input parameters do decide if we need to use multiprocessing"""
         if self.filename is None:
             if ~isinstance(self.incoming_data, Queue):
@@ -58,6 +83,7 @@ class VideoWriter(Thread):
                 self.threaded_writing = False
 
     def run(self) -> None:
+        """_summary_"""
         # Check what type of data we got
         if self.threaded_writing:
             self.looped_video_writer()
@@ -65,6 +91,11 @@ class VideoWriter(Thread):
             self.write_video(self.incoming_data)
 
     def write_video(self, data: list | np.ndarray | DataPacket) -> None:
+        """_summary_
+
+        Args:
+            data (list | np.ndarray | DataPacket): _description_
+        """
         """Write video to file"""
 
         if isinstance(data, DataPacket):
@@ -98,6 +129,7 @@ class VideoWriter(Thread):
         video_writer.close()
 
     def looped_video_writer(self) -> None:
+        """_summary_"""
         logging.debug("Starting looped video writer")
         while True:
             # Check if the kill_event is set, but also that the queue is empty
@@ -118,6 +150,12 @@ class VideoWriter(Thread):
 
 
 class BaslerCam(mp.Process):
+    """_summary_
+
+    Args:
+        mp (_type_): _description_
+    """
+
     def __init__(
         self,
         serial: str | int,
@@ -125,6 +163,12 @@ class BaslerCam(mp.Process):
         *args,
         **kwargs,
     ) -> None:
+        """_summary_
+
+        Args:
+            serial (str | int): _description_
+            camera_params (dict | None, optional): _description_. Defaults to None.
+        """
         super(BaslerCam, self).__init__(*args, **kwargs)
 
         # Get arguments
@@ -194,10 +238,24 @@ class BaslerCam(mp.Process):
 
     @property
     def get_attr(self, attr: str) -> Any:
+        """_summary_
+
+        Args:
+            attr (str): _description_
+
+        Returns:
+            Any: _description_
+        """
         return getattr(self.cam, attr).Value
 
 
 class TriggeredBaslerCam(BaslerCam):
+    """_summary_
+
+    Args:
+        BaslerCam (_type_): _description_
+    """
+
     def __init__(
         self,
         serial: str | int,
@@ -208,6 +266,15 @@ class TriggeredBaslerCam(BaslerCam):
         *args,
         **kwargs,
     ):
+        """_summary_
+
+        Args:
+            serial (str | int): _description_
+            camera_params (dict | None): _description_
+            barrier (mp.Barrier): _description_
+            kill_event (mp.Event): _description_
+            incoming_data_queue (mp.Queue): _description_
+        """
         super().__init__(serial, camera_params, *args, **kwargs)
 
         # Multiprocessing stuff
@@ -250,6 +317,7 @@ class TriggeredBaslerCam(BaslerCam):
                 trigger_set = True
             except Empty:
                 trigger_set = False
+                pass
 
             # Append frame to frames buffer
             frames_buffer.append(self.grab())
@@ -282,6 +350,7 @@ class TriggeredBaslerCam(BaslerCam):
         logging.info("Process finished.")
 
     def _video_writer(self):
+        """_summary_"""
         output_params = {
             "-input_framerate": 25,
             "-vcodec": "h264_nvenc",

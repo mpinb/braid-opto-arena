@@ -12,6 +12,12 @@ DATA_PREFIX = "data: "
 
 
 class FlydraProxy(ThreadClass):
+    """_summary_
+
+    Args:
+        ThreadClass (_type_): _description_
+    """
+
     def __init__(
         self,
         url: str,
@@ -22,6 +28,15 @@ class FlydraProxy(ThreadClass):
         *args,
         **kwargs,
     ) -> None:
+        """_summary_
+
+        Args:
+            url (str): _description_
+            queue (Queue): _description_
+            kill_event (Event): _description_
+            barrier (Barrier): _description_
+            params (dict): _description_
+        """
         super(FlydraProxy, self).__init__(
             queue, kill_event, barrier, params, *args, **kwargs
         )
@@ -40,6 +55,7 @@ class FlydraProxy(ThreadClass):
         )
 
     def run(self):
+        """_summary_"""
         # Wait for all processes/threads to start
         logging.debug("Waiting for barrier.")
         self.barrier.wait()
@@ -67,6 +83,14 @@ class FlydraProxy(ThreadClass):
         self.queue.join()
 
     def _parse_chunk(self, chunk):
+        """_summary_
+
+        Args:
+            chunk (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         lines = chunk.strip().split("\n")
         assert len(lines) == 2
         assert lines[0] == "event: braid"

@@ -6,6 +6,12 @@ from ThreadClass import ThreadClass
 
 
 class PositionTrigger(ThreadClass):
+    """_summary_
+
+    Args:
+        ThreadClass (_type_): _description_
+    """
+
     def __init__(
         self,
         out_queues: list | Queue,
@@ -16,6 +22,15 @@ class PositionTrigger(ThreadClass):
         *args,
         **kwargs,
     ) -> None:
+        """_summary_
+
+        Args:
+            out_queues (list | Queue): _description_
+            queue (Queue): _description_
+            kill_event (Event): _description_
+            barrier (Barrier): _description_
+            params (dict): _description_
+        """
         super(PositionTrigger, self).__init__(
             queue, kill_event, barrier, params, *args, **kwargs
         )
@@ -31,6 +46,7 @@ class PositionTrigger(ThreadClass):
         self.zmax = params["zmax"]
 
     def run(self):
+        """_summary_"""
         # Tracking control stuff
         curr_obj_id = None
         obj_ids = []
@@ -124,4 +140,15 @@ class PositionTrigger(ThreadClass):
             self.queue.get()
 
     def _get_radius_fast(x, y, center_x, center_y):
+        """_summary_
+
+        Args:
+            x (_type_): _description_
+            y (_type_): _description_
+            center_x (_type_): _description_
+            center_y (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         return ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
