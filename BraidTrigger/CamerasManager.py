@@ -4,8 +4,8 @@ import time
 from queue import Empty, Queue
 from threading import Barrier, Event
 
-from BraidTrigger.cameras.BaslerCam import TriggeredBaslerCam
-from ThreadClass import ThreadClass
+from .cameras import TriggeredBaslerCam
+from .ThreadClass import ThreadClass
 
 
 class CamerasManager(ThreadClass):
@@ -55,16 +55,12 @@ class CamerasManager(ThreadClass):
         logging.info("Starting main loop.")
         while not self.kill_event.is_set():
             # Get data from queue
-            try:
-                data = self.queue.get_nowait()
-            except Empty:
-                continue
+            data = self.queue.get()
 
+            # Send the data to each camera queue
             for cam_name, cam_queue in self.mp_cameras_queues.items():
                 logging.debug(f"Putting data in queue {cam_name}.")
                 cam_queue.put(data)
-
-            data["opto_trigger_get_time"] = time.time()
 
         # Kill all cameras
         self.mp_cameras_kill_event.set()
@@ -90,11 +86,11 @@ class CamerasManager(ThreadClass):
             # Create a new process for each camera
             self.mp_cameras[cam_serial] = TriggeredBaslerCam(
                 serial=cam_serial,
-                camera_params=self.params["highspeed"]["camera_params"],
+                camera_params=self.params["highspeed"]["parameters"],
                 barrier=self.mp_cameras_barrier,
                 kill_event=self.mp_cameras_kill_event,
                 incoming_data_queue=self.mp_cameras_queues[cam_serial],
-            )
+            ).start()
             logging.debug(f"Created camera process for {cam_name}.")
             # Give the camera enough time to initialize
             time.sleep(3)

@@ -6,7 +6,7 @@ from threading import Barrier, Event
 
 import requests
 
-from ThreadClass import ThreadClass
+from .ThreadClass import ThreadClass
 
 DATA_PREFIX = "data: "
 
@@ -20,11 +20,10 @@ class FlydraProxy(ThreadClass):
 
     def __init__(
         self,
-        url: str,
         queue: Queue,
         kill_event: Event,
         barrier: Barrier,
-        params: dict,
+        url: str = "http://0.0.0.0:8397/",
         *args,
         **kwargs,
     ) -> None:
@@ -37,9 +36,7 @@ class FlydraProxy(ThreadClass):
             barrier (Barrier): _description_
             params (dict): _description_
         """
-        super(FlydraProxy, self).__init__(
-            queue, kill_event, barrier, params, *args, **kwargs
-        )
+        super(FlydraProxy, self).__init__(queue, kill_event, barrier, *args, **kwargs)
 
         # Initialize the session
         self.session = requests.session()

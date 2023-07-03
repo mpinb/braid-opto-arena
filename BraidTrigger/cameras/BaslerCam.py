@@ -1,13 +1,14 @@
 import logging
 import multiprocessing as mp
 import os
+import time
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from queue import Queue, Empty
+from queue import Empty, Queue
 from threading import Event, Thread
 from typing import Any
-import time
+
 import numpy as np
 from pypylon import genicam, pylon
 from vidgear.gears import WriteGear
@@ -53,11 +54,14 @@ class VideoWriter(Thread):
             filename (str | None, optional): _description_. Defaults to None.
             kill_event (Event | None, optional): _description_. Defaults to None.
         """
+        super(VideoWriter, self).__init__()
+
         # Configure parameters
         self.params = params
         self.incoming_data = incoming_data
         self.filename = filename
         self.kill_event = kill_event
+        self.threaded_writing = False
 
     def _check_mp(self):
         """_summary_
@@ -190,6 +194,12 @@ class BaslerCam(mp.Process):
         """Set the camera parameters"""
         self.open()
 
+        # First set everything to a hardware trigger
+        self.cam.TriggerSelector = "FrameStart"
+        self.cam.TriggerSource = "Line1"
+        self.cam.TriggerActivation = "RisingEdge"
+        self.cam.TriggerMode = "On"
+
         # Loop over all the dict items and set the camera parameters
         # If the parameter doesn't exist, raise a warning
         try:
@@ -198,7 +208,8 @@ class BaslerCam(mp.Process):
                     setattr(self.cam, key, value)
                     logging.debug(f"Setting {key} = {getattr(self.cam, key).Value}")
                 except genicam.LogicalErrorException:
-                    raise Warning(f"Could not find {key}.")
+                    logging.warning(f"Could not find {key}.")
+                    pass
         except AttributeError:
             raise Warning("No camera parameters were passed.")
 
@@ -237,7 +248,7 @@ class BaslerCam(mp.Process):
         self.converter.OutputBitAlignment = pylon.OutputBitAlignment_MsbAligned
 
     @property
-    def get_attr(self, attr: str) -> Any:
+    def get_attr(self, attribiute: str) -> Any:
         """_summary_
 
         Args:
@@ -246,7 +257,7 @@ class BaslerCam(mp.Process):
         Returns:
             Any: _description_
         """
-        return getattr(self.cam, attr).Value
+        return getattr(self.cam, attribiute).Value
 
 
 class TriggeredBaslerCam(BaslerCam):
@@ -283,7 +294,9 @@ class TriggeredBaslerCam(BaslerCam):
         self.incoming_data_queue = incoming_data_queue
 
         # Capture stuff
-        self.fps = camera_params.get("fps", self.get_attr("ResultingFrameRate"))
+        self.fps = camera_params[
+            "fps"
+        ]  # camera_params.get("fps", self.get_attr(attr="ResultingFrameRate"))
         self.duration = camera_params.get("duration", 3)
         self.ratio = camera_params.get("ratio", 1 / 3)
         self.frames_before = int(self.fps * self.duration * self.ratio)

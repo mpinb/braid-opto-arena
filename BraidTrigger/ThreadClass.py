@@ -1,5 +1,5 @@
-from queue import Queue
 import threading
+from queue import Queue
 
 
 class ThreadClass(threading.Thread):

@@ -1,19 +1,20 @@
 import logging
-import multiprocessing as mp
 import os
 import pathlib
 import shutil
+import threading
 import time
 import tomllib
+from queue import Queue
 
 import git
 import serial
 
-from FlydraProxy import flydra_proxy
-from CamerasManager import highspeed_camera
-from OptoTrigger import opto_trigger
-from PositionTrigger import position_trigger
-from VisualStimuli import stimuli
+from BraidTrigger.CamerasManager import CamerasManager
+from BraidTrigger.FlydraProxy import FlydraProxy
+from BraidTrigger.OptoTrigger import OptoTrigger
+from BraidTrigger.PositionTrigger import PositionTrigger
+from BraidTrigger.VisualStimuli import VisualStimuli
 
 
 def check_braid_folder(root_folder: str) -> str:
@@ -34,192 +35,125 @@ def check_braid_folder(root_folder: str) -> str:
     return curr_braid_folder[0].as_posix()
 
 
-def BraidTrigger(
-    params_file: str = "./params.toml",
-    root_folder: str = "/media/benyishay_la/Data/Experiments/",
-):
-    # load the params
-    with open(params_file, "rb") as pf:
-        params = tomllib.load(pf)
+def main(params_file: str, root_folder: str):
+    # Load params
+    with open(params_file, "rb") as f:
+        params = tomllib.load(f)
 
-    # check if the braid folder exists
+    # Check if braidz is running (see if folder was created)
     folder = check_braid_folder(root_folder)
     params["folder"] = folder
-
-    # copy the params file and commit info to the braid folder
-    shutil.copyfile(params_file, folder + "/params.toml")
-    with open(f"{folder}/commit.toml", "w") as f:
+    # Copy the params file to the experiment folder
+    shutil.copy(params_file, folder)
+    with open(os.path.join(folder, "params.toml"), "w") as f:
         f.write(
             f"commit = {git.Repo(search_parent_directories=True).head.commit.hexsha}"
         )
 
-    # create a manager for the shared variables
-    manager = mp.Manager()
-    queue = (
-        manager.Queue()
-    )  # main queue to pass messages between braid proxy and position trigger
-    mp_dict = (
-        manager.dict()
-    )  # a shared dict that gets updated with positional and debug information on trigger
-    kill_event = manager.Event()  # the main event to kill all processes
-    trigger_event = manager.Event()  # the main event to trigger the processes
+    # Create all threading stuff
+    data_queue = Queue()
+    kill_event = threading.Event()
 
-    # count number of barriers
-    n_barriers = 3  # for main process, flydra_proxy, and position_trigger
+    # Start counting how many barriers we need
+    num_barriers = 3  # 1 for main thread + 1 for FlydraProxy + 1 for PositionTrigger
 
-    if params["opto_params"]["active"]:  # opto trigger
-        n_barriers += 1
+    # Also count how many output queues we need
+    num_out_queues = 0
 
-    if params["highspeed"]["active"]:  # highspeed camera(s)
-        n_barriers += len(params["highspeed"]["cameras"])
+    # Check if the opto is active
+    if params["opto_params"]["active"]:
+        num_barriers += 1
+        num_out_queues += 1
 
-    # check if the static stimulus is active
-    # if so, we don't actually need to add a barrier object, since it's static
-    stim_active = False
+    # Check if and how many cameras are working
+    if params["highspeed"]["active"]:
+        num_barriers + 1  # +1 for CamerasManager (each camera has it's own mp.barrier)
+        num_out_queues += 1
+
+    # Check if and how many visual stimuli are active
     if params["stim_params"]["static"]["active"]:
-        stim_active = True
+        num_barriers += 1  # +1 for the basic static stimuli
 
-    # but also check if any of the dynamic stimuli are active, cause then we need a barrier
     if (
         params["stim_params"]["grating"]["active"]
         or params["stim_params"]["looming"]["active"]
     ):
-        n_barriers += 1
-        stim_active = True
+        num_barriers += 1
+        num_out_queues += 1
 
-    # initialize barrier
-    barrier = manager.Barrier(n_barriers)
+    # Create the barrier
+    barrier = threading.Barrier(num_barriers)
+    out_queues = [Queue() for _ in range(num_out_queues)]
 
-    n_processes = n_barriers - 2  # ignoring the main process and the flydra proxy
+    # Start FlydraProxy
+    flydra_proxy = FlydraProxy(
+        queue=data_queue,
+        kill_event=kill_event,
+        barrier=barrier,
+        name="FlydraProxy",
+    )
 
-    lock = mp.Lock()
-    got_trigger_counter = mp.Value("i", 0)
+    # Start PositionTrigger
+    position_trigger = PositionTrigger(
+        out_queues=out_queues,
+        queue=data_queue,
+        kill_event=kill_event,
+        barrier=barrier,
+        params=params["trigger_params"],
+        name="PositionTrigger",
+    )
 
-    # create a dictionary to hold all processes
-    process_dict = {}
+    # Start OptoTrigger
+    opto_trigger = OptoTrigger(
+        queue=out_queues[0],
+        kill_event=kill_event,
+        barrier=barrier,
+        params=params,
+        name="OptoTrigger",
+    )
 
-    # start flydra proxy process
-    flydra2_url = "http://0.0.0.0:8397/"
-    process_dict["flydra_proxy"] = mp.Process(
-        target=flydra_proxy,
-        args=(flydra2_url, queue, kill_event, barrier),
-        name="flydra_proxy",
-    ).start()
+    # Start VisualStimuli
+    visual_stimuli = VisualStimuli(
+        queue=out_queues[1],
+        kill_event=kill_event,
+        barrier=barrier,
+        params=params,
+        name="VisualStimuli",
+    )
 
-    # start position trigger process
-    process_dict["position_trigger"] = mp.Process(
-        target=position_trigger,
-        args=(
-            queue,
-            trigger_event,
-            kill_event,
-            mp_dict,
-            barrier,
-            got_trigger_counter,
-            lock,
-            n_processes,
-            params,
-        ),
-        name="position_trigger",
-    ).start()
+    # Start CamerasManager
+    cameras_manager = CamerasManager(
+        queue=out_queues[2],
+        kill_event=kill_event,
+        barrier=barrier,
+        params=params,
+        name="CamerasManager",
+    )
 
-    if params["opto_params"]["active"]:
-        # start opto trigger process
-        process_dict["opto_trigger"] = mp.Process(
-            target=opto_trigger,
-            args=(
-                trigger_event,
-                kill_event,
-                mp_dict,
-                barrier,
-                got_trigger_counter,
-                lock,
-                params,
-            ),
-            name="opto_trigger",
-        ).start()
+    # Start all threads
+    flydra_proxy.start()
+    position_trigger.start()
+    opto_trigger.start()
+    visual_stimuli.start()
+    cameras_manager.start()
 
-    if stim_active:
-        # start stimuli process
-        process_dict["stimuli"] = mp.Process(
-            target=stimuli,
-            args=(
-                trigger_event,
-                kill_event,
-                mp_dict,
-                barrier,
-                got_trigger_counter,
-                lock,
-                params,
-            ),
-            name="stimuli",
-        ).start()
-
-    # if highspeed cameras are active, start them
-    if params["highspeed"]["active"]:
-        # connect to highspeed trigger
-        highspeed_board = serial.Serial(
-            params["arduino_devices"]["camera_trigger"], 9600
-        )
-
-        # setup video save folder
-        save_folder = os.path.basename(params["folder"])[:-6]
-        if not os.path.exists(f"/home/benyishay_la/Videos/{save_folder}"):
-            os.mkdir(f"/home/benyishay_la/Videos/{save_folder}")
-
-        # initialize all camera processes
-        camera_processes = []
-        for _, camera_serial in params["highspeed"]["cameras"].items():
-            camera_processes.append(
-                mp.Process(
-                    target=highspeed_camera,
-                    args=(
-                        camera_serial,
-                        save_folder,
-                        trigger_event,
-                        kill_event,
-                        mp_dict,
-                        barrier,
-                        got_trigger_counter,
-                        lock,
-                        params,
-                    ),
-                    name=f"highspeed_camera_{camera_serial}",
-                ).start()
-            )
-            time.sleep(2)
-
-    logging.info("Reached barrier")
-    # wait until all processes finish intializing
+    # Wait for everything to start
     barrier.wait()
 
-    # start camera trigger
-    if params["highspeed"]["active"]:
-        highspeed_board.write(b"H")
-
-    logging.info("All proceeses initialized...")
-
-    # start main loop
+    # Main loop
     try:
         while True:
-            continue
+            time.sleep(1)
     except KeyboardInterrupt:
+        logging.debug("KeyboardInterrupt received. Stopping all threads...")
         kill_event.set()
-
-    # stop camera trigger
-    if params["highspeed"]["active"]:
-        highspeed_board.write(b"L")
-        highspeed_board.close()
-
-    # wait for all processes to finish
-    for _, process in process_dict.items():
-        process.join()
 
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.INFO, format="%(processName)s: %(asctime)s - %(message)s"
+        level=logging.INFO, format="%(threadName)s: %(asctime)s - %(message)s"
     )
-    BraidTrigger(
-        params_file="./params.toml", root_folder="/media/benyishay_la/Data/Experiments/"
+    main(
+        params_file="./data/params.toml",
+        root_folder="/media/benyishay_la/Data/Experiments/",
     )

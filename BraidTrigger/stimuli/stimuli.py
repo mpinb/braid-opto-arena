@@ -75,9 +75,9 @@ class LoomingCircleStim(BaseStim):
         if self.position == "random":
             possible_x = list(range(0, WIDTH, 32))
             possible_y = [HEIGHT // 2] * len(possible_x)
-            self.possible_positions = np.asarray([possible_x, possible_y]).T
+            self.possible_positions = np.asarray(possible_x).T
         elif isinstance(self.position, int):
-            self.possible_positions = np.asarray([self.position, HEIGHT // 2]).T
+            self.possible_positions = np.asarray(self.position).T
         else:
             self.possible_positions = self.position
 
@@ -109,7 +109,7 @@ class LoomingCircleStim(BaseStim):
         # Add stimuli to dataframe
         self.stimuli_df["stim"] = stimuli
 
-    def _generate_stimulus(self, radius, duration):
+    def _generate_stimulus(self, radius, duration, position):
         """_summary_
 
         Args:

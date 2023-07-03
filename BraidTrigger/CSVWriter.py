@@ -1,8 +1,9 @@
-from queue import Queue, Empty
-from threading import Event
 import csv
 import logging
-from ThreadClass import ThreadClass
+from queue import Empty, Queue
+from threading import Event
+
+from .ThreadClass import ThreadClass
 
 
 class CSVWriter(ThreadClass):

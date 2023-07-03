@@ -1,12 +1,12 @@
 import logging
-from threading import Event, Barrier
 import time
-from queue import Queue, Empty
+from queue import Empty, Queue
+from threading import Barrier, Event
 
 import serial
 
-from ThreadClass import ThreadClass
-from CSVWriter import CSVWriter
+from .CSVWriter import CSVWriter
+from .ThreadClass import ThreadClass
 
 
 class OptoTrigger(ThreadClass):

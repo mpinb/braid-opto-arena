@@ -4,10 +4,10 @@ from queue import Empty, Queue
 from threading import Barrier, Event
 
 import pygame
-from BraidTrigger.stimuli import LoomingCircleStim, StaticStim
 
-from CSVWriter import CSVWriter
-from ThreadClass import ThreadClass
+from .CSVWriter import CSVWriter
+from .stimuli import GratingStim, LoomingCircleStim, StaticStim
+from .ThreadClass import ThreadClass
 
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
 
@@ -42,7 +42,8 @@ class VisualStimuli(ThreadClass):
         super(VisualStimuli, self).__init__(
             queue, kill_event, barrier, params, *args, **kwargs
         )
-        self.fodler = params["folder"]
+        self.folder = params["folder"]
+        self.parse_params()
 
     def parse_params(self):
         """_summary_"""  # Parse parameters
@@ -124,7 +125,7 @@ class VisualStimuli(ThreadClass):
 
     def _define_screen(self):
         """_summary_"""
-        self.screen_size = self.params["screen_size"]
+        self.screen_size = self.params["stim_params"]["window"]["size"]
         self.screen = pygame.display.set_mode(self.screen_size, pygame.NOFRAME)
 
     def _define_stimuli(self):

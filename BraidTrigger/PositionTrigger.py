@@ -1,8 +1,9 @@
 import logging
 import time
-from threading import Event, Barrier
-from queue import Queue, Empty
-from ThreadClass import ThreadClass
+from queue import Empty, Queue
+from threading import Barrier, Event
+
+from .ThreadClass import ThreadClass
 
 
 class PositionTrigger(ThreadClass):
