@@ -65,6 +65,9 @@ class OptoTrigger(ThreadClass):
 
         # Wait for all processes/threads to start
         logging.debug("Reached barrier.")
+        print(
+            f"OptoTrigger barrier parties: {self.barrier.parties}, n_waiting: {self.barrier.n_waiting}"
+        )
         self.barrier.wait()
 
         # Start the CSV writer

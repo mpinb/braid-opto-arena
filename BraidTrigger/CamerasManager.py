@@ -33,7 +33,7 @@ class CamerasManager(ThreadClass):
             params (dict): _description_
         """
         super(CamerasManager, self).__init__(
-            queue, barrier, kill_event, params, *args, **kwargs
+            queue, kill_event, barrier, params, *args, **kwargs
         )
 
         # Threading stuff
@@ -49,6 +49,9 @@ class CamerasManager(ThreadClass):
 
         # Wait for all processes/threads to start
         logging.debug("Reached barrier.")
+        print(
+            f"CamerasManager barrier parties: {self.barrier.parties}, n_waiting: {self.barrier.n_waiting}"
+        )
         self.barrier.wait()
 
         # Start main loop

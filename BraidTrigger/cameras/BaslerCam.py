@@ -45,6 +45,7 @@ class VideoWriter(Thread):
         incoming_data: Queue | None | list | np.ndarray = None,
         filename: str | None = None,
         kill_event: Event | None = None,
+        threaded_writing: bool = True,
     ) -> None:
         """_summary_
 
@@ -54,37 +55,14 @@ class VideoWriter(Thread):
             filename (str | None, optional): _description_. Defaults to None.
             kill_event (Event | None, optional): _description_. Defaults to None.
         """
-        super(VideoWriter, self).__init__()
+        super(VideoWriter, self).__init__(name="VideoWriter")
 
         # Configure parameters
         self.params = params
         self.incoming_data = incoming_data
         self.filename = filename
         self.kill_event = kill_event
-        self.threaded_writing = False
-
-    def _check_mp(self):
-        """_summary_
-
-        Raises:
-            ValueError: _description_
-            ValueError: _description_
-            ValueError: _description_
-        """
-        """Check input parameters do decide if we need to use multiprocessing"""
-        if self.filename is None:
-            if ~isinstance(self.incoming_data, Queue):
-                raise ValueError("If filename is None, data must be a Queue")
-            else:
-                if ~isinstance(self.kill_event, Event):
-                    raise ValueError("If filename is None, kill_event must be an Event")
-                else:
-                    self.threaded_writing = True
-        else:
-            if isinstance(self.incoming_data, Queue):
-                raise ValueError("If filename is not None, data must not be a Queue")
-            else:
-                self.threaded_writing = False
+        self.threaded_writing = threaded_writing
 
     def run(self) -> None:
         """_summary_"""
@@ -173,7 +151,7 @@ class BaslerCam(mp.Process):
             serial (str | int): _description_
             camera_params (dict | None, optional): _description_. Defaults to None.
         """
-        super(BaslerCam, self).__init__(*args, **kwargs)
+        super(BaslerCam, self).__init__(name=f"BaslerCam_{serial}", *args, **kwargs)
 
         # Get arguments
         self.serial = serial

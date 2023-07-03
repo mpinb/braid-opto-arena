@@ -55,6 +55,9 @@ class FlydraProxy(ThreadClass):
         """_summary_"""
         # Wait for all processes/threads to start
         logging.debug("Waiting for barrier.")
+        print(
+            f"FlydraProxy barrier parties: {self.barrier.parties}, n_waiting: {self.barrier.n_waiting}"
+        )
         self.barrier.wait()
 
         # Start the event stream

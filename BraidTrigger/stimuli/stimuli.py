@@ -149,8 +149,8 @@ class LoomingCircleStim(BaseStim):
             curr_loom = self.stimuli_df.sample().iloc[0]
 
             # Get all parameters from the row
-            self.x = curr_loom["position"][0]
-            self.y = curr_loom["position"][1]
+            self.x = curr_loom["position"]
+            self.y = HEIGHT // 2
 
             # Define our radius array as an iterator
             self.radius_array = iter(curr_loom["stim"].values)

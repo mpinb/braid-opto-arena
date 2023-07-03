@@ -45,6 +45,8 @@ class PositionTrigger(ThreadClass):
         self.radius_min = params["radius_min"]
         self.zmin = params["zmin"]
         self.zmax = params["zmax"]
+        self.center_x = params["center_x"]
+        self.center_y = params["center_y"]
 
     def run(self):
         """_summary_"""
@@ -56,6 +58,9 @@ class PositionTrigger(ThreadClass):
 
         # Wait for all processes/threads to start
         logging.debug("Reached barrier.")
+        print(
+            f"PositionTrigger barrier parties: {self.barrier.parties}, n_waiting: {self.barrier.n_waiting}"
+        )
         self.barrier.wait()
 
         # Set last trigger time as current
@@ -112,12 +117,12 @@ class PositionTrigger(ThreadClass):
 
             # Get positional data
             pos = data["Update"]
-            radius = self._get_radius_fast(
-                pos["x"], pos["y"], self.center_x, self.center_y
-            )
+            radius = (
+                (pos["x"] - self.center_x) ** 2 + (pos["y"] - self.center_y) ** 2
+            ) ** 0.5
 
             # Check for trigger conditions
-            if radius <= self.radius and self.zmin <= pos["z"] <= self.zmax:
+            if radius <= self.radius_min and self.zmin <= pos["z"] <= self.zmax:
                 # Set trigger counter and time
                 ntrig += 1
                 last_trigger = tcall
@@ -152,4 +157,4 @@ class PositionTrigger(ThreadClass):
         Returns:
             _type_: _description_
         """
-        return ((x - center_x) ** 2 + (y - center_y) ** 2) ** 0.5
+        return

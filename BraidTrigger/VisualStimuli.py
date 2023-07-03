@@ -79,6 +79,9 @@ class VisualStimuli(ThreadClass):
 
         # Wait for barrier
         logging.debug("Waiting for barrier.")
+        print(
+            f"VisualStimuli parties: {self.barrier.parties}, n_waiting: {self.barrier.n_waiting}"
+        )
         self.barrier.wait()
 
         # Start the CSV writer

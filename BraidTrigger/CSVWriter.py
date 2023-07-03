@@ -44,7 +44,7 @@ class CSVWriter(ThreadClass):
 
             # Check if file has header
             try:
-                header = next(csv_writer)  # noqa: F841
+                header = next(csvfile)  # noqa: F841
                 has_header = True
             except StopIteration:
                 has_header = False

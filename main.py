@@ -78,11 +78,10 @@ def main(params_file: str, root_folder: str):
         params["stim_params"]["grating"]["active"]
         or params["stim_params"]["looming"]["active"]
     ):
-        num_barriers += 1
         num_out_queues += 1
 
     # Create the barrier
-    barrier = threading.Barrier(num_barriers)
+    barrier = threading.Barrier(6)
     out_queues = [Queue() for _ in range(num_out_queues)]
 
     # Start FlydraProxy
@@ -138,7 +137,10 @@ def main(params_file: str, root_folder: str):
     cameras_manager.start()
 
     # Wait for everything to start
+    logging.debug("Waiting for all threads to start...")
+    print(f"Main Thread parties: {barrier.parties}, n_waiting: {barrier.n_waiting}")
     barrier.wait()
+    logging.info("Started all threads successfully.")
 
     # Main loop
     try:
@@ -151,7 +153,7 @@ def main(params_file: str, root_folder: str):
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.INFO, format="%(threadName)s: %(asctime)s - %(message)s"
+        level=logging.DEBUG, format="%(threadName)s: %(asctime)s - %(message)s"
     )
     main(
         params_file="./data/params.toml",
