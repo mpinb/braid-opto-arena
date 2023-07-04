@@ -13,6 +13,8 @@ import numpy as np
 from pypylon import genicam, pylon
 from vidgear.gears import WriteGear
 
+from vidgear.gears import WriteGear
+
 
 @dataclass
 class MetaData:

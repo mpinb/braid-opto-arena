@@ -5,9 +5,9 @@ from threading import Barrier, Event
 
 import pygame
 
-from .CSVWriter import CSVWriter
-from .stimuli import GratingStim, LoomingCircleStim, StaticStim
-from .ThreadClass import ThreadClass
+from .BraidTrigger.CSVWriter import CSVWriter
+from .BraidTrigger.stimuli import GratingStim, LoomingCircleStim, StaticStim
+from .BraidTrigger.ThreadClass import ThreadClass
 
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
 
