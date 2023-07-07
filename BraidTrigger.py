@@ -436,6 +436,7 @@ def main(params_file: str, root_folder: str):
 
     # Create mp variables
     kill_event = mp.Event()
+    signal.signal(signal.SIGINT, lambda signal, frame: kill_event.set())
 
     # Connect to flydra2 proxy
     flydra2_url = "http://0.0.0.0:8397/"
