@@ -1,21 +1,14 @@
 import logging
+import multiprocessing as mp
 import os
 from queue import Empty, Queue
-from threading import Barrier, Event
 
 import pygame
 
-from .BraidTrigger.CSVWriter import CSVWriter
-from .BraidTrigger.stimuli import GratingStim, LoomingCircleStim, StaticStim
-from .BraidTrigger.ThreadClass import ThreadClass
-
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
 
-HEIGHT = 128
-WIDTH = 640
 
-
-class VisualStimuli(ThreadClass):
+class VisualStimuli(mp.Process):
     """_summary_
 
     Args:
@@ -25,8 +18,8 @@ class VisualStimuli(ThreadClass):
     def __init__(
         self,
         queue: Queue,
-        kill_event: Event,
-        barrier: Barrier,
+        kill_event: mp.Event,
+        barrier: mp.Barrier,
         params: dict,
         *args,
         **kwargs,
@@ -39,9 +32,7 @@ class VisualStimuli(ThreadClass):
             barrier (Barrier): _description_
             params (dict): _description_
         """
-        super(VisualStimuli, self).__init__(
-            queue, kill_event, barrier, params, *args, **kwargs
-        )
+        super().__init__(*args, **kwargs)
         self.folder = params["folder"]
         self.parse_params()
 
@@ -53,14 +44,6 @@ class VisualStimuli(ThreadClass):
 
     def run(self):
         """_summary_"""
-        csv_queue = Queue()
-
-        # Start csv writer
-        csv_writer = CSVWriter(
-            self.folder + "/opto.csv",
-            csv_queue,
-            self.kill_event,
-        )
 
         # Start the main pygame instance
         logging.debug("Initializing pygame.")
@@ -78,14 +61,6 @@ class VisualStimuli(ThreadClass):
         loom_status = False
 
         # Wait for barrier
-        logging.debug("Waiting for barrier.")
-        print(
-            f"VisualStimuli parties: {self.barrier.parties}, n_waiting: {self.barrier.n_waiting}"
-        )
-        self.barrier.wait()
-
-        # Start the CSV writer
-        csv_writer.start()
 
         # Start main loop
         logging.info("Starting main loop.")

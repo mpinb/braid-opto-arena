@@ -6,14 +6,14 @@ import os
 import pathlib
 import shutil
 import time
+import tomllib
+from collections import deque
 
+import cv2
 import git
 import requests
 import serial
-import tomllib
 from vidgear.gears import WriteGear
-from collections import deque
-import cv2
 
 
 def check_braid_folder(root_folder: str) -> str:
@@ -42,32 +42,6 @@ def check_braid_folder(root_folder: str) -> str:
     return curr_braid_folder[0].as_posix()
 
 
-def create_flydra_proxy(flydra2_url: str) -> requests.Response:
-    """A function to connect to the flydra2 server and return a requests.Response object.
-
-    Args:
-        flydra2_url (str): the url of the flydra2 server.
-
-    Returns:
-        requests.Response: a requests.Response object.
-    """
-
-    # Connect to
-    flydra2_session = requests.session()
-    r = flydra2_session.get(flydra2_url)
-    assert r.status_code == requests.codes.ok
-
-    # Run main flydra proxy loop
-    events_url = f"{flydra2_url}/events"
-    r = flydra2_session.get(
-        events_url,
-        stream=True,
-        headers={"Accept": "text/event-stream"},
-    )
-
-    return r
-
-
 def video_writer(video_writer_recv: mp.Pipe):
     """a process/thread function to loop over a pipe and write frames to a video file.
 
@@ -84,22 +58,153 @@ def video_writer(video_writer_recv: mp.Pipe):
 
     while True:
         folder, trigger_data, frame_buffer = video_writer_recv.recv()
+        t_write_start = time.time()
         base_folder = os.path.basename(folder)
         ntrig = trigger_data["ntrig"]
         obj_id = trigger_data["obj_id"]
         cam_serial = trigger_data["cam_serial"]
         frame = trigger_data["frame"]
 
-        output_filename = f"/home/benyishay_la/Videos/{base_folder}/{ntrig}_obj_id_{obj_id}_cam_{cam_serial}_frame_{frame}.mp4"  # noqa: E501
+        # Create output folder and filename
+        output_folder = f"/home/benyishay_la/Videos/{base_folder}/"
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+        output_file = (
+            f"{ntrig}_obj_id_{obj_id}_cam_{cam_serial}_frame_{frame}.mp4"  # noqa: E501
+        )
+        output_filename = os.path.join(output_folder, output_file)
+
         logging.debug("Starting WriteGear videowriter.")
         video_writer = WriteGear(output=output_filename, logging=False, **output_params)
         logging.debug(f"Writing video to {os.path.basename(output_filename)}")
+
+        # Loop over frames and write to video
         for frame in frame_buffer:
             video_writer.write(cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR))
         logging.info(
-            f"Finished writing video with length {len(frame_buffer)} to {os.path.basename(output_filename)}"  # noqa: E501
+            f"Finished writing video with length {len(frame_buffer)} to {os.path.basename(output_filename)} in {time.time()-t_write_start:2f} seconds."  # noqa: E501
         )
         video_writer.close()
+
+
+def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Event):
+    import os
+
+    import pygame
+
+    from stimuli.LoomingStim import LoomingStim
+    from stimuli.StaticStim import StaticStim
+
+    os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
+    logging.debug("Initializing pygame.")
+    pygame.init()
+
+    width, height = (
+        params["stim_params"]["window"]["size"][0],
+        params["stim_params"]["window"]["size"][1],
+    )  # noqa: E501
+    screen = pygame.display.set_mode((width, height), pygame.NOFRAME)
+    clock = pygame.time.Clock()
+
+    # Check if static stimulus is active
+    if params["stim_params"]["static"]["active"]:
+        logging.debug("Initializing static stimulus.")
+        static_active = True
+        static_stim = StaticStim(
+            screen=screen, image=params["stim_params"]["static"]["image"]
+        )
+    else:
+        static_active = False
+
+    # Check if grating stimulus is active
+    if params["stim_params"]["grating"]["active"]:
+        logging.debug("Initializing grating stimulus.")
+        grating_active = True
+        pass
+    else:
+        grating_active = False
+
+    # Check if looming stimulus is active
+    if params["stim_params"]["looming"]["active"]:
+        logging.debug("Initializing looming stimulus.")
+        looming_active = True
+        looming_stim = LoomingStim(
+            screen=screen,
+            color=params["stim_params"]["looming"]["color"],
+            radius=params["stim_params"]["looming"]["max_radius"],
+            duration=params["stim_params"]["looming"]["duration"],
+            position=params["stim_params"]["looming"]["position"],
+        )
+    else:
+        looming_active = False
+
+    # Create looming flags
+    do_looming = False
+    do_grating = False
+
+    # Start CSV writer object
+    csv_file, csv_writer, write_header = create_csv_writer(params["folder"], "stim.csv")
+
+    logging.info("Starting main loop.")
+    while not kill_event.is_set():
+        # Check if there's anything in the pipe
+        trigger_set = trigger_recv.poll()
+
+        # If so, it's the trigger. Also get the data.
+        if trigger_set:
+            # logging.debug("Trigger received.")
+            trigger_data = trigger_recv.recv()
+
+        # Draw static stim
+        if static_active:
+            # logging.debug("Drawing static stimulus.")
+            static_stim.draw()
+
+        # Check if the trigger is set
+        if trigger_set:
+            # Check if the looming stimulus is active
+            if looming_active:
+                # Initialize the looming stimulus
+                do_looming = looming_stim.init_loom()
+
+                # Get stim data from looming stimulus object
+                dict_update_time = time.time()
+                trigger_data["radius"] = looming_stim.curr_loom["radius"]
+                trigger_data["duration"] = looming_stim.curr_loom["duration"]
+                trigger_data["position"] = looming_stim.curr_loom["position"]
+                logging.debug(f"Dict update time: {time.time()-dict_update_time:.5f}")
+
+            if grating_active:
+                do_grating = True
+
+            # Write data to csv
+            logging.debug("Writing data to csv.")
+            csv_writer_time = time.time()
+            if write_header:
+                csv_writer.writerow(trigger_data.keys())
+                write_header = False
+            csv_writer.writerow(trigger_data.values())
+            csv_file.flush()
+            logging.debug(f"CSV writer time: {time.time()-csv_writer_time:.5f}")
+
+        if do_looming:
+            do_looming = looming_stim.loom()
+
+        if do_grating:
+            pass
+
+        # Update screen
+        pygame.display.flip()
+
+        # Tick clock (60hz)
+        clock.tick(60)
+
+    # Close pygame
+    pygame.quit()
+
+    # Close CSV file
+    csv_file.close()
+    logging.info("Closed pygame.")
 
 
 def basler_camera(
@@ -182,7 +287,7 @@ def basler_camera(
 
         # Grab frame
         with cam.RetrieveResult(
-            cam.ExposureTime + 100, pylon.TimeoutHandling_ThrowException
+            2000, pylon.TimeoutHandling_ThrowException
         ) as grabResult:
             frame_buffer.append(grabResult.Array)
 
@@ -222,7 +327,8 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
     highspeed_cameras_pipes = {}
 
     # Loop over cameras
-    for cam_name, cam_serial in params["highspeed"]["cameras"]:
+    for cam_name, cam_serial in params["highspeed"]["cameras"].items():
+        highspeed_cameras_pipes[cam_name] = {}
         # Create a pipe for each camera
         (
             highspeed_cameras_pipes[cam_name]["recv"],
@@ -240,7 +346,7 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
                 highspeed_cameras_pipes[cam_name]["recv"],
                 kill_event,
             ),
-            name=f"Camera_{cam_name}",
+            name=f"Camera_{cam_serial}",
         )
         highspeed_cameras.append(p)
         time.sleep(2)  # need to add a small delay between cameras initialization
@@ -281,8 +387,19 @@ def create_arduino_device(port: str, baudrate: int = 9600) -> serial.Serial:
     return board
 
 
-def start_visual_stimuli(params: dict, trigger_event: mp.Event):
-    pass
+def create_csv_writer(folder: str, file: str):
+    # Open csv file
+    csv_file = open(os.path.join(folder, file), "a+")
+
+    # Initialize csv writer
+    logging.debug("Initializing csv writer.")
+    csv_writer = csv.writer(csv_file, delimiter=",")
+    if os.stat(csv_file.name).st_size == 0:
+        write_header = True
+    else:
+        write_header = False
+
+    return csv_file, csv_writer, write_header
 
 
 def main(params_file: str, root_folder: str):
@@ -309,41 +426,57 @@ def main(params_file: str, root_folder: str):
         )
 
     # Create sessions object
-    r = create_flydra_proxy(flydra2_url="http://0.0.0.0:8397/")
 
     # Connect to arduino
-    logging.debug("Connecting to arduino.")
-    opto_trigger_board = create_arduino_device(params["opto_trigger"])
+    if params["opto_params"]["active"]:
+        logging.debug("Connecting to arduino.")
+        opto_trigger_board = create_arduino_device(
+            params["arduino_devices"]["opto_trigger"]
+        )
 
-    # Create kill event
+    # Create mp variables
     kill_event = mp.Event()
+
+    # Connect to flydra2 proxy
+    flydra2_url = "http://0.0.0.0:8397/"
+    session = requests.Session()
+    r = session.get(flydra2_url)
+    assert r.status_code == requests.codes.ok
+    events_url = r.url + "events"
 
     # Connect to cameras
     if params["highspeed"]["active"]:
         # Connect to camera trigger
-        camera_trigger_board = create_arduino_device(params["camera_trigger"])
+        camera_trigger_board = create_arduino_device(
+            params["arduino_devices"]["camera_trigger"]
+        )
 
         # Start camera processes
         highspeed_cameras, highspeed_cameras_pipes = start_highspeed_cameras(
             params, kill_event
         )
 
-        # Start camera trigger
-        camera_trigger_board.write(b"H")
-
         # Start cameras
         for cam in highspeed_cameras:
             logging.debug(f"Starting camera {cam.name}.")
             cam.start()
 
-    # Start (static) visual stimuli
-    if params["stim_params"]["static"]:
-        pass
+        # Start camera trigger
+        camera_trigger_board.write(b"H")
 
     # Start (dynamic) visual stimuli
-    if params["stim_params"]["looming"] or params["stim_params"]["grating"]:
+    if (
+        params["stim_params"]["static"]
+        or params["stim_params"]["looming"]
+        or params["stim_params"]["grating"]
+    ):
         stim_recv, stim_send = mp.Pipe()
-        pass
+        stimulus_process = mp.Process(
+            target=start_visual_stimuli,
+            args=(params, stim_recv, kill_event),
+            name="VisualStimuli",
+        )
+        stimulus_process.start()
 
     # Trigger parameters
     min_trajectory_time = params["trigger_params"].get(
@@ -361,6 +494,8 @@ def main(params_file: str, root_folder: str):
     frequency = params["opto_params"].get("frequency", 0)
     duration = params["opto_params"].get("duration", 300)
 
+    csv_file, csv_writer, write_header = create_csv_writer(params["folder"], "opto.csv")
+
     # Check parameters
     obj_ids = []
     obj_birth_times = {}
@@ -370,33 +505,24 @@ def main(params_file: str, root_folder: str):
     # Wait a few seconds for all processes to start
     time.sleep(5)
 
-    # Open csv file
-    with open(os.path.join(folder, "opto.csv"), "a+") as csvfile:
-        # Initialize csv writer
-        logging.debug("Initializing csv writer.")
-        csv_writer = csv.writer(csvfile, delimiter=",")
-        if os.stat(csvfile.name).st_size == 0:
-            write_header = True
-        else:
-            write_header = False
-
-        # Start main loop
-        logging.info("Starting main loop.")
-        for chunk in r.iter_content(chunk_size=None):
+    # Start main loop
+    logging.info("Starting main loop.")
+    with session.get(
+        events_url, stream=True, headers={"Accept": "text/event-stream"}
+    ) as r:
+        for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
             if kill_event.is_set():
                 break
 
             tcall = time.time()  # Get current time
-
-            data = parse_chunk(chunk)  # Parse data
-            version = data.get("v", 1)
-            assert version == 1
+            data = parse_chunk(chunk)
 
             try:
                 msg_dict = data["msg"]
-                logging.debug(f"Message received: {msg_dict}")
             except KeyError:
                 continue
+
+            # logging.info(f"Received message: {msg_dict}")
 
             # Check for first "birth" message
             if "Birth" in msg_dict:
@@ -413,7 +539,7 @@ def main(params_file: str, root_folder: str):
                     logging.debug(f"New object detected: {curr_obj_id}")
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall
-                continue
+                    continue
 
             # Check for "death" message
             if "Death" in msg_dict:
@@ -425,17 +551,17 @@ def main(params_file: str, root_folder: str):
 
             # if the trajectory is too short, skip
             if (tcall - obj_birth_times[curr_obj_id]) < min_trajectory_time:
-                logging.debug(f"Trajectory too short for object {curr_obj_id}")
+                # logging.warning(f"Trajectory too short for object {curr_obj_id}")
                 continue
 
             # if the trigger interval is too short, skip
             if tcall - last_trigger_time < min_trigger_interval:
-                logging.debug(f"Trigger interval too short for object {curr_obj_id}")
+                # logging.warning(f"Trigger interval too short for object {curr_obj_id}")
                 continue
 
             # Get position and radius
-            pos = msg_dict["pos"]
-            radius = (pos[0] ** 2 + pos[1] ** 2) ** 0.5
+            pos = msg_dict["Update"]
+            radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
 
             # Check if object is in the trigger zone
             if radius < min_radius and zmin <= pos["z"] <= zmax:
@@ -450,20 +576,24 @@ def main(params_file: str, root_folder: str):
                 pos["ntrig"] = ntrig
 
                 # Opto Trigger
-                logging.debug("Triggering opto.")
-                opto_trigger_time = time.time()
-                opto_trigger_board.write(
-                    f"<{duration},{intensity},{frequency}>".encode()
-                )
-                logging.debugf(
-                    f"Opto trigger time: {time.time()-opto_trigger_time:.5f}"
-                )
+                if params["opto_params"]["active"]:
+                    logging.debug("Triggering opto.")
+                    opto_trigger_time = time.time()
+                    opto_trigger_board.write(
+                        f"<{duration},{intensity},{frequency}>".encode()
+                    )
+                    pos["opto_duration"] = duration
+                    pos["opto_intensity"] = intensity
+                    pos["opto_frequency"] = frequency
+                    logging.debug(
+                        f"Opto trigger time: {time.time()-opto_trigger_time:.5f}"
+                    )
 
                 logging.debug("Triggering cameras.")
                 camera_trigger_time = time.time()
                 if params["highspeed"]["active"]:
-                    for _, cam_pipe in highspeed_cameras_pipes:
-                        cam_pipe.send(pos)
+                    for _, cam_pipe in highspeed_cameras_pipes.items():
+                        cam_pipe["send"].send(pos)
                 logging.debug(
                     f"Camera trigger time: {time.time()-camera_trigger_time:.5f}"
                 )
@@ -471,17 +601,19 @@ def main(params_file: str, root_folder: str):
                 logging.debug("Triggering stim.")
                 stim_trigger_time = time.time()
                 if params["stim_params"]["looming"] or params["stim_params"]["grating"]:
-                    stim_send.put(pos)
+                    stim_send.send(pos)
                 logging.debug(f"Stim trigger time: {time.time()-stim_trigger_time:.5f}")
 
                 # Write data to csv
-                logging.debug("Writing data to csv.")
-                csv_writer_time = time.time()
-                if write_header:
-                    csv_writer.writerow(pos.keys())
-                    write_header = False
-                csv_writer.writerow(pos.values())
-                logging.debug(f"CSV writer time: {time.time()-csv_writer_time:.5f}")
+                if params["opto_params"]["active"]:
+                    logging.debug("Writing data to csv.")
+                    csv_writer_time = time.time()
+                    if write_header:
+                        csv_writer.writerow(pos.keys())
+                        write_header = False
+                    csv_writer.writerow(pos.values())
+                    csv_file.flush()
+                    logging.debug(f"CSV writer time: {time.time()-csv_writer_time:.5f}")
 
     # Close all processes
     logging.debug("Closing all camera processes.")
@@ -490,16 +622,22 @@ def main(params_file: str, root_folder: str):
 
     # Close all boards
     logging.debug("Closing all Arduino boards.")
-    opto_trigger_board.close()
-    camera_trigger_board.close()
+    if params["opto_params"]["active"]:
+        opto_trigger_board.close()
+    if params["highspeed"]["active"]:
+        camera_trigger_board.close()
+
+    # Close CSV file
+    logging.debug("Closing CSV file.")
+    csv_file.close()
 
     logging.info("Finished.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(processName)s-%(threadName)s: %(asctime)s - %(message)s",
+        level=logging.INFO,
+        format="%(processName)s: %(asctime)s - %(message)s",
     )
     main(
         params_file="./data/params.toml",
