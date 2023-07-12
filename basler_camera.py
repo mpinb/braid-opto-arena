@@ -6,6 +6,7 @@ from collections import deque
 
 import cv2
 from vidgear.gears import WriteGear
+from pypylon import pylon
 
 
 def video_writer(video_writer_recv: mp.Pipe):
@@ -69,7 +70,6 @@ def basler_camera(
         trigger_recv (mp.Pipe): incoming trigger pipe
         kill_event (mp.Event): kill event
     """
-    from pypylon import pylon
 
     # Connect to camera
     tlf = pylon.TlFactory.GetInstance()
