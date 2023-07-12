@@ -2,19 +2,20 @@ import logging
 import multiprocessing as mp
 import os
 import shutil
+import signal
 import time
 import tomllib
-import signal
 
 import git
 import requests
+
+from basler_camera import start_highspeed_cameras
 from helper_functions import (
     check_braid_folder,
-    parse_chunk,
     create_arduino_device,
     create_csv_writer,
+    parse_chunk,
 )
-from basler_camera import start_highspeed_cameras
 from visual_stimuli import start_visual_stimuli
 
 
@@ -67,6 +68,7 @@ def main(params_file: str, root_folder: str):
         camera_trigger_board = create_arduino_device(
             params["arduino_devices"]["camera_trigger"]
         )
+        camera_trigger_board.write(b"L")  # reset camera trigger
 
         # Start camera processes
         highspeed_cameras, highspeed_cameras_pipes = start_highspeed_cameras(
@@ -77,15 +79,16 @@ def main(params_file: str, root_folder: str):
         for cam in highspeed_cameras:
             logging.debug(f"Starting camera {cam.name}.")
             cam.start()
+            time.sleep(2)  # Delay between starting each camera process
 
         # Start camera trigger
         camera_trigger_board.write(b"H")
 
     # Start (dynamic) visual stimuli
     if (
-        params["stim_params"]["static"]
-        or params["stim_params"]["looming"]
-        or params["stim_params"]["grating"]
+        params["stim_params"]["static"]["active"]
+        or params["stim_params"]["looming"]["active"]
+        or params["stim_params"]["grating"]["active"]
     ):
         stim_recv, stim_send = mp.Pipe()
         stimulus_process = mp.Process(
@@ -182,7 +185,7 @@ def main(params_file: str, root_folder: str):
 
             # Check if object is in the trigger zone
             if radius < min_radius and zmin <= pos["z"] <= zmax:
-                logging.info(f"{ntrig}: Triggering at {tcall:.2f}")
+                logging.info(f"Trigger {ntrig} at {radius}, {pos['z']}")
 
                 # Update last trigger time
                 ntrig += 1
@@ -217,7 +220,10 @@ def main(params_file: str, root_folder: str):
 
                 logging.debug("Triggering stim.")
                 stim_trigger_time = time.time()
-                if params["stim_params"]["looming"] or params["stim_params"]["grating"]:
+                if (
+                    params["stim_params"]["looming"]["active"]
+                    or params["stim_params"]["grating"]["active"]
+                ):
                     stim_send.send(pos)
                 logging.debug(f"Stim trigger time: {time.time()-stim_trigger_time:.5f}")
 
@@ -242,6 +248,7 @@ def main(params_file: str, root_folder: str):
     if params["opto_params"]["active"]:
         opto_trigger_board.close()
     if params["highspeed"]["active"]:
+        camera_trigger_board.write(b"L")
         camera_trigger_board.close()
 
     # Close CSV file

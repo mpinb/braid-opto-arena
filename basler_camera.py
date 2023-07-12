@@ -1,10 +1,11 @@
-import multiprocessing as mp
-import time
-import os
 import logging
+import multiprocessing as mp
+import os
+import time
 from collections import deque
-from vidgear.gears import WriteGear
+
 import cv2
+from vidgear.gears import WriteGear
 
 
 def video_writer(video_writer_recv: mp.Pipe):
@@ -90,13 +91,13 @@ def basler_camera(
     cam.SensorReadoutMode = "Fast"
 
     # Set possible camera parameters from `params`
-    cam.ExposureTime = params["highspeed"].get("ExposureTime", 1900)
-    cam.Gain = params["highspeed"].get("Gain", 10)
+    cam.ExposureTime = params["highspeed"]["parameters"].get("ExposureTime", 1900)
+    cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
 
     # Setup triggered writing variables
-    time_before = params["highspeed"].get("time_before", 1)
-    time_after = params["highspeed"].get("time_after", 2)
-    fps = params["highspeed"].get("fps", 500)
+    time_before = params["highspeed"]["parameters"].get("time_before", 1)
+    time_after = params["highspeed"]["parameters"].get("time_after", 2)
+    fps = params["highspeed"]["parameters"].get("fps", 500)
     frames_before = int(time_before * fps)
     frames_after = int(time_after * fps)
     n_total_frames = int(frames_before + frames_after)
@@ -166,7 +167,9 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
     """
     # Create a synchronization barrier for the cameras
     camera_barrier = mp.Barrier(len(params["highspeed"]["cameras"]))
-
+    logging.debug(
+        f"Created camera barrier with {len(params['highspeed']['cameras'])} cameras."
+    )
     # Start camera processes
     highspeed_cameras = []
     highspeed_cameras_pipes = {}
@@ -181,7 +184,7 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
         ) = mp.Pipe()
 
         # Start the process
-        logging.debug(f"Creating camera {cam_name} with serial {cam_serial}.")
+        logging.info(f"Creating camera {cam_name} with serial {cam_serial}.")
         p = mp.Process(
             target=basler_camera,
             args=(
@@ -194,6 +197,5 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
             name=f"Camera_{cam_serial}",
         )
         highspeed_cameras.append(p)
-        time.sleep(2)  # need to add a small delay between cameras initialization
 
     return highspeed_cameras, highspeed_cameras_pipes

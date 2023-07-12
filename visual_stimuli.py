@@ -1,10 +1,13 @@
 import logging
 import multiprocessing as mp
 import os
-import pygame
 import time
-from stimuli import LoomingStim, StaticStim
+
+import pygame
+
 from helper_functions import create_csv_writer
+from stimuli.LoomingStim import LoomingStim
+from stimuli.StaticStim import StaticStim
 
 
 def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Event):

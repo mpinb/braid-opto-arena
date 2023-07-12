@@ -6,13 +6,13 @@ camera_trigger = '/dev/camera_trigger'
 min_trajectory_time = 1.0   # minimum trajectory time (in seconds)
 min_trigger_interval = 5     # minimum time between activations (in seconds)
 min_radius = 0.025      # minimum radius for activation (in meters)
-zmin = 0.10              # minimum z for activation (in meters)
+zmin = 0.15              # minimum z for activation (in meters)
 zmax = 0.25             # maximum z for activation (in meters)
 center_x = 0       # arena center x in meters (in meters)
 center_y = 0       # arena center y in meters (in meters)
 
 [opto_params]
-active = false
+active = true
 duration = 300      # in milliseconds
 intensity = 255       # in 0-255 range
 frequency = 0          # in Hz
@@ -38,7 +38,7 @@ frequency = 0          # in Hz
     color = "black"
 
     [stim_params.looming]
-    active = true
+    active = false
     position = "random"
     max_radius = "random" # value between 0-1, where 1 means fullscreen
     duration = "random"
@@ -48,10 +48,10 @@ frequency = 0          # in Hz
     active = true
 
     [highspeed.cameras]
-    # camera1 = "23047980"
+    camera1 = "23047980"
     camera2 = "23096298"
-    # camera3 = "23088879"
-    # camera4 = "23088882"
+    camera3 = "23088879"
+    camera4 = "23088882"
 
     [highspeed.parameters]
     pre_trigger_mode = true
@@ -59,6 +59,6 @@ frequency = 0          # in Hz
     time_after = 2
     fps = 500
     ExposureTime = 1900
-    Gain = 10
+    Gain = 0
     SensorReadoutMode = "Fast"
 
