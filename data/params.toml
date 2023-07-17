@@ -12,7 +12,7 @@ center_x = 0       # arena center x in meters (in meters)
 center_y = 0       # arena center y in meters (in meters)
 
 [opto_params]
-active = true
+active = false
 duration = 300      # in milliseconds
 intensity = 255       # in 0-255 range
 frequency = 0          # in Hz
@@ -38,7 +38,7 @@ frequency = 0          # in Hz
     color = "black"
 
     [stim_params.looming]
-    active = false
+    active = true
     position = "random"
     max_radius = "random" # value between 0-1, where 1 means fullscreen
     duration = "random"
@@ -51,7 +51,7 @@ frequency = 0          # in Hz
     camera1 = "23047980"
     camera2 = "23096298"
     camera3 = "23088879"
-    camera4 = "23088882"
+    #camera4 = "23088882"
 
     [highspeed.parameters]
     pre_trigger_mode = true
@@ -59,6 +59,6 @@ frequency = 0          # in Hz
     time_after = 2
     fps = 500
     ExposureTime = 1900
-    Gain = 0
+    #Gain = 0
     SensorReadoutMode = "Fast"
 

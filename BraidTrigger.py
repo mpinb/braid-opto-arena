@@ -218,6 +218,7 @@ def main(params_file: str, root_folder: str):
                     f"Camera trigger time: {time.time()-camera_trigger_time:.5f}"
                 )
 
+                # Stim Trigger
                 logging.debug("Triggering stim.")
                 stim_trigger_time = time.time()
                 if (

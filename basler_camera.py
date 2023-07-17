@@ -92,7 +92,7 @@ def basler_camera(
 
     # Set possible camera parameters from `params`
     cam.ExposureTime = params["highspeed"]["parameters"].get("ExposureTime", 1900)
-    cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
+    # cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
 
     # Setup triggered writing variables
     time_before = params["highspeed"]["parameters"].get("time_before", 1)
