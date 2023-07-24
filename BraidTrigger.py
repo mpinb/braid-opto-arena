@@ -16,6 +16,7 @@ from helper_functions import (
     create_csv_writer,
     parse_chunk,
 )
+from utils.rspowersupply import PowerSupply
 from visual_stimuli import start_visual_stimuli
 
 
@@ -42,7 +43,8 @@ def main(params_file: str, root_folder: str):
             f"commit = {git.Repo(search_parent_directories=True).head.commit.hexsha}"
         )
 
-    # Create sessions object
+    ps = PowerSupply()
+    ps.set_voltage(15)
 
     # Connect to arduino
     if params["opto_params"]["active"]:
@@ -255,6 +257,9 @@ def main(params_file: str, root_folder: str):
     # Close CSV file
     logging.debug("Closing CSV file.")
     csv_file.close()
+
+    logging.debug("Closing power supply.")
+    ps.set_voltage(0)
 
     logging.info("Finished.")
 

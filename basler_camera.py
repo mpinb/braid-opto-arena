@@ -5,8 +5,8 @@ import time
 from collections import deque
 
 import cv2
-from vidgear.gears import WriteGear
 from pypylon import pylon
+from vidgear.gears import WriteGear
 
 
 def video_writer(video_writer_recv: mp.Pipe):

@@ -1,13 +1,14 @@
-from pypylon import pylon as py
 import multiprocessing as mp
-from vidgear.gears import WriteGear
 import os
-import serial
 import signal
 import time
 
+import serial
+from pypylon import pylon as py
+from vidgear.gears import WriteGear
+
 CAMERA_PARAMS = {
-    "Gain": 0,
+    "Gain": 5,
     "ExposureTime": 10000,
     "TriggerMode": "On",
     "TriggerSelector": "FrameStart",
@@ -86,3 +87,4 @@ if __name__ == "__main__":
     board.write(b"H")
     while True:
         time.sleep(0.1)
+    board.write(b"L")
