@@ -6,6 +6,7 @@ import time
 import serial
 from pypylon import pylon as py
 from vidgear.gears import WriteGear
+import cv2
 
 CAMERA_PARAMS = {
     "Gain": 5,
@@ -36,7 +37,7 @@ def signal_handler(signal, frame):
     time.sleep(1)
 
 
-def camera(serial: str):
+def camera(serial: str, show_video: bool = True):
     info = py.DeviceInfo()
     info.SetSerialNumber(serial)
     cam = py.InstantCamera(py.TlFactory.GetInstance().CreateFirstDevice(info))
@@ -68,8 +69,12 @@ def camera(serial: str):
                 image = converter.Convert(grab_result)
                 image = image.GetArray()
                 video_writer.write(image)
+                if show_video:
+                    cv2.imshow(f"{serial}", image)
+                    cv2.waitKey(1)
 
     # Stop grabbing and close video writer
+    cv2.destroyAllWindows()
     cam.StartGrabbing()
     video_writer.close()
 
@@ -85,6 +90,6 @@ if __name__ == "__main__":
 
     BARRIER.wait()
     board.write(b"H")
-    while True:
+    while not KILL_SWITCH.is_set():
         time.sleep(0.1)
     board.write(b"L")
