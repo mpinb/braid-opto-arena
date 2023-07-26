@@ -8,6 +8,8 @@ unsigned long previousMicros = 0; // will store last time triggerPin was updated
 
 unsigned long interval = 0; // interval at which to blink (milliseconds)
 
+long incoming;
+
 void setup() {
   // set the digital pin as output:
   pinMode(triggerPin, OUTPUT);
@@ -15,19 +17,18 @@ void setup() {
   Serial.begin(9600);
 }
 
-
 void loop() {
   
   unsigned long currentMicros = micros();
   
   if (Serial.available() > 0){
-    interval = Serial.parseInt();
-    Serial << "Triggering camera(s) at " << interval << " Hz" << endl;
-    interval = 1000000/interval/2; // In Microseconds
-    
+    incoming = Serial.parseInt(SKIP_ALL, '\n');
+    Serial << "Triggering camera(s) at " << incoming << " Hz" << endl;
+    interval = 1000000/incoming/2; // In Microseconds
+    Serial << "Interval = " << interval << endl;
   }
   
-  if (interval == 0) {
+  if (incoming == 0) {
     return; 
   }
   
