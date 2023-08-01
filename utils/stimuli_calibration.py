@@ -12,7 +12,7 @@ screen_width = 640
 screen_height = 128
 
 # Set the number of circles and their radius
-num_circles = 4
+num_circles = 10
 circle_radius = 30
 
 # Calculate the horizontal spacing between circles

@@ -84,7 +84,7 @@ def main(params_file: str, root_folder: str):
             time.sleep(2)  # Delay between starting each camera process
 
         # Start camera trigger
-        camera_trigger_board.write(b"H")
+        camera_trigger_board.write(b"500")
 
     # Start (dynamic) visual stimuli
     if (
@@ -251,7 +251,7 @@ def main(params_file: str, root_folder: str):
     if params["opto_params"]["active"]:
         opto_trigger_board.close()
     if params["highspeed"]["active"]:
-        camera_trigger_board.write(b"L")
+        camera_trigger_board.write(b"0")
         camera_trigger_board.close()
 
     # Close CSV file
