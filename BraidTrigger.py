@@ -44,7 +44,7 @@ def main(params_file: str, root_folder: str):
         )
 
     ps = PowerSupply()
-    ps.set_voltage(15)
+    ps.set_voltage(30)
 
     # Connect to arduino
     if params["opto_params"]["active"]:
@@ -73,9 +73,11 @@ def main(params_file: str, root_folder: str):
         camera_trigger_board.write(b"L")  # reset camera trigger
 
         # Start camera processes
-        highspeed_cameras, highspeed_cameras_pipes = start_highspeed_cameras(
-            params, kill_event
-        )
+        (
+            highspeed_cameras,
+            highspeed_cameras_pipes,
+            camera_barrier,
+        ) = start_highspeed_cameras(params, kill_event)
 
         # Start cameras
         for cam in highspeed_cameras:
@@ -83,8 +85,8 @@ def main(params_file: str, root_folder: str):
             cam.start()
             time.sleep(2)  # Delay between starting each camera process
 
-        # Start camera trigger
-        camera_trigger_board.write(b"500")
+        camera_barrier.wait()  # Wait for all cameras to be ready
+        camera_trigger_board.write(b"500")  # Start camera trigger
 
     # Start (dynamic) visual stimuli
     if (

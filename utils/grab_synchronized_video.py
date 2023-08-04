@@ -1,16 +1,15 @@
 import multiprocessing as mp
 import os
-import signal
 import time
 
+import cv2
 import serial
 from pypylon import pylon as py
 from vidgear.gears import WriteGear
-import cv2
 
 CAMERA_PARAMS = {
-    "Gain": 5,
-    "ExposureTime": 10000,
+    "Gain": 0,
+    "ExposureTime": 5000,
     "TriggerMode": "On",
     "TriggerSelector": "FrameStart",
     "TriggerSource": "Line1",
@@ -31,12 +30,6 @@ KILL_SWITCH = mp.Event()
 BARRIER = mp.Barrier(len(CAMERA_SERIALS) + 1)
 
 
-def signal_handler(signal, frame):
-    KILL_SWITCH.set()
-    board.write(b"L")
-    time.sleep(1)
-
-
 def camera(serial: str, show_video: bool = True):
     info = py.DeviceInfo()
     info.SetSerialNumber(serial)
@@ -53,7 +46,10 @@ def camera(serial: str, show_video: bool = True):
     converter.OutputBitAlignment = py.OutputBitAlignment_MsbAligned
 
     # Create video writer
-    filename = os.path.join(os.getcwd(), f"{serial}.mp4")
+    filename = os.path.join(
+        "/home/benyishay_la/Videos/20230801_134131.braid/laser_position/",
+        f"{serial}.mp4",
+    )
     video_writer = WriteGear(output=filename, logging=False, **VIDEO_PARAMS)
 
     # Wait for all cameras to be ready
@@ -80,16 +76,19 @@ def camera(serial: str, show_video: bool = True):
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
-
     board = serial.Serial("/dev/camera_trigger", 9600)
-
+    ps = []
     for cam_serial in CAMERA_SERIALS:
-        mp.Process(target=camera, args=(cam_serial,), daemon=False).start()
-        time.sleep(2)
+        p = mp.Process(target=camera, args=(cam_serial,), daemon=False)
+        p.start()
+        ps.append(p)
+        time.sleep(1)
 
     BARRIER.wait()
-    board.write(b"H")
-    while not KILL_SWITCH.is_set():
-        time.sleep(0.1)
-    board.write(b"L")
+    board.write(b"10")
+    kill = input("Kill? (y): ")
+    KILL_SWITCH.set()
+    board.write(b"0")
+
+    for p in ps:
+        p.join()

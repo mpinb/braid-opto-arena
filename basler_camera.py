@@ -91,7 +91,7 @@ def basler_camera(
     cam.SensorReadoutMode = "Fast"
 
     # Set possible camera parameters from `params`
-    cam.ExposureTime = params["highspeed"]["parameters"].get("ExposureTime", 1900)
+    # cam.ExposureTime = params["highspeed"]["parameters"].get("ExposureTime", 1900)
     # cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
 
     # Setup triggered writing variables
@@ -166,7 +166,7 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
         highspeed_cameras_pipes: a dict containing the camera pipes
     """
     # Create a synchronization barrier for the cameras
-    camera_barrier = mp.Barrier(len(params["highspeed"]["cameras"]))
+    camera_barrier = mp.Barrier(len(params["highspeed"]["cameras"]) + 1)
     logging.debug(
         f"Created camera barrier with {len(params['highspeed']['cameras'])} cameras."
     )
@@ -198,4 +198,4 @@ def start_highspeed_cameras(params: dict, kill_event: mp.Event):
         )
         highspeed_cameras.append(p)
 
-    return highspeed_cameras, highspeed_cameras_pipes
+    return highspeed_cameras, highspeed_cameras_pipes, camera_barrier
