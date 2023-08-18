@@ -6,6 +6,8 @@ import pygame
 
 from . import BaseStim
 
+MM_PER_PIXEL = 2.5
+
 
 class LoomingStim(BaseStim):
     """_summary_
@@ -28,6 +30,7 @@ class LoomingStim(BaseStim):
         self.radius = radius
         self.duration = duration
         self.position = position
+        self.type = kwargs.get("type", "linear")
 
         # Define stimulus flag
         self.is_looming = False
@@ -42,7 +45,11 @@ class LoomingStim(BaseStim):
 
         # Get radius
         if self.radius == "random":
-            self.possible_radii = [32, 64]
+            if self.type == "linear":
+                self.possible_radii = [32, 64]
+            else:
+                self.possible_radii = [45, 90]
+
         elif isinstance(self.radius, int):
             self.possible_radii = [self.radius]
         else:
@@ -86,15 +93,54 @@ class LoomingStim(BaseStim):
 
         # Get all possible combinations in a pandas dataframe
         stimuli = []
-        for index, row in self.stimuli_df.iterrows():
+        for _, row in self.stimuli_df.iterrows():
             stimuli.append(
-                self._generate_stimulus(row["radius"], row["duration"], row["position"])
+                self._generate_stimulus(row["radius"], row["duration"], self.type)
             )
 
         # Add stimuli to dataframe
         self.stimuli_df["stim"] = stimuli
 
-    def _generate_stimulus(self, radius, duration, position):
+    def _find_rv_timecourse(
+        stimulus_duration_ms, theta_min_deg, theta_max_deg, delta_t
+    ):
+        display_frequency = 1 / delta_t  # in Hz
+        deg_to_rad = np.pi / 180
+        theta_max = theta_max_deg * deg_to_rad
+        theta_min = theta_min_deg * deg_to_rad
+
+        # Calculate time to collision for the given stimulus duration
+        r_v_ratio = np.tan(theta_min / 2) * (stimulus_duration_ms / 1000)
+        min_collision_time = r_v_ratio / np.tan(theta_max / 2)
+        max_collision_time = r_v_ratio / np.tan(theta_min / 2)
+        total_collision_time = max_collision_time - min_collision_time
+        num_frames = int(np.ceil(total_collision_time * display_frequency))  # round up
+
+        # initialize the time and theta arrays
+        time_theta_array = np.zeros((num_frames, 4))
+
+        # fill in the time array
+        time_theta_array[:, 0] = -np.linspace(
+            min_collision_time, max_collision_time, num_frames
+        )
+
+        # fill in the theta in radians
+        time_theta_array[:, 1] = 2 * np.arctan2(
+            r_v_ratio, np.abs(time_theta_array[:, 0])
+        )
+
+        # fill in the theta in mm
+        # arctan(theta/2) = x (size on screen) / 250 mm (r)
+        # arctan(theta/2) * 250 mm = x mm
+        time_theta_array[:, 2] = np.tan(time_theta_array[:, 1] / 2) * 250
+
+        # fill in the theta in pixels
+        # x mm / (2.5 mm / pixel) = x mm * (1 pixel / 2.5 mm) = x pixels
+        time_theta_array[:, 3] = time_theta_array[:, 2] / MM_PER_PIXEL
+
+        return time_theta_array, r_v_ratio
+
+    def _generate_stimulus(self, radius: int, duration: int, type: str):
         """_summary_
 
         Args:
@@ -104,8 +150,15 @@ class LoomingStim(BaseStim):
         Returns:
             _type_: _description_
         """
+        # generate a stimulus according to the type
         n_frames = int(duration / (1000 / 60))
-        return np.linspace(1, radius, n_frames)
+        if type == "linear":
+            stim = np.linspace(1, radius, n_frames)
+        else:
+            temp_stim, _ = self._find_rv_timecourse(duration, 5, radius, 1 / 60)
+            stim = temp_stim[:, 3]
+
+        return stim
 
     def draw(self):
         """_summary_"""

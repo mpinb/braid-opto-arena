@@ -39,8 +39,9 @@ frequency = 0          # in Hz
 
     [stim_params.looming]
     active = false
+    type = "exp"
     position = "random"
-    max_radius = "random" # value between 0-1, where 1 means fullscreen
+    max_radius = "random"
     duration = "random"
     color = "black"
 
