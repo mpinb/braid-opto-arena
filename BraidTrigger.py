@@ -19,6 +19,8 @@ from helper_functions import (
 from utils.rspowersupply import PowerSupply
 from visual_stimuli import start_visual_stimuli
 
+PSU_VOLTAGE = 28
+
 
 def main(params_file: str, root_folder: str):
     """Main BraidTrigger function. Starts up all processes and triggers.
@@ -43,8 +45,9 @@ def main(params_file: str, root_folder: str):
             f"commit = {git.Repo(search_parent_directories=True).head.commit.hexsha}"
         )
 
+    # Set power supply voltage (for backlighting)
     ps = PowerSupply()
-    ps.set_voltage(30)
+    ps.set_voltage(PSU_VOLTAGE)
 
     # Connect to arduino
     if params["opto_params"]["active"]:
@@ -66,6 +69,12 @@ def main(params_file: str, root_folder: str):
 
     # Connect to cameras
     if params["highspeed"]["active"]:
+        base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
+        output_folder = f"/home/benyishay_la/Videos/{base_folder}/"
+        params["video_save_folder"] = output_folder
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+
         # Connect to camera trigger
         camera_trigger_board = create_arduino_device(
             params["arduino_devices"]["camera_trigger"]
@@ -134,114 +143,116 @@ def main(params_file: str, root_folder: str):
     with session.get(
         events_url, stream=True, headers={"Accept": "text/event-stream"}
     ) as r:
-        for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
-            if kill_event.is_set():
-                break
+        while not kill_event.is_set():
+            for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
+                tcall = time.time()  # Get current time
+                data = parse_chunk(chunk)
 
-            tcall = time.time()  # Get current time
-            data = parse_chunk(chunk)
+                try:
+                    msg_dict = data["msg"]
+                except KeyError:
+                    continue
 
-            try:
-                msg_dict = data["msg"]
-            except KeyError:
-                continue
+                # logging.info(f"Received message: {msg_dict}")
 
-            # logging.info(f"Received message: {msg_dict}")
-
-            # Check for first "birth" message
-            if "Birth" in msg_dict:
-                curr_obj_id = msg_dict["Birth"]["obj_id"]
-                logging.debug(f"New object detected: {curr_obj_id}")
-                obj_ids.append(curr_obj_id)
-                obj_birth_times[curr_obj_id] = tcall
-                continue
-
-            # Check for "update" message
-            if "Update" in msg_dict:
-                curr_obj_id = msg_dict["Update"]["obj_id"]
-                if curr_obj_id not in obj_ids:
+                # Check for first "birth" message
+                if "Birth" in msg_dict:
+                    curr_obj_id = msg_dict["Birth"]["obj_id"]
                     logging.debug(f"New object detected: {curr_obj_id}")
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall
                     continue
 
-            # Check for "death" message
-            if "Death" in msg_dict:
-                curr_obj_id = msg_dict["Death"]
-                if curr_obj_id in obj_ids:
-                    logging.debug(f"Object {curr_obj_id} died")
-                    obj_ids.remove(curr_obj_id)
-                continue
+                # Check for "update" message
+                if "Update" in msg_dict:
+                    curr_obj_id = msg_dict["Update"]["obj_id"]
+                    if curr_obj_id not in obj_ids:
+                        logging.debug(f"New object detected: {curr_obj_id}")
+                        obj_ids.append(curr_obj_id)
+                        obj_birth_times[curr_obj_id] = tcall
+                        continue
 
-            # if the trajectory is too short, skip
-            if (tcall - obj_birth_times[curr_obj_id]) < min_trajectory_time:
-                # logging.warning(f"Trajectory too short for object {curr_obj_id}")
-                continue
+                # Check for "death" message
+                if "Death" in msg_dict:
+                    curr_obj_id = msg_dict["Death"]
+                    if curr_obj_id in obj_ids:
+                        logging.debug(f"Object {curr_obj_id} died")
+                        obj_ids.remove(curr_obj_id)
+                    continue
 
-            # if the trigger interval is too short, skip
-            if tcall - last_trigger_time < min_trigger_interval:
-                # logging.warning(f"Trigger interval too short for object {curr_obj_id}")
-                continue
+                # if the trajectory is too short, skip
+                if (tcall - obj_birth_times[curr_obj_id]) < min_trajectory_time:
+                    # logging.warning(f"Trajectory too short for object {curr_obj_id}")
+                    continue
 
-            # Get position and radius
-            pos = msg_dict["Update"]
-            radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+                # if the trigger interval is too short, skip
+                if tcall - last_trigger_time < min_trigger_interval:
+                    # logging.warning(f"Trigger interval too short for object {curr_obj_id}")
+                    continue
 
-            # Check if object is in the trigger zone
-            if radius < min_radius and zmin <= pos["z"] <= zmax:
-                logging.info(f"Trigger {ntrig} at {radius}, {pos['z']}")
+                # Get position and radius
+                pos = msg_dict["Update"]
+                radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
 
-                # Update last trigger time
-                ntrig += 1
-                last_trigger_time = tcall
+                # Check if object is in the trigger zone
+                if radius < min_radius and zmin <= pos["z"] <= zmax:
+                    logging.info(f"Trigger {ntrig} at {radius}, {pos['z']}")
 
-                # Add trigger time to dict
-                pos["trigger_time"] = last_trigger_time
-                pos["ntrig"] = ntrig
+                    # Update last trigger time
+                    ntrig += 1
+                    last_trigger_time = tcall
 
-                # Opto Trigger
-                if params["opto_params"]["active"]:
-                    logging.debug("Triggering opto.")
-                    opto_trigger_time = time.time()
-                    opto_trigger_board.write(
-                        f"<{duration},{intensity},{frequency}>".encode()
-                    )
-                    pos["opto_duration"] = duration
-                    pos["opto_intensity"] = intensity
-                    pos["opto_frequency"] = frequency
+                    # Add trigger time to dict
+                    pos["trigger_time"] = last_trigger_time
+                    pos["ntrig"] = ntrig
+
+                    # Opto Trigger
+                    if params["opto_params"]["active"]:
+                        logging.debug("Triggering opto.")
+                        opto_trigger_time = time.time()
+                        opto_trigger_board.write(
+                            f"<{duration},{intensity},{frequency}>".encode()
+                        )
+                        pos["opto_duration"] = duration
+                        pos["opto_intensity"] = intensity
+                        pos["opto_frequency"] = frequency
+                        logging.debug(
+                            f"Opto trigger time: {time.time()-opto_trigger_time:.5f}"
+                        )
+
+                    logging.debug("Triggering cameras.")
+                    camera_trigger_time = time.time()
+                    if params["highspeed"]["active"]:
+                        for _, cam_pipe in highspeed_cameras_pipes.items():
+                            cam_pipe["send"].send(pos)
                     logging.debug(
-                        f"Opto trigger time: {time.time()-opto_trigger_time:.5f}"
+                        f"Camera trigger time: {time.time()-camera_trigger_time:.5f}"
                     )
 
-                logging.debug("Triggering cameras.")
-                camera_trigger_time = time.time()
-                if params["highspeed"]["active"]:
-                    for _, cam_pipe in highspeed_cameras_pipes.items():
-                        cam_pipe["send"].send(pos)
-                logging.debug(
-                    f"Camera trigger time: {time.time()-camera_trigger_time:.5f}"
-                )
+                    # Stim Trigger
+                    logging.debug("Triggering stim.")
+                    stim_trigger_time = time.time()
+                    if (
+                        params["stim_params"]["looming"]["active"]
+                        or params["stim_params"]["grating"]["active"]
+                    ):
+                        stim_send.send(pos)
+                    logging.debug(
+                        f"Stim trigger time: {time.time()-stim_trigger_time:.5f}"
+                    )
 
-                # Stim Trigger
-                logging.debug("Triggering stim.")
-                stim_trigger_time = time.time()
-                if (
-                    params["stim_params"]["looming"]["active"]
-                    or params["stim_params"]["grating"]["active"]
-                ):
-                    stim_send.send(pos)
-                logging.debug(f"Stim trigger time: {time.time()-stim_trigger_time:.5f}")
-
-                # Write data to csv
-                if params["opto_params"]["active"]:
-                    logging.debug("Writing data to csv.")
-                    csv_writer_time = time.time()
-                    if write_header:
-                        csv_writer.writerow(pos.keys())
-                        write_header = False
-                    csv_writer.writerow(pos.values())
-                    csv_file.flush()
-                    logging.debug(f"CSV writer time: {time.time()-csv_writer_time:.5f}")
+                    # Write data to csv
+                    if params["opto_params"]["active"]:
+                        logging.debug("Writing data to csv.")
+                        csv_writer_time = time.time()
+                        if write_header:
+                            csv_writer.writerow(pos.keys())
+                            write_header = False
+                        csv_writer.writerow(pos.values())
+                        csv_file.flush()
+                        logging.debug(
+                            f"CSV writer time: {time.time()-csv_writer_time:.5f}"
+                        )
 
     # Close all processes
     logging.debug("Closing all camera processes.")

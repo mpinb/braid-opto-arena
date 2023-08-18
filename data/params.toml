@@ -12,7 +12,7 @@ center_x = 0       # arena center x in meters (in meters)
 center_y = 0       # arena center y in meters (in meters)
 
 [opto_params]
-active = false
+active = true
 duration = 300      # in milliseconds
 intensity = 255       # in 0-255 range
 frequency = 0          # in Hz
@@ -38,7 +38,7 @@ frequency = 0          # in Hz
     color = "black"
 
     [stim_params.looming]
-    active = true
+    active = false
     position = "random"
     max_radius = "random" # value between 0-1, where 1 means fullscreen
     duration = "random"
@@ -58,7 +58,7 @@ frequency = 0          # in Hz
     time_before = 1
     time_after = 2
     fps = 500
-    #ExposureTime = 1900
+    ExposureTime = 1900
     #Gain = 3
     SensorReadoutMode = "Fast"
 

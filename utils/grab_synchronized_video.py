@@ -34,7 +34,6 @@ def camera(serial: str, show_video: bool = True):
     info = py.DeviceInfo()
     info.SetSerialNumber(serial)
     cam = py.InstantCamera(py.TlFactory.GetInstance().CreateFirstDevice(info))
-
     # Set parameters
     cam.Open()
     for k, v in CAMERA_PARAMS.items():
@@ -47,8 +46,8 @@ def camera(serial: str, show_video: bool = True):
 
     # Create video writer
     filename = os.path.join(
-        "/home/benyishay_la/Videos/20230801_134131.braid/laser_position/",
-        f"{serial}.mp4",
+        "/home/benyishay_la/Videos/20230814_charuco_calibration/",
+        f"{serial}_100fps.mp4",
     )
     video_writer = WriteGear(output=filename, logging=False, **VIDEO_PARAMS)
 
@@ -85,7 +84,7 @@ if __name__ == "__main__":
         time.sleep(1)
 
     BARRIER.wait()
-    board.write(b"10")
+    board.write(b"100")
     kill = input("Kill? (y): ")
     KILL_SWITCH.set()
     board.write(b"0")

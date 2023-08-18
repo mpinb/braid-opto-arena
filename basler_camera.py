@@ -9,7 +9,7 @@ from pypylon import pylon
 from vidgear.gears import WriteGear
 
 
-def video_writer(video_writer_recv: mp.Pipe):
+def video_writer(video_writer_recv: mp.Pipe, output_folder: str):
     """a process/thread function to loop over a pipe and write frames to a video file.
 
     Args:
@@ -24,18 +24,15 @@ def video_writer(video_writer_recv: mp.Pipe):
     }
 
     while True:
-        folder, trigger_data, frame_buffer = video_writer_recv.recv()
+        trigger_data, frame_buffer = video_writer_recv.recv()
         t_write_start = time.time()
-        base_folder = os.path.basename(folder)
         ntrig = trigger_data["ntrig"]
         obj_id = trigger_data["obj_id"]
         cam_serial = trigger_data["cam_serial"]
         frame = trigger_data["frame"]
 
         # Create output folder and filename
-        output_folder = f"/home/benyishay_la/Videos/{base_folder}/"
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
+
         output_file = (
             f"{ntrig}_obj_id_{obj_id}_cam_{cam_serial}_frame_{frame}.mp4"  # noqa: E501
         )
@@ -91,7 +88,9 @@ def basler_camera(
     cam.SensorReadoutMode = "Fast"
 
     # Set possible camera parameters from `params`
-    # cam.ExposureTime = params["highspeed"]["parameters"].get("ExposureTime", 1900)
+    cam.ExposureTime = (
+        1900  # params["highspeed"]["parameters"].get("ExposureTime", 1900)
+    )
     # cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
 
     # Setup triggered writing variables
@@ -109,7 +108,12 @@ def basler_camera(
     # Initialize video writer process
     video_writer_recv, video_writer_send = mp.Pipe()
     video_writer_p = mp.Process(
-        target=video_writer, args=(video_writer_recv,), daemon=True
+        target=video_writer,
+        args=(
+            video_writer_recv,
+            params["video_save_folder"],
+        ),
+        daemon=True,
     )
     video_writer_p.start()
 
@@ -144,7 +148,7 @@ def basler_camera(
 
             if i_frame == frames_after:
                 # Send data to video writer
-                video_writer_send.send([params["folder"], trigger_data, frame_buffer])
+                video_writer_send.send([trigger_data, frame_buffer])
                 logging.debug(f"Sent {len(frame_buffer)} frames to video writer.")
 
                 # Reset counter and flag
