@@ -1,3 +1,4 @@
+import argparse
 import logging
 import multiprocessing as mp
 import os
@@ -19,10 +20,10 @@ from helper_functions import (
 from utils.rspowersupply import PowerSupply
 from visual_stimuli import start_visual_stimuli
 
-PSU_VOLTAGE = 28
+PSU_VOLTAGE = 0
 
 
-def main(params_file: str, root_folder: str):
+def main(params_file: str, root_folder: str, args: argparse.Namespace):
     """Main BraidTrigger function. Starts up all processes and triggers.
     Loop over data incoming from the flydra2 proxy and tests if a trigger should be sent.
 
@@ -30,12 +31,16 @@ def main(params_file: str, root_folder: str):
         params_file (str): a path to the params.toml file
         root_folder (str): the root folder where the experiment folder will be created
     """
+
     # Load params
     with open(params_file, "rb") as f:
         params = tomllib.load(f)
 
     # Check if braidz is running (see if folder was created)
-    folder = check_braid_folder(root_folder)
+    if not args.debug:
+        folder = check_braid_folder(root_folder)
+    else:
+        folder = "./.test/"
     params["folder"] = folder
 
     # Copy the params file to the experiment folder
@@ -46,19 +51,19 @@ def main(params_file: str, root_folder: str):
         )
 
     # Set power supply voltage (for backlighting)
-    ps = PowerSupply()
-    ps.set_voltage(PSU_VOLTAGE)
+    # ps = PowerSupply()
+    # ps.set_voltage(PSU_VOLTAGE)
+
+    # Create mp variables
+    kill_event = mp.Event()
+    # signal.signal(signal.SIGINT, signal_handler)
 
     # Connect to arduino
-    if params["opto_params"]["active"]:
+    if args.opto:
         logging.debug("Connecting to arduino.")
         opto_trigger_board = create_arduino_device(
             params["arduino_devices"]["opto_trigger"]
         )
-
-    # Create mp variables
-    kill_event = mp.Event()
-    signal.signal(signal.SIGINT, lambda signal, frame: kill_event.set())
 
     # Connect to flydra2 proxy
     flydra2_url = "http://0.0.0.0:8397/"
@@ -68,7 +73,7 @@ def main(params_file: str, root_folder: str):
     events_url = r.url + "events"
 
     # Connect to cameras
-    if params["highspeed"]["active"]:
+    if args.highspeed:
         base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
         output_folder = f"/home/benyishay_la/Videos/{base_folder}/"
         params["video_save_folder"] = output_folder
@@ -79,7 +84,7 @@ def main(params_file: str, root_folder: str):
         camera_trigger_board = create_arduino_device(
             params["arduino_devices"]["camera_trigger"]
         )
-        camera_trigger_board.write(b"L")  # reset camera trigger
+        camera_trigger_board.write(b"0")  # reset camera trigger
 
         # Start camera processes
         (
@@ -98,15 +103,16 @@ def main(params_file: str, root_folder: str):
         camera_trigger_board.write(b"500")  # Start camera trigger
 
     # Start (dynamic) visual stimuli
-    if (
-        params["stim_params"]["static"]["active"]
-        or params["stim_params"]["looming"]["active"]
-        or params["stim_params"]["grating"]["active"]
-    ):
+    if args.static or args.looming or args.grating:
         stim_recv, stim_send = mp.Pipe()
         stimulus_process = mp.Process(
             target=start_visual_stimuli,
-            args=(params, stim_recv, kill_event),
+            args=(
+                params,
+                stim_recv,
+                kill_event,
+                args,
+            ),
             name="VisualStimuli",
         )
         stimulus_process.start()
@@ -140,11 +146,14 @@ def main(params_file: str, root_folder: str):
 
     # Start main loop
     logging.info("Starting main loop.")
-    with session.get(
-        events_url, stream=True, headers={"Accept": "text/event-stream"}
-    ) as r:
-        while not kill_event.is_set():
+    try:
+        with session.get(
+            events_url, stream=True, headers={"Accept": "text/event-stream"}
+        ) as r:
             for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
+                if kill_event.is_set():
+                    break
+
                 tcall = time.time()  # Get current time
                 data = parse_chunk(chunk)
 
@@ -207,7 +216,7 @@ def main(params_file: str, root_folder: str):
                     pos["ntrig"] = ntrig
 
                     # Opto Trigger
-                    if params["opto_params"]["active"]:
+                    if args.opto:
                         logging.debug("Triggering opto.")
                         opto_trigger_time = time.time()
                         opto_trigger_board.write(
@@ -222,7 +231,7 @@ def main(params_file: str, root_folder: str):
 
                     logging.debug("Triggering cameras.")
                     camera_trigger_time = time.time()
-                    if params["highspeed"]["active"]:
+                    if args.highspeed:
                         for _, cam_pipe in highspeed_cameras_pipes.items():
                             cam_pipe["send"].send(pos)
                     logging.debug(
@@ -232,10 +241,7 @@ def main(params_file: str, root_folder: str):
                     # Stim Trigger
                     logging.debug("Triggering stim.")
                     stim_trigger_time = time.time()
-                    if (
-                        params["stim_params"]["looming"]["active"]
-                        or params["stim_params"]["grating"]["active"]
-                    ):
+                    if args.looming or args.grating:
                         stim_send.send(pos)
                     logging.debug(
                         f"Stim trigger time: {time.time()-stim_trigger_time:.5f}"
@@ -253,36 +259,53 @@ def main(params_file: str, root_folder: str):
                         logging.debug(
                             f"CSV writer time: {time.time()-csv_writer_time:.5f}"
                         )
+    except KeyboardInterrupt:
+        logging.info("Keyboard interrupt received.")
+        kill_event.set()
+        logging.debug("Set kill event.")
 
-    # Close all processes
-    logging.debug("Closing all camera processes.")
-    for cam in highspeed_cameras:
-        cam.join()
+        # Close all processes
+        logging.debug("Closing all camera processes.")
+        for cam in highspeed_cameras:
+            cam.join()
 
-    # Close all boards
-    logging.debug("Closing all Arduino boards.")
-    if params["opto_params"]["active"]:
-        opto_trigger_board.close()
-    if params["highspeed"]["active"]:
-        camera_trigger_board.write(b"0")
-        camera_trigger_board.close()
+        # Close all boards
+        logging.debug("Closing all Arduino boards.")
+        if args.opto:
+            opto_trigger_board.close()
+        if args.highspeed:
+            camera_trigger_board.write(b"0")
+            camera_trigger_board.close()
 
-    # Close CSV file
-    logging.debug("Closing CSV file.")
-    csv_file.close()
+        # Close CSV file
+        logging.debug("Closing CSV file.")
+        csv_file.close()
 
-    logging.debug("Closing power supply.")
-    ps.set_voltage(0)
+        logging.debug("Closing power supply.")
+        # ps.set_voltage(0)
 
-    logging.info("Finished.")
+        logging.info("Finished.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(processName)s: %(asctime)s - %(message)s",
     )
+
+    # Parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--opto", action="store_true", default=True)
+    parser.add_argument("--static", action="store_true", default=True)
+    parser.add_argument("--looming", action="store_true", default=False)
+    parser.add_argument("--grating", action="store_true", default=False)
+    parser.add_argument("--highspeed", action="store_true", default=True)
+    parser.add_argument("--debug", action="store_true", default=False)
+    args = parser.parse_args()
+
+    # Start main function
     main(
         params_file="./data/params.toml",
         root_folder="/media/benyishay_la/Data/Experiments/",
+        args=args,
     )

@@ -127,6 +127,9 @@ def basler_camera(
 
     # Start camera
     while not kill_event.is_set():
+        if kill_event.is_set():
+            break
+
         # Check for trigger
         trigger_set = trigger_recv.poll()
 
@@ -155,6 +158,7 @@ def basler_camera(
                 i_frame = 0
                 started_capture = False
 
+    logging.debug(f"Stopping camera {cam_serial}.")
     cam.StopGrabbing()
 
 

@@ -16,7 +16,7 @@ class LoomingStim(BaseStim):
         BaseStim (_type_): _description_
     """
 
-    def __init__(self, radius, duration, position, *args, **kwargs):
+    def __init__(self, radius, duration, position, stim_type, *args, **kwargs):
         """_summary_
 
         Args:
@@ -30,7 +30,8 @@ class LoomingStim(BaseStim):
         self.radius = radius
         self.duration = duration
         self.position = position
-        self.type = kwargs.get("type", "linear")
+        self.type = stim_type
+        print(f"Stimulus type: {self.type}")
 
         # Define stimulus flag
         self.is_looming = False
@@ -102,7 +103,7 @@ class LoomingStim(BaseStim):
         self.stimuli_df["stim"] = stimuli
 
     def _find_rv_timecourse(
-        stimulus_duration_ms, theta_min_deg, theta_max_deg, delta_t
+        self, stimulus_duration_ms, theta_min_deg, theta_max_deg, delta_t
     ):
         display_frequency = 1 / delta_t  # in Hz
         deg_to_rad = np.pi / 180
@@ -155,8 +156,15 @@ class LoomingStim(BaseStim):
         if type == "linear":
             stim = np.linspace(1, radius, n_frames)
         else:
-            temp_stim, _ = self._find_rv_timecourse(duration, 5, radius, 1 / 60)
-            stim = temp_stim[:, 3]
+            print(f"Generating stimulus with radius {radius} and duration {duration}")
+            temp_stim, _ = self._find_rv_timecourse(
+                stimulus_duration_ms=duration,
+                theta_min_deg=5,
+                theta_max_deg=radius,
+                delta_t=1 / 60,
+            )
+            stim = np.flip(temp_stim[:, 3])
+            print(stim)
 
         return stim
 

@@ -10,7 +10,9 @@ from stimuli.LoomingStim import LoomingStim
 from stimuli.StaticStim import StaticStim
 
 
-def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Event):
+def start_visual_stimuli(
+    params: dict, trigger_recv: mp.Pipe, kill_event: mp.Event, args
+):
     os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
     logging.debug("Initializing pygame.")
     pygame.init()
@@ -23,7 +25,7 @@ def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Eve
     clock = pygame.time.Clock()
 
     # Check if static stimulus is active
-    if params["stim_params"]["static"]["active"]:
+    if args.static:
         logging.debug("Initializing static stimulus.")
         static_active = True
         static_stim = StaticStim(
@@ -33,7 +35,7 @@ def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Eve
         static_active = False
 
     # Check if grating stimulus is active
-    if params["stim_params"]["grating"]["active"]:
+    if args.grating:
         logging.debug("Initializing grating stimulus.")
         grating_active = True
         pass
@@ -41,7 +43,7 @@ def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Eve
         grating_active = False
 
     # Check if looming stimulus is active
-    if params["stim_params"]["looming"]["active"]:
+    if args.looming:
         logging.debug("Initializing looming stimulus.")
         looming_active = True
         looming_stim = LoomingStim(
@@ -50,6 +52,7 @@ def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Eve
             radius=params["stim_params"]["looming"]["max_radius"],
             duration=params["stim_params"]["looming"]["duration"],
             position=params["stim_params"]["looming"]["position"],
+            stim_type=params["stim_params"]["looming"]["stim_type"],
         )
     else:
         looming_active = False
@@ -63,6 +66,8 @@ def start_visual_stimuli(params: dict, trigger_recv: mp.Pipe, kill_event: mp.Eve
 
     logging.info("Starting main loop.")
     while not kill_event.is_set():
+        if kill_event.is_set():
+            break
         # Check if there's anything in the pipe
         trigger_set = trigger_recv.poll()
 
