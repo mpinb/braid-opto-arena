@@ -1,6 +1,8 @@
+import glob
 import logging
 import multiprocessing as mp
 import os
+import shutil
 import time
 from collections import deque
 
@@ -18,7 +20,7 @@ def video_writer(video_writer_recv: mp.Pipe, output_folder: str):
     output_params = {
         "-input_framerate": 25,
         "-vcodec": "h264_nvenc",
-        "-preset": "fast",
+        "-preset": "slow",
         "-cq": "18",
         "-disable_force_termination": True,
     }
@@ -49,6 +51,15 @@ def video_writer(video_writer_recv: mp.Pipe, output_folder: str):
             f"Finished writing video with length {len(frame_buffer)} to {os.path.basename(output_filename)} in {time.time()-t_write_start:2f} seconds."  # noqa: E501
         )
         video_writer.close()
+
+        # copy file to external drive
+        # copy_dest = os.makedirs(
+        #     os.path.join(
+        #         "/media/benyishay_la/8tb_data/Videos", os.path.basename(output_folder)
+        #     ),
+        #     exist_ok=True,
+        # )
+        # shutil.copy(output_filename, os.path.join(copy_dest, output_file))
 
 
 def basler_camera(
@@ -81,17 +92,21 @@ def basler_camera(
 
     # Set essential camera parameters
     cam.Open()
-    cam.TriggerSelector = "FrameStart"
-    cam.TriggerMode = "On"
-    cam.TriggerSource = "Line1"
-    cam.TriggerActivation = "RisingEdge"
-    cam.SensorReadoutMode = "Fast"
+    nodeFile = glob.glob(f"/home/benyishay_la/braid-configs/*{cam_serial}*.pfs")
+    pylon.FeaturePersistence_Load(nodeFile[0], cam.GetNodeMap(), True)
+    cam.Close()
+    # cam.Open()
+    # cam.TriggerSelector = "FrameStart"
+    # cam.TriggerMode = "On"
+    # cam.TriggerSource = "Line1"
+    # cam.TriggerActivation = "RisingEdge"
+    # # cam.SensorReadoutMode = "Fast"
 
-    # Set possible camera parameters from `params`
-    cam.ExposureTime = (
-        1900  # params["highspeed"]["parameters"].get("ExposureTime", 1900)
-    )
-    # cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
+    # # Set possible camera parameters from `params`
+    # cam.ExposureTime = (
+    #     1900  # params["highspeed"]["parameters"].get("ExposureTime", 1900)
+    # )
+    # # cam.Gain = params["highspeed"]["parameters"].get("Gain", 10)
 
     # Setup triggered writing variables
     time_before = params["highspeed"]["parameters"].get("time_before", 1)

@@ -1,10 +1,40 @@
 import csv
+import filecmp
 import json
 import logging
 import os
 import pathlib
+import shutil
 import time
+
 import serial
+from tqdm.contrib.concurrent import thread_map
+
+
+def copy_files_with_progress(src_folder, dest_folder):
+    def copy_file(src_file_path, dest_file_path):
+        shutil.copy2(src_file_path, dest_file_path)
+
+        if filecmp.cmp(src_file_path, dest_file_path, shallow=False):
+            logging.debug(f"File {src_file_path} copied successfully.")
+            os.remove(src_file_path)
+
+    # Get a list of all files in the source folder
+    files = [
+        f for f in os.listdir(src_folder) if os.path.isfile(os.path.join(src_folder, f))
+    ]
+
+    src_file_paths = [os.path.join(src_folder, file) for file in files]
+    dest_file_paths = [os.path.join(dest_folder, file) for file in files]
+
+    # Make sure the destination folder exists
+    if not os.path.exists(dest_folder):
+        os.makedirs(dest_folder)
+
+    thread_map(copy_file, src_file_paths, dest_file_paths, max_workers=4)
+
+    if len(os.listdir(src_folder)) == 0:
+        os.rmdir(src_folder)
 
 
 def check_braid_folder(root_folder: str) -> str:

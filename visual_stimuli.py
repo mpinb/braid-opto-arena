@@ -44,7 +44,7 @@ def start_visual_stimuli(
 
     # Check if looming stimulus is active
     if args.looming:
-        logging.debug("Initializing looming stimulus.")
+        logging.info("Initializing looming stimulus.")
         looming_active = True
         looming_stim = LoomingStim(
             screen=screen,
@@ -93,6 +93,9 @@ def start_visual_stimuli(
                 trigger_data["radius"] = looming_stim.curr_loom["radius"]
                 trigger_data["duration"] = looming_stim.curr_loom["duration"]
                 trigger_data["position"] = looming_stim.curr_loom["position"]
+                logging.info(
+                    f"Looming with radius {trigger_data['radius']} for {trigger_data['duration']} at {trigger_data['position']}."
+                )
                 logging.debug(f"Dict update time: {time.time()-dict_update_time:.5f}")
 
             if grating_active:

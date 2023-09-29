@@ -3,7 +3,6 @@ import logging
 import multiprocessing as mp
 import os
 import shutil
-import signal
 import time
 import tomllib
 
@@ -13,6 +12,7 @@ import requests
 from basler_camera import start_highspeed_cameras
 from helper_functions import (
     check_braid_folder,
+    copy_files_with_progress,
     create_arduino_device,
     create_csv_writer,
     parse_chunk,
@@ -20,7 +20,7 @@ from helper_functions import (
 from utils.rspowersupply import PowerSupply
 from visual_stimuli import start_visual_stimuli
 
-PSU_VOLTAGE = 0
+PSU_VOLTAGE = 30
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -51,8 +51,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         )
 
     # Set power supply voltage (for backlighting)
-    # ps = PowerSupply()
-    # ps.set_voltage(PSU_VOLTAGE)
+    ps = PowerSupply(port="/dev/ttyACM1")
+    ps.set_voltage(PSU_VOLTAGE)
 
     # Create mp variables
     kill_event = mp.Event()
@@ -248,7 +248,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     )
 
                     # Write data to csv
-                    if params["opto_params"]["active"]:
+                    if args.opto:
                         logging.debug("Writing data to csv.")
                         csv_writer_time = time.time()
                         if write_header:
@@ -282,26 +282,38 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         csv_file.close()
 
         logging.debug("Closing power supply.")
-        # ps.set_voltage(0)
+        ps.set_voltage(0)
+
+        # copy all video files to new hdd
+        # logging.debug("Copying video files to new hdd.")
+        # old_folder = params["video_save_folder"]
+        # new_folder = os.path.join(
+        #     "/media/benyishay_la/8tb_data/videos/",
+        #     os.path.basename(params["video_save_folder"]),
+        # )
+        # copy_files_with_progress(old_folder, new_folder)
 
         logging.info("Finished.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(processName)s: %(asctime)s - %(message)s",
     )
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--opto", action="store_true", default=True)
-    parser.add_argument("--static", action="store_true", default=True)
+    parser.add_argument("--opto", action="store_true", default=False)
+    parser.add_argument("--static", action="store_true", default=False)
     parser.add_argument("--looming", action="store_true", default=False)
     parser.add_argument("--grating", action="store_true", default=False)
-    parser.add_argument("--highspeed", action="store_true", default=True)
+    parser.add_argument("--highspeed", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=False)
     args = parser.parse_args()
+
+    for arg in vars(args):
+        logging.info(f"{arg}: {getattr(args, arg)}")
 
     # Start main function
     main(

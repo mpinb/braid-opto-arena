@@ -4,7 +4,7 @@ camera_trigger = '/dev/camera_trigger'
 
 [trigger_params]
 min_trajectory_time = 1.0   # minimum trajectory time (in seconds)
-min_trigger_interval = 5     # minimum time between activations (in seconds)
+min_trigger_interval = 10     # minimum time between activations (in seconds)
 min_radius = 0.025      # minimum radius for activation (in meters)
 zmin = 0.15              # minimum z for activation (in meters)
 zmax = 0.25             # maximum z for activation (in meters)
@@ -58,8 +58,8 @@ frequency = 0          # in Hz
     pre_trigger_mode = true
     time_before = 1
     time_after = 2
-    fps = 500
-    ExposureTime = 1900
+    fps = 650
+    ExposureTime = 1000
     #Gain = 3
     SensorReadoutMode = "Fast"
 
