@@ -5,10 +5,10 @@ import os
 import random
 import shutil
 import time
-import tomllib
 
 import git
 import requests
+import tomllib
 
 from basler_camera import start_highspeed_cameras
 from helper_functions import (
@@ -227,7 +227,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                             stim_duration = duration
                             stim_intensity = intensity
                             stim_frequency = frequency
-                            
+
                         logging.debug("Triggering opto.")
                         opto_trigger_time = time.time()
                         opto_trigger_board.write(
@@ -331,5 +331,4 @@ if __name__ == "__main__":
         params_file="./data/params.toml",
         root_folder="/mnt/data/Experiments/",
         args=args,
-    )
     )
