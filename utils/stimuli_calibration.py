@@ -12,7 +12,7 @@ screen_width = 640
 screen_height = 128
 
 # Set the number of circles and their radius
-num_circles = 10
+num_circles = 20
 circle_radius = 30
 
 # Calculate the horizontal spacing between circles
@@ -31,25 +31,26 @@ circle_color = (255, 0, 0)  # Red
 # Set the font and font size for the circle labels
 font = pygame.font.Font(None, 30)
 
-# Draw the circles
-for i in range(num_circles):
-    # Calculate the x-position of the circle
-    x = (i * horizontal_spacing + circle_radius) % screen_width
+stimuli_position = list(range(0, 640 + 32, 32))
 
-    # Calculate the y-position of the circle
-    y = screen_height // 2
+# Calculate the x-position of the circle
+x = stimuli_position[20]
+print(x)
 
-    # Draw the circle
-    pygame.draw.circle(screen, circle_color, (int(x), y), circle_radius)
+# Calculate the y-position of the circle
+y = screen_height // 2
 
-    # Create a text surface with the x-position label
-    text_surface = font.render(str(int(x)), True, (0, 0, 0))  # Black
+# Draw the circle
+pygame.draw.circle(screen, circle_color, (int(x), y), circle_radius)
 
-    # Calculate the position of the text to center it within the circle
-    text_rect = text_surface.get_rect(center=(int(x), y))
+# Create a text surface with the x-position label
+text_surface = font.render(str(int(x)), True, (0, 0, 0))  # Black
 
-    # Draw the text surface onto the screen
-    screen.blit(text_surface, text_rect)
+# Calculate the position of the text to center it within the circle
+text_rect = text_surface.get_rect(center=(int(x), y))
+
+# Draw the text surface onto the screen
+screen.blit(text_surface, text_rect)
 
 # Update the screen
 pygame.display.flip()

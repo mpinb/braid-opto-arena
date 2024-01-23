@@ -2,6 +2,7 @@ import argparse
 import logging
 import multiprocessing as mp
 import os
+import random
 import shutil
 import time
 import tomllib
@@ -12,7 +13,6 @@ import requests
 from basler_camera import start_highspeed_cameras
 from helper_functions import (
     check_braid_folder,
-    copy_files_with_progress,
     create_arduino_device,
     create_csv_writer,
     parse_chunk,
@@ -75,7 +75,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # Connect to cameras
     if args.highspeed:
         base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
-        output_folder = f"/home/benyishay_la/Videos/{base_folder}/"
+        output_folder = f"/mnt/data/Videos/{base_folder}/"
         params["video_save_folder"] = output_folder
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
@@ -132,6 +132,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     intensity = params["opto_params"].get("intensity", 255)
     frequency = params["opto_params"].get("frequency", 0)
     duration = params["opto_params"].get("duration", 300)
+    sham_perc = params["opto_params"].get("sham_perc", 0)
 
     csv_file, csv_writer, write_header = create_csv_writer(params["folder"], "opto.csv")
 
@@ -217,14 +218,24 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
                     # Opto Trigger
                     if args.opto:
+                        if random.random() < sham_perc:
+                            logging.debug("Sham opto.")
+                            stim_duration = 0
+                            stim_intensity = 0
+                            stim_frequency = 0
+                        else:
+                            stim_duration = duration
+                            stim_intensity = intensity
+                            stim_frequency = frequency
+                            
                         logging.debug("Triggering opto.")
                         opto_trigger_time = time.time()
                         opto_trigger_board.write(
-                            f"<{duration},{intensity},{frequency}>".encode()
+                            f"<{stim_duration},{stim_intensity},{stim_frequency}>".encode()
                         )
-                        pos["opto_duration"] = duration
-                        pos["opto_intensity"] = intensity
-                        pos["opto_frequency"] = frequency
+                        pos["opto_duration"] = stim_duration
+                        pos["opto_intensity"] = stim_intensity
+                        pos["opto_frequency"] = stim_frequency
                         logging.debug(
                             f"Opto trigger time: {time.time()-opto_trigger_time:.5f}"
                         )
@@ -318,6 +329,7 @@ if __name__ == "__main__":
     # Start main function
     main(
         params_file="./data/params.toml",
-        root_folder="/media/benyishay_la/Data/Experiments/",
+        root_folder="/mnt/data/Experiments/",
         args=args,
+    )
     )

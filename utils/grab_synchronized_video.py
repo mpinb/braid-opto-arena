@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import os
 import time
+from datetime import datetime
 
 import cv2
 import serial
@@ -29,6 +30,8 @@ CAMERA_SERIALS = ["23047980", "23096298", "23088879", "23088882"]
 KILL_SWITCH = mp.Event()
 BARRIER = mp.Barrier(len(CAMERA_SERIALS) + 1)
 
+POS = 640
+
 
 def camera(serial: str, show_video: bool = True):
     info = py.DeviceInfo()
@@ -45,10 +48,17 @@ def camera(serial: str, show_video: bool = True):
     converter.OutputBitAlignment = py.OutputBitAlignment_MsbAligned
 
     # Create video writer
-    filename = os.path.join(
-        "/home/benyishay_la/Videos/20230814_charuco_calibration/",
-        f"{serial}_100fps.mp4",
+    date = datetime.now().strftime("%Y%m%d")
+    filedir = os.path.join(
+        f"/home/benyishay_la/Videos/{date}_laser_calibration/",
     )
+    filename = os.path.join(
+        filedir,
+        f"{serial}_{POS}_100fps.mp4",
+    )
+
+    # create folder if it doesn't exist
+    os.makedirs(os.path.dirname(filedir), exist_ok=True)
     video_writer = WriteGear(output=filename, logging=False, **VIDEO_PARAMS)
 
     # Wait for all cameras to be ready
