@@ -34,7 +34,6 @@ def video_writer(video_writer_recv: mp.Pipe, output_folder: str):
         frame = trigger_data["frame"]
 
         # Create output folder and filename
-
         output_file = (
             f"{ntrig}_obj_id_{obj_id}_cam_{cam_serial}_frame_{frame}.mp4"  # noqa: E501
         )
@@ -154,10 +153,13 @@ def basler_camera(
             trigger_data["cam_serial"] = cam_serial
 
         # Grab frame
-        with cam.RetrieveResult(
-            2000, pylon.TimeoutHandling_ThrowException
-        ) as grabResult:
-            frame_buffer.append(grabResult.Array)
+        try:
+            grabResult = cam.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+        except pylon.TimeoutException:
+            logging.warning("TimeoutException in camera grab.")
+            continue
+
+        frame_buffer.append(grabResult.GetArray())
 
         if trigger_set or started_capture:
             # Define that we want to start capturing frames
