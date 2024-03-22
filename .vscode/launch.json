@@ -11,7 +11,33 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--opto", "--highspeed", "--static", "--debug"]
+            "args": [
+                "--opto",
+                "--highspeed",
+                "--static",
+                "--debug"
+            ]
+        },
+        {
+            "name": "ximea camera app debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/buchsbaum/src/BraidTrigger/utils/ximea_camera_cpp/ximea-camera-test",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "/home/buchsbaum/src/BraidTrigger/utils/ximea_camera_cpp/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "build",
+            "miDebuggerPath": "/usr/bin/gdb"
         }
     ]
 }

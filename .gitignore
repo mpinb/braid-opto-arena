@@ -161,3 +161,7 @@ cython_debug/
 
 data/params.toml
 .test/
+queue_size_over_time.png
+queue_transfer_delay_over_time.png
+.vscode/launch.json
+scripts/xiapi_rust/.vscode/launch.json
