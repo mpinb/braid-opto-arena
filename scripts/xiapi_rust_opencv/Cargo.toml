@@ -1,0 +1,14 @@
+[package]
+name = "xiapi_rust_opencv"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+image = "0.24.8"
+xiapi-sys = "0.1.2"
+xiapi = { git = "https://github.com/Ximea-GmbH/xiapi.git" }
+bounded-vec-deque = "0.1.1"
+opencv = {version = "0.89.0", features = ["clang-runtime"]}
+chrono = "0.4.37"

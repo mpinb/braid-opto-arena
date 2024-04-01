@@ -1,17 +1,13 @@
-use clap::Parser;
+use clap::{Error, Parser};
 use ctrlc;
+use log;
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
-use zmq;
-
-struct ImageData {
-    frame: Vec<u8>,
-    timestamp_raw: u64,
-    nframe: u32,
-    acq_nframe: u32,
-}
+use zmq::Context;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -19,7 +15,7 @@ struct Args {
     #[arg(long, default_value = "1000")]
     exposure: f32,
 
-    #[arg(long, default_value = "400")]
+    #[arg(long, default_value = "200")]
     fps: f32,
 
     #[arg(long, default_value = "10")]
@@ -28,12 +24,29 @@ struct Args {
     #[arg(long, default_value = "2496")]
     width: u32,
 
-    #[arg(long, default_value = "2048")]
+    #[arg(long, default_value = "2496")]
     height: u32,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), i32> {
+// fn setup_zme()
+fn setup_camera(cam: &mut xiapi::Camera, args: &Args) -> Result<(), xiapi::XI_RETURN> {
+    cam.set_exposure(args.exposure)?;
+    cam.set_image_data_format(xiapi::XI_IMG_FORMAT::XI_MONO8)?;
+    cam.set_acq_timing_mode(xiapi::XI_ACQ_TIMING_MODE::XI_ACQ_TIMING_MODE_FRAME_RATE_LIMIT)?;
+    cam.set_framerate(args.fps)?;
+    cam.set_height(args.height)?;
+    cam.set_width(args.width)?;
+
+    cam.set_limit_bandwidth(cam.limit_bandwidth_maximum()?)?;
+    let buffer_size = cam.acq_buffer_size()?;
+    cam.set_acq_buffer_size(buffer_size * 4)?;
+    cam.set_buffers_queue_size(cam.buffers_queue_size_maximum()?)?;
+
+    Ok(())
+}
+fn main() -> Result<(), i32> {
+    env_logger::init();
+
     // Create a boolean flag to indicate if Ctrl+C has been pressed
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -45,17 +58,14 @@ async fn main() -> Result<(), i32> {
     .expect("Error setting Ctrl-C handler");
 
     // Create a ZMQ context and socket
-    let ctx = zmq::Context::new();
-    let socket = ctx.socket(zmq::STREAM).unwrap();
-    socket.bind("tcp://*:5555").unwrap();
-    let mut msg = zmq::Message::new();
+    let context = Context::new();
+    let subscriber = context.socket(zmq::SUB).unwrap();
+
+    assert!(subscriber.connect("tcp://localhost:5555").is_ok());
+    assert!(subscriber.set_subscribe(b"").is_ok()); // Subscribe to all messages
 
     // Argument parser
     let args: Args = Args::parse();
-    let exposure = args.exposure;
-    let fps = args.fps;
-    let width = args.width;
-    let height = args.height;
 
     // Create a deque to store images
     let mut pre_buffer: VecDeque<Vec<u8>> = VecDeque::with_capacity(args.fps as usize);
@@ -67,71 +77,59 @@ async fn main() -> Result<(), i32> {
     let mut cam = xiapi::open_device(None)?;
 
     // Set camera parameters
-    cam.set_exposure(exposure)?;
-    cam.set_image_data_format(xiapi::XI_IMG_FORMAT::XI_MONO8)?;
-    cam.set_acq_timing_mode(xiapi::XI_ACQ_TIMING_MODE::XI_ACQ_TIMING_MODE_FRAME_RATE_LIMIT)?;
-    cam.set_framerate(fps)?;
-    cam.set_height(height)?;
-    cam.set_width(width)?;
-
-    // Set camera bandwidth
-    cam.set_limit_bandwidth(cam.limit_bandwidth_maximum()?)?;
-    let buffer_size = cam.acq_buffer_size()?;
-    cam.set_acq_buffer_size(buffer_size * 4)?;
-    cam.set_buffers_queue_size(cam.buffers_queue_size_maximum()?)?;
-
-    // Create empty image struct
-    let mut image_data: ImageData = ImageData {
-        frame: Vec::new(),
-        timestamp_raw: 0,
-        nframe: 0,
-        acq_nframe: 0,
-    };
+    setup_camera(&mut cam, &args)?;
 
     // Start acquisition
     let buffer = cam.start_acquisition()?;
-    println!("Acquisition started");
+    log::info!("Acquisition started");
 
     while running.load(Ordering::SeqCst) {
         // Start time
         let start_time = Instant::now();
 
         // Attempt to receive a message from the socket
-        match socket.recv(&mut msg, zmq::DONTWAIT) {
-            Ok(_) => {
-                if msg.as_str().unwrap() == "stop" {
-                    break;
-                } else if msg.as_str().unwrap() == "start" {
-                    switch = true;
-                } else {
-                    // pass
-                }
+
+        if let Ok(msg) = subscriber.recv_msg(zmq::DONTWAIT) {
+            if msg.as_str().unwrap() == "start" {
+                log::info!("Received start message");
+                switch = true;
+            } else if msg.as_str().unwrap() == "stop" {
+                log::info!("Received stop message");
+                break;
+            } else {
+                log::info!("Unknown message: {}", msg.as_str().unwrap());
             }
-            Err(_) => {
-                // do nothing
-            }
+        } else {
+            // No message available yet, do something else or sleep
         }
-
         // Get the next image from the camera
-        let image = buffer.next_image::<u8>(None)?;
-
-        // Copy the image data to the image struct
-        image_data.frame = image.data().to_vec();
-        image_data.timestamp_raw = image.timestamp_raw();
-        image_data.nframe = image.nframe();
-        image_data.acq_nframe = image.acq_nframe();
+        let image = buffer.next_image::<u8>(None)?.data().to_vec();
 
         // Push the image to the appropriate buffer
         if !switch {
             if pre_buffer.len() == pre_buffer.capacity() {
                 pre_buffer.pop_front();
             }
-            pre_buffer.push_back(image_data.frame);
-        } else if post_buffer.len() < post_buffer.capacity() {
-            post_buffer.push_back(image_data.frame);
+            pre_buffer.push_back(image);
+        } else if switch && post_buffer.len() < post_buffer.capacity() {
+            post_buffer.push_back(image);
         } else {
-            pre_buffer.append(&mut post_buffer);
+            log::debug!("Buffers full");
+            log::debug!("len(pre_buffer): {}", pre_buffer.len());
+            log::debug!("len(post_buffer): {}", post_buffer.len());
+
+            let mut pre_buffer_clone = pre_buffer.clone();
+            let mut post_buffer_clone = post_buffer.clone();
+            pre_buffer_clone.append(&mut post_buffer_clone);
+
+            //
             pre_buffer.clear();
+            assert!(pre_buffer.is_empty());
+            log::debug!("length of pre_buffer: {}", pre_buffer.len());
+
+            post_buffer.clear();
+            assert!(post_buffer.is_empty());
+            log::debug!("length of post_buffer: {}", post_buffer.len());
 
             switch = false;
         }
@@ -143,13 +141,13 @@ async fn main() -> Result<(), i32> {
     }
 
     // print iteration time
-    println!(
+    log::info!(
         "Average iteration time: {:?}",
         iteration_times.iter().sum::<Duration>() / iteration_times.len() as u32
     );
 
     // print average fps
-    println!(
+    log::info!(
         "Average FPS: {:?}",
         1.0 / (iteration_times.iter().sum::<Duration>().as_secs_f64()
             / iteration_times.len() as f64)
