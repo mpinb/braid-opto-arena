@@ -69,3 +69,8 @@ pub enum Packet {
     Images(Vec<Arc<ImageData>>),
     Kill,
 }
+
+pub enum zmq_packet {
+    KalmanEstimate(KalmanEstimateRow),
+    SaveFolder,
+}

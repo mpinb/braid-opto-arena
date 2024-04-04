@@ -13,7 +13,6 @@ import argparse
 import requests
 import json
 import time
-import socket
 import zmq
 
 DATA_PREFIX = "data: "
@@ -30,7 +29,13 @@ class Flydra2Proxy:
         print("sending flydra data to tcp %s" % (tcp_addr,))
         context = zmq.Context()
         socket = context.socket(zmq.PUB)
-        socket.bind("tcp://%s" % tcp_addr)
+        socket.bind("tcp://127.0.0.1:5555")
+
+        # wait for socket to initialize properly
+        time.sleep(5)
+
+        # send the folder to write the videos to
+        socket.send("/tmp/".encode("utf-8"))
 
         events_url = self.flydra2_url + "events"
         r = self.session.get(
@@ -38,6 +43,9 @@ class Flydra2Proxy:
             stream=True,
             headers={"Accept": "text/event-stream"},
         )
+
+        start_time = time.time()
+
         for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
             data = parse_chunk(chunk)
             # print('chunk value: %r'%data)
@@ -47,9 +55,12 @@ class Flydra2Proxy:
             try:
                 update_dict = data["msg"]["Update"]
                 update_dict["timestamp"] = time.time()
-                socket.send(json.dumps(update_dict).encode("utf-8"))
+
             except KeyError:
                 continue
+
+            if time.time() - start_time > 10:
+                socket.send(json.dumps(update_dict).encode("utf-8"))
 
 
 def parse_chunk(chunk):

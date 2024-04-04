@@ -6,10 +6,10 @@ use std::path::Path;
 use std::sync::Arc; // Make sure this is imported correctly
 
 pub fn process_packets(
-    save_folder: &str,
+    save_folder: String,
     receiver: Receiver<Packet>,
 ) -> Result<(), std::io::Error> {
-    let save_path = Path::new(save_folder);
+    let save_path = Path::new(&save_folder);
     if !save_path.exists() {
         create_dir_all(&save_path)?;
     }

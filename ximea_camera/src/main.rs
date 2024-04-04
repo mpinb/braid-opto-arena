@@ -39,10 +39,6 @@ fn main() -> Result<(), i32> {
         VecDeque::with_capacity(args.t_after as usize * args.fps as usize);
     let mut switch = false;
 
-    // spawn writer thread
-    let (sender, receiver) = channel::unbounded::<Packet>();
-    let writer_thread = std::thread::spawn(move || process_packets("test", receiver));
-
     // Connect to ZMQ; return error if connection fails
     log::info!("Connecting to ZMQ server at {}", args.address);
     let socket = connect_to_zmq(&args.address).unwrap();
@@ -50,7 +46,23 @@ fn main() -> Result<(), i32> {
     // Wait for ready message from socket
     log::info!("Waiting for ready message from ZMQ PUB");
     let mut msg = zmq::Message::new();
-    socket.recv(&mut msg, 0).unwrap();
+    let save_folder: String;
+
+    // First message should be the save folder
+    match socket.recv(&mut msg, 0) {
+        Ok(_) => {
+            save_folder = msg.as_str().unwrap_or_default().to_string();
+            log::info!("Got save folder: {}", &save_folder);
+        }
+        Err(e) => {
+            log::error!("Failed to receive ready message: {}", e);
+            return Err(1);
+        }
+    }
+
+    // spawn writer thread
+    let (sender, receiver) = channel::unbounded::<Packet>();
+    let writer_thread = std::thread::spawn(move || process_packets(save_folder, receiver));
 
     // create vector to keep track of latency
     // maximum size of 1000 elements
