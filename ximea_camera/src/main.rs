@@ -72,7 +72,6 @@ fn main() -> Result<(), i32> {
     let buffer = cam.start_acquisition()?;
     log::info!("Starting acquisition");
     while running.load(Ordering::SeqCst) {
-        
         // Get msg from zmq
         if let Ok(msg) = socket.recv_msg(zmq::DONTWAIT) {
             trigger = serde_json::from_str(msg.as_str().unwrap()).unwrap();
@@ -83,7 +82,7 @@ fn main() -> Result<(), i32> {
 
         // Get frame from camera
         let frame = buffer.next_image::<u8>(None)?;
-        
+
         // Put frame data to struct
         let image_data = Arc::new(ImageData {
             width: frame.width(),

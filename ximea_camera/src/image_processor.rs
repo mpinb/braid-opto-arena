@@ -1,19 +1,22 @@
 use crate::KalmanEstimateRow;
 
-use super::structs::{Packet, ImageData};
+use super::structs::{ImageData, Packet};
 use crossbeam::channel::Receiver;
 use rayon::prelude::*;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use std::fs::File;
-use std::io::{Write, BufWriter};
+use std::io::Write;
 
-fn save_images_to_disk(images: &Vec<Arc<ImageData>>, save_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+use std::fs::OpenOptions;
+
+fn save_images_to_disk(
+    images: &Vec<Arc<ImageData>>,
+    save_path: &PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
     // loop over images and save to disk
     images.into_par_iter().for_each(|image| {
-
         // set the filename to save the image to (based on the acq_nframe field of the image)
         let filename = save_path.join(format!("{}.tiff", image.acq_nframe));
 
@@ -29,20 +32,30 @@ fn save_images_to_disk(images: &Vec<Arc<ImageData>>, save_path: &PathBuf) -> Res
     Ok(())
 }
 
-fn save_video_metadata(images: &Vec<Arc<ImageData>>, save_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+fn save_video_metadata(
+    images: &Vec<Arc<ImageData>>,
+    save_path: &PathBuf,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Open a file in write mode to save CSV data
-    let file = File::create(save_path.join("metadata.csv")).unwrap();
-    let mut writer = BufWriter::new(file);
+    //let file = File::create(save_path.join("metadata.csv")).unwrap();
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .append(true)
+        .open(save_path.join("metadata.csv"))
+        .unwrap();
 
-    // Write CSV header
-    writer.write_all(b"width,height,nframe,acq_nframe,timestamp_raw\n").unwrap();
+    writeln!(file, "width,height,nframe,acq_nframe,timestamp_raw").unwrap();
 
     // loop over data
     for (_index, image) in images.iter().enumerate() {
         // Format other data as a line in a CSV file
-        let line = format!("{},{},{},{},{}\n", image.width, image.height, image.nframe, image.acq_nframe, image.timestamp_raw);
+        let line = format!(
+            "{},{},{},{},{}\n",
+            image.width, image.height, image.nframe, image.acq_nframe, image.timestamp_raw
+        );
         // Write the line to the file
-        writer.write_all(line.as_bytes()).unwrap();
+        writeln!(file, "{}", line).unwrap();
     }
 
     Ok(())
@@ -51,7 +64,6 @@ pub fn process_packets(
     save_folder: String,
     receiver: Receiver<(Packet, KalmanEstimateRow)>,
 ) -> Result<(), std::io::Error> {
-
     // create the save folder if it doesn't exist
     let save_path = Path::new(&save_folder);
     if !save_path.exists() {
@@ -60,10 +72,8 @@ pub fn process_packets(
 
     // loop over packets and save images to disk
     while let Ok((packet, row)) = receiver.recv() {
-
         // match the packet type
         match packet {
-
             // if its an images packet, save the images to disk
             Packet::Images(images) => {
                 // create new folder with the format row.frame, row.obj_id at save_path
