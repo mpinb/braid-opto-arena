@@ -64,6 +64,30 @@ pub struct KalmanEstimateRow {
     pub P55: f64,
 }
 
+impl Default for KalmanEstimateRow {
+    fn default() -> Self {
+        Self {
+            obj_id: 0,
+            frame: 0,
+            timestamp: 0.0,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            xvel: 0.0,
+            yvel: 0.0,
+            zvel: 0.0,
+            P00: 0.0,
+            P01: 0.0,
+            P02: 0.0,
+            P11: 0.0,
+            P12: 0.0,
+            P22: 0.0,
+            P33: 0.0,
+            P44: 0.0,
+            P55: 0.0,
+        }
+    }
+}
 // Adjusted for the enum
 pub enum Packet {
     Images(Vec<Arc<ImageData>>),

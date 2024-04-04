@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use xiapi;
+
 mod structs;
 use structs::*;
 
@@ -61,33 +62,29 @@ fn main() -> Result<(), i32> {
     }
 
     // spawn writer thread
-    let (sender, receiver) = channel::unbounded::<Packet>();
+    let (sender, receiver) = channel::unbounded::<(Packet, KalmanEstimateRow)>();
     let writer_thread = std::thread::spawn(move || process_packets(save_folder, receiver));
 
-    // create vector to keep track of latency
-    // maximum size of 1000 elements
-    // let mut latency: Vec<f64> = Vec::with_capacity(1000);
+    // setup trigger
+    let mut trigger: KalmanEstimateRow;
 
     // create image buffer
     let buffer = cam.start_acquisition()?;
-    println!("Starting acquisition");
+    log::info!("Starting acquisition");
     while running.load(Ordering::SeqCst) {
+        
+        // Get msg from zmq
         if let Ok(msg) = socket.recv_msg(zmq::DONTWAIT) {
-            // let trigger: KalmanEstimateRow = serde_json::from_str(msg.as_str().unwrap()).unwrap();
-            // let send_timestamp = trigger.timestamp;
-            // let recv_timestamp = time() as f64;
-            // log::debug!(
-            //     "Send time = {}, Recv time = {}",
-            //     send_timestamp,
-            //     recv_timestamp
-            // );
-            // log::debug!("Latency: {}", recv_timestamp - send_timestamp);
-            // latency.push(recv_timestamp - send_timestamp);
+            trigger = serde_json::from_str(msg.as_str().unwrap()).unwrap();
             switch = true;
+        } else {
+            trigger = KalmanEstimateRow::default();
         }
 
+        // Get frame from camera
         let frame = buffer.next_image::<u8>(None)?;
-
+        
+        // Put frame data to struct
         let image_data = Arc::new(ImageData {
             width: frame.width(),
             height: frame.height(),
@@ -97,6 +94,7 @@ fn main() -> Result<(), i32> {
             data: ImageBuffer::<Luma<u8>, Vec<u8>>::from(frame),
         });
 
+        // Add frame to appropriate buffer
         if !switch {
             if pre_buffer.len() == pre_buffer.capacity() {
                 pre_buffer.pop_front();
@@ -106,7 +104,8 @@ fn main() -> Result<(), i32> {
             post_buffer.push_back(image_data);
         };
 
-        if post_buffer.len() == post_buffer.capacity() {
+        // If buffer is full, send to writer thread
+        if post_buffer.len() == post_buffer.capacity() && switch {
             println!("Sending buffer to writer thread");
             // get current time
             let start = time();
@@ -123,7 +122,7 @@ fn main() -> Result<(), i32> {
             post_buffer.clear();
 
             // Send combined_buffer to writer thread.
-            match sender.send(Packet::Images(combined_buffer)) {
+            match sender.send((Packet::Images(combined_buffer), trigger)) {
                 Ok(_) => log::info!("Buffer sent to writer thread."),
                 Err(e) => log::error!("Failed to send buffer: {}", e),
             }
@@ -139,15 +138,11 @@ fn main() -> Result<(), i32> {
         };
     }
 
-    // println!(
-    //     "Average latency in seconds: {}",
-    //     latency.iter().sum::<f64>() / latency.len() as f64
-    // );
-
+    // stop acquisition
     buffer.stop_acquisition()?;
 
     // send kill packet
-    match sender.send(Packet::Kill) {
+    match sender.send((Packet::Kill, KalmanEstimateRow::default())) {
         Ok(_) => log::info!("Kill signal sent to writer thread."),
         Err(e) => log::error!("Failed to send kill signal: {}", e),
     }
