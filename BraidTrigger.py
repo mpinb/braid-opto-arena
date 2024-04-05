@@ -20,7 +20,8 @@ from helper_functions import (
     parse_chunk,
     zmq_pubsub,
 )
-from utils.rspowersupply import PowerSupply
+import json
+from rspowersupply import PowerSupply
 from visual_stimuli import start_visual_stimuli
 
 PSU_VOLTAGE = 30
@@ -54,12 +55,16 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         )
     # create PUB socket
     logging.info("Creating PUB socket.")
-    publisher = zmq_pubsub(addr="127.0.0.1", port=5555, topic="trigger")
-    time.sleep(5)  # give socket a few seconds to initialize
+    context = zmq.Context()
+    publisher = context.socket(zmq.PUB)
+    publisher.bind("tcp://127.0.0.1:5555")
 
     # Set power supply voltage (for backlighting)
-    ps = PowerSupply(port="/dev/ttyACM1")
-    ps.set_voltage(PSU_VOLTAGE)
+    try:
+        ps = PowerSupply(port="/dev/ttyACM1")
+        ps.set_voltage(PSU_VOLTAGE)
+    except RuntimeError:
+        logging.debug("Backlight power supply not connected.")
 
     # Create mp variables
     kill_event = mp.Event()
@@ -73,7 +78,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         )
 
     # Connect to flydra2 proxy
-    flydra2_url = "http://0.0.0.0:8397/"
+    flydra2_url = "http://10.40.80.6:8397/"
     session = requests.Session()
     r = session.get(flydra2_url)
     assert r.status_code == requests.codes.ok
@@ -81,6 +86,12 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Connect to cameras
     if args.highspeed:
+        base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
+        output_folder = f"/media/buchsbaum/Data/Videos/{base_folder}/"
+        params["video_save_folder"] = output_folder
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
+
         if params["highspeed"]["type"] == "ximea":
             monitor_socket = publisher.get_monitor_socket(
                 zmq.EVENT_ACCEPTED | zmq.EVENT_DISCONNECTED
@@ -88,31 +99,22 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # open rust ximea camera process
             ximea_camera_process = subprocess.Popen(
-                "./ximea_camera/release/ximea_camera"
+                "ximea_camera/target/release/ximea_camera"
             )
 
             # wait for the camera process to connect
-            msg = monitor_socket.recv_multipart()
-            event = zmon.event_from_monitor(monitor_socket, msg)
-            event_type = event["type"]
+            evt_mon = zmon.recv_monitor_message(monitor_socket)
 
             # send the folder to the camera process
-            if event_type == zmq.EVENT_ACCEPTED:
-                publisher.send(folder.encode("utf-8"))
-            elif event_type == zmq.EVENT_DISCONNECTED:
-                logging.error("Camera process disconnected.")
-                raise ValueError("Camera process disconnected.")
+            if evt_mon["event"] == zmq.EVENT_ACCEPTED:
+                logging.info("Camera process connected.")
+                publisher.send(output_folder.encode("utf-8"))
+
             else:
                 logging.error("Camera process not connected.")
                 raise ValueError("Camera process not connected.")
 
         elif params["highspeed"]["type"] == "basler":
-            base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
-            output_folder = f"/mnt/data/Videos/{base_folder}/"
-            params["video_save_folder"] = output_folder
-            if not os.path.exists(output_folder):
-                os.makedirs(output_folder)
-
             # Connect to camera trigger
             camera_trigger_board = create_arduino_device(
                 params["arduino_devices"]["camera_trigger"]
@@ -208,22 +210,24 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall
                     continue
-
                 # Check for "update" message
-                if "Update" in msg_dict:
+                elif "Update" in msg_dict:
                     curr_obj_id = msg_dict["Update"]["obj_id"]
                     if curr_obj_id not in obj_ids:
                         logging.debug(f"New object detected: {curr_obj_id}")
                         obj_ids.append(curr_obj_id)
                         obj_birth_times[curr_obj_id] = tcall
                         continue
-
                 # Check for "death" message
-                if "Death" in msg_dict:
+                elif "Death" in msg_dict:
                     curr_obj_id = msg_dict["Death"]
                     if curr_obj_id in obj_ids:
                         logging.debug(f"Object {curr_obj_id} died")
                         obj_ids.remove(curr_obj_id)
+                    continue
+
+                else:
+                    logging.debug("No relevant message.")
                     continue
 
                 # if the trajectory is too short, skip
@@ -279,8 +283,16 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     logging.debug("Triggering cameras.")
                     camera_trigger_time = time.time()
                     if args.highspeed:
-                        for _, cam_pipe in highspeed_cameras_pipes.items():
-                            cam_pipe["send"].send(pos)
+                        if params["highspeed"]["type"] == "basler":
+                            for _, cam_pipe in highspeed_cameras_pipes.items():
+                                cam_pipe["send"].send(pos)
+
+                        elif params["highspeed"]["type"] == "ximea":
+                            pos["timestamp"] = tcall
+                            publisher.send(json.dumps(pos).encode("utf-8"))
+                        else:
+                            pass
+
                     logging.debug(
                         f"Camera trigger time: {time.time()-camera_trigger_time:.5f}"
                     )
@@ -306,6 +318,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                         logging.debug(
                             f"CSV writer time: {time.time()-csv_writer_time:.5f}"
                         )
+
     except KeyboardInterrupt:
         logging.info("Keyboard interrupt received.")
         kill_event.set()
@@ -365,7 +378,7 @@ if __name__ == "__main__":
     parser.add_argument("--static", action="store_true", default=False)
     parser.add_argument("--looming", action="store_true", default=False)
     parser.add_argument("--grating", action="store_true", default=False)
-    parser.add_argument("--highspeed", action="store_true", default=False)
+    parser.add_argument("--highspeed", action="store_true", default=True)
     parser.add_argument("--debug", action="store_true", default=False)
     args = parser.parse_args()
 
@@ -375,6 +388,6 @@ if __name__ == "__main__":
     # Start main function
     main(
         params_file="./data/params.toml",
-        root_folder="/mnt/data/Experiments/",
+        root_folder="/media/buchsbaum/Data/Experiments/",
         args=args,
     )

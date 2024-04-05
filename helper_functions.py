@@ -17,7 +17,6 @@ def zmq_pubsub(
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
     socket.bind(f"tcp://{addr}:{port}")
-    socket.setsockopt(zmq.LINGER, 0)
     return socket
 
 

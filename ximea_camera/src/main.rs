@@ -53,7 +53,7 @@ fn main() -> Result<(), i32> {
     match socket.recv(&mut msg, 0) {
         Ok(_) => {
             save_folder = msg.as_str().unwrap_or_default().to_string();
-            log::info!("Got save folder: {}", &save_folder);
+            println!("Got save folder: {}", &save_folder);
         }
         Err(e) => {
             log::error!("Failed to receive ready message: {}", e);
@@ -112,7 +112,7 @@ fn main() -> Result<(), i32> {
             Err(e) => {
                 if e == zmq::Error::EAGAIN {
                     // No message received, this branch allows for other processing if necessary
-                    log::error!("No message received")
+                    log::debug!("No message received")
                 } else {
                     // Handle other errors
                     log::error!("Error receiving ZMQ message: {}", e);
