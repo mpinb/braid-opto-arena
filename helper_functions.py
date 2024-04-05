@@ -6,9 +6,19 @@ import os
 import pathlib
 import shutil
 import time
-
+import zmq
 import serial
 from tqdm.contrib.concurrent import thread_map
+
+
+def zmq_pubsub(
+    addr: str = "127.0.0.1", port: str = "5555", topic: str = ""
+) -> zmq.Socket:
+    context = zmq.Context()
+    socket = context.socket(zmq.PUB)
+    socket.bind(f"tcp://{addr}:{port}")
+    socket.setsockopt(zmq.LINGER, 0)
+    return socket
 
 
 def copy_files_with_progress(src_folder, dest_folder):

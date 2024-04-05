@@ -3,64 +3,63 @@ opto_trigger = '/dev/opto_trigger'
 camera_trigger = '/dev/camera_trigger'
 
 [trigger_params]
-min_trajectory_time = 1.0   # minimum trajectory time (in seconds)
-min_trigger_interval = 5     # minimum time between activations (in seconds)
-min_radius = 0.025      # minimum radius for activation (in meters)
-zmin = 0.15              # minimum z for activation (in meters)
-zmax = 0.25             # maximum z for activation (in meters)
-center_x = 0       # arena center x in meters (in meters)
-center_y = 0       # arena center y in meters (in meters)
+min_trajectory_time = 1.0 # minimum trajectory time (in seconds)
+min_trigger_interval = 5  # minimum time between activations (in seconds)
+min_radius = 0.025        # minimum radius for activation (in meters)
+zmin = 0.15               # minimum z for activation (in meters)
+zmax = 0.25               # maximum z for activation (in meters)
+center_x = 0              # arena center x in meters (in meters)
+center_y = 0              # arena center y in meters (in meters)
 
 [opto_params]
 #active = false
-duration = 300      # in milliseconds
-intensity = 255       # in 0-255 range
-frequency = 0          # in Hz
-sham_perc = 0.1        # percentage of sham trials
+duration = 300  # in milliseconds
+intensity = 255 # in 0-255 range
+frequency = 0   # in Hz
+sham_perc = 0.1 # percentage of sham trials
 
 [stim_params]
-    [stim_params.window]
-    size = [640, 128]
-    pos = [0, 0]
-    fullscr = false
-    screen = 1
-    color = [1, 1, 1]
-    units = "pix"
-    
-    [stim_params.static]
-    #active = true
-    image = "./data/static.jpg"
+[stim_params.window]
+size = [640, 128]
+pos = [0, 0]
+fullscr = false
+screen = 1
+color = [1, 1, 1]
+units = "pix"
 
-    [stim_params.grating]
-    #active = false
-    frequency = 0
-    orientation = 0
-    direction = 0
-    color = "black"
+[stim_params.static]
+#active = true
+image = "./data/static.jpg"
 
-    [stim_params.looming]
-    #active = true
-    stim_type = "linear"
-    position = "random"
-    max_radius = "random"
-    duration = "random"
-    color = "black"
+[stim_params.grating]
+#active = false
+frequency = 0
+orientation = 0
+direction = 0
+color = "black"
+
+[stim_params.looming]
+#active = true
+stim_type = "linear"
+position = "random"
+max_radius = "random"
+duration = "random"
+color = "black"
 
 [highspeed]
-    #active = true
+type = "ximea"
 
-    [highspeed.cameras]
-    camera1 = "23047980"
-    camera2 = "23096298"
-    camera3 = "23088879"
-    camera4 = "23088882"
+[highspeed.cameras]
+camera1 = "23047980"
+camera2 = "23096298"
+camera3 = "23088879"
+camera4 = "23088882"
 
-    [highspeed.parameters]
-    pre_trigger_mode = true
-    time_before = 1
-    time_after = 2
-    fps = 500
-    ExposureTime = 1900
-    #Gain = 3
-    SensorReadoutMode = "Fast"
-
+[highspeed.parameters]
+pre_trigger_mode = true
+time_before = 1
+time_after = 2
+fps = 500
+ExposureTime = 1900
+#Gain = 3
+SensorReadoutMode = "Fast"

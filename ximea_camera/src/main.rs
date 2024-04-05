@@ -66,18 +66,58 @@ fn main() -> Result<(), i32> {
     let writer_thread = std::thread::spawn(move || process_packets(save_folder, receiver));
 
     // setup trigger
-    let mut trigger: KalmanEstimateRow;
+    let mut trigger: KalmanEstimateRow = KalmanEstimateRow::default();
 
     // create image buffer
     let buffer = cam.start_acquisition()?;
+
+    // start acquisition
     log::info!("Starting acquisition");
     while running.load(Ordering::SeqCst) {
         // Get msg from zmq
-        if let Ok(msg) = socket.recv_msg(zmq::DONTWAIT) {
-            trigger = serde_json::from_str(msg.as_str().unwrap()).unwrap();
-            switch = true;
-        } else {
-            trigger = KalmanEstimateRow::default();
+        match socket.recv_msg(zmq::DONTWAIT) {
+            // If a message is received, attempt to process it
+            Ok(msg) => {
+                // Check if the message is valid UTF-8
+                if let Some(text) = msg.as_str() {
+                    // Check if the message is the kill command
+                    if text == "kill" {
+                        log::info!("Received kill command. Breaking loop.");
+                        break;
+
+                    // If the message is not the kill command, attempt to deserialize it
+                    } else {
+                        // Attempt to deserialize the JSON into your struct
+                        match serde_json::from_str::<KalmanEstimateRow>(text) {
+                            // If deserialization is successful, print a message and set the switch
+                            Ok(deserialized_trigger) => {
+                                println!("Received JSON struct.");
+                                // Save the successfully deserialized JSON to `trigger`
+                                trigger = deserialized_trigger;
+                                // Assuming 'switch' is part of your flow to indicate a new trigger is ready
+                                switch = true;
+                            }
+                            // If deserialization fails, print an error message
+                            Err(_) => {
+                                println!("Received an unrecognized message: {}", text);
+                            }
+                        }
+                    }
+                // If the message is not valid UTF-8, print an error message
+                } else {
+                    println!("Received a message that's not valid UTF-8, ignoring.");
+                }
+            }
+            // If no message is received, handle the error
+            Err(e) => {
+                if e == zmq::Error::EAGAIN {
+                    // No message received, this branch allows for other processing if necessary
+                    log::error!("No message received")
+                } else {
+                    // Handle other errors
+                    log::error!("Error receiving ZMQ message: {}", e);
+                }
+            }
         }
 
         // Get frame from camera
@@ -121,7 +161,7 @@ fn main() -> Result<(), i32> {
             post_buffer.clear();
 
             // Send combined_buffer to writer thread.
-            match sender.send((Packet::Images(combined_buffer), trigger)) {
+            match sender.send((Packet::Images(combined_buffer), trigger.clone())) {
                 Ok(_) => log::info!("Buffer sent to writer thread."),
                 Err(e) => log::error!("Failed to send buffer: {}", e),
             }

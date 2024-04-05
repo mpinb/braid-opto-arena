@@ -5,10 +5,12 @@ import os
 import random
 import shutil
 import time
-
+import zmq
+import zmq.utils.monitor as zmon
 import git
 import requests
 import tomllib
+import subprocess
 
 from basler_camera import start_highspeed_cameras
 from helper_functions import (
@@ -16,6 +18,7 @@ from helper_functions import (
     create_arduino_device,
     create_csv_writer,
     parse_chunk,
+    zmq_pubsub,
 )
 from utils.rspowersupply import PowerSupply
 from visual_stimuli import start_visual_stimuli
@@ -49,6 +52,10 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         f.write(
             f"commit = {git.Repo(search_parent_directories=True).head.commit.hexsha}"
         )
+    # create PUB socket
+    logging.info("Creating PUB socket.")
+    publisher = zmq_pubsub(addr="127.0.0.1", port=5555, topic="trigger")
+    time.sleep(5)  # give socket a few seconds to initialize
 
     # Set power supply voltage (for backlighting)
     ps = PowerSupply(port="/dev/ttyACM1")
@@ -74,33 +81,62 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Connect to cameras
     if args.highspeed:
-        base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
-        output_folder = f"/mnt/data/Videos/{base_folder}/"
-        params["video_save_folder"] = output_folder
-        if not os.path.exists(output_folder):
-            os.makedirs(output_folder)
+        if params["highspeed"]["type"] == "ximea":
+            monitor_socket = publisher.get_monitor_socket(
+                zmq.EVENT_ACCEPTED | zmq.EVENT_DISCONNECTED
+            )
 
-        # Connect to camera trigger
-        camera_trigger_board = create_arduino_device(
-            params["arduino_devices"]["camera_trigger"]
-        )
-        camera_trigger_board.write(b"0")  # reset camera trigger
+            # open rust ximea camera process
+            ximea_camera_process = subprocess.Popen(
+                "./ximea_camera/release/ximea_camera"
+            )
 
-        # Start camera processes
-        (
-            highspeed_cameras,
-            highspeed_cameras_pipes,
-            camera_barrier,
-        ) = start_highspeed_cameras(params, kill_event)
+            # wait for the camera process to connect
+            msg = monitor_socket.recv_multipart()
+            event = zmon.event_from_monitor(monitor_socket, msg)
+            event_type = event["type"]
 
-        # Start cameras
-        for cam in highspeed_cameras:
-            logging.debug(f"Starting camera {cam.name}.")
-            cam.start()
-            time.sleep(2)  # Delay between starting each camera process
+            # send the folder to the camera process
+            if event_type == zmq.EVENT_ACCEPTED:
+                publisher.send(folder.encode("utf-8"))
+            elif event_type == zmq.EVENT_DISCONNECTED:
+                logging.error("Camera process disconnected.")
+                raise ValueError("Camera process disconnected.")
+            else:
+                logging.error("Camera process not connected.")
+                raise ValueError("Camera process not connected.")
 
-        camera_barrier.wait()  # Wait for all cameras to be ready
-        camera_trigger_board.write(b"500")  # Start camera trigger
+        elif params["highspeed"]["type"] == "basler":
+            base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
+            output_folder = f"/mnt/data/Videos/{base_folder}/"
+            params["video_save_folder"] = output_folder
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+
+            # Connect to camera trigger
+            camera_trigger_board = create_arduino_device(
+                params["arduino_devices"]["camera_trigger"]
+            )
+            camera_trigger_board.write(b"0")  # reset camera trigger
+
+            # Start camera processes
+            (
+                highspeed_cameras,
+                highspeed_cameras_pipes,
+                camera_barrier,
+            ) = start_highspeed_cameras(params, kill_event)
+
+            # Start cameras
+            for cam in highspeed_cameras:
+                logging.debug(f"Starting camera {cam.name}.")
+                cam.start()
+                time.sleep(2)  # Delay between starting each camera process
+
+            camera_barrier.wait()  # Wait for all cameras to be ready
+            camera_trigger_board.write(b"500")  # Start camera trigger
+        else:
+            logging.error("Highspeed camera type not recognized.")
+            raise ValueError("Highspeed camera type not recognized.")
 
     # Start (dynamic) visual stimuli
     if args.static or args.looming or args.grating:
@@ -284,9 +320,19 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         logging.debug("Closing all Arduino boards.")
         if args.opto:
             opto_trigger_board.close()
+
         if args.highspeed:
-            camera_trigger_board.write(b"0")
-            camera_trigger_board.close()
+            # close the ximea camera
+            if params["highspeed"]["type"] == "ximea":
+                publisher.send(b"kill")
+                ximea_camera_process.wait()
+
+            # or the basler cameras
+            elif params["highspeed"]["type"] == "basler":
+                camera_trigger_board.write(b"0")
+                camera_trigger_board.close()
+            else:
+                pass
 
         # Close CSV file
         logging.debug("Closing CSV file.")
