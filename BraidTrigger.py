@@ -87,7 +87,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # Connect to cameras
     if args.highspeed:
         base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
-        output_folder = f"/media/buchsbaum/Data/Videos/{base_folder}/"
+        output_folder = f"/home/buchsbaum/mnt/DATA/Videos/{base_folder}/"
         params["video_save_folder"] = output_folder
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
@@ -243,9 +243,16 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 # Get position and radius
                 pos = msg_dict["Update"]
                 radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+                # in_position = radius < min_radius and zmin <= pos["z"] <= zmax
 
                 # Check if object is in the trigger zone
-                if radius < min_radius and zmin <= pos["z"] <= zmax:
+                in_position = (
+                    zmin <= pos["z"] <= zmax
+                    and -0.05 <= pos["x"] <= 0.036
+                    and -0.027 <= pos["y"] <= 0.06
+                )
+
+                if in_position:
                     logging.info(f"Trigger {ntrig} at {radius}, {pos['z']}")
 
                     # Update last trigger time
@@ -291,6 +298,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                             pos["timestamp"] = tcall
                             publisher.send(json.dumps(pos).encode("utf-8"))
                         else:
+                            logging.debug(f"No highspeed camera type specified.")
                             pass
 
                     logging.debug(
@@ -378,7 +386,7 @@ if __name__ == "__main__":
     parser.add_argument("--static", action="store_true", default=False)
     parser.add_argument("--looming", action="store_true", default=False)
     parser.add_argument("--grating", action="store_true", default=False)
-    parser.add_argument("--highspeed", action="store_true", default=True)
+    parser.add_argument("--highspeed", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=False)
     args = parser.parse_args()
 
@@ -388,6 +396,6 @@ if __name__ == "__main__":
     # Start main function
     main(
         params_file="./data/params.toml",
-        root_folder="/media/buchsbaum/Data/Experiments/",
+        root_folder="/home/buchsbaum/mnt/DATA/Experiments/",
         args=args,
     )
