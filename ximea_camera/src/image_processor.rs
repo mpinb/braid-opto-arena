@@ -11,7 +11,7 @@ use std::io::Write;
 
 use std::fs::OpenOptions;
 
-fn save_images_to_disk(
+pub fn save_images_to_disk(
     images: &Vec<Arc<ImageData>>,
     save_path: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {

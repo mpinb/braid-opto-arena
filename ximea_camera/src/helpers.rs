@@ -1,5 +1,6 @@
 use super::structs::Args;
 use ctrlc;
+use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};

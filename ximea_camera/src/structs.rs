@@ -9,10 +9,10 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub serial: u32,
 
-    #[arg(long, default_value_t = 300.0)]
+    #[arg(long, default_value_t = 250.0)]
     pub fps: f32,
 
-    #[arg(long, default_value_t = 1000.0)]
+    #[arg(long, default_value_t = 500.0)]
     pub exposure: f32,
 
     #[arg(long, default_value_t = 2496)]
@@ -21,11 +21,11 @@ pub struct Args {
     #[arg(long, default_value_t = 2496)]
     pub height: u32,
 
-    #[arg(long, default_value_t = 1)]
-    pub t_before: u8,
+    #[arg(long, default_value_t = 0.5)]
+    pub t_before: f32,
 
-    #[arg(long, default_value_t = 2)]
-    pub t_after: u8,
+    #[arg(long, default_value_t = 1.0)]
+    pub t_after: f32,
 
     #[arg(long, default_value_t = String::from("127.0.0.1:5555"))]
     pub address: String,

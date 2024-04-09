@@ -3,10 +3,10 @@ use crossbeam::channel;
 use image::{ImageBuffer, Luma};
 use log;
 use std::collections::VecDeque;
+use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use xiapi;
-
 mod structs;
 use structs::*;
 
@@ -30,14 +30,48 @@ fn main() -> Result<(), i32> {
     // Open the camera
     let mut cam = xiapi::open_device(Some(0))?;
 
+    unsafe {
+        xiapi::xiSetParamInt(*cam, xiapi::XI_PRM_LENS_MODE.as_ptr() as *const c_char, 1);
+
+        let mut lens_mode = 0;
+        xiapi::xiGetParamInt(
+            *cam,
+            xiapi::XI_PRM_LENS_MODE.as_ptr() as *const c_char,
+            &mut lens_mode as *mut i32,
+        );
+
+        xiapi::xiSetParamFloat(
+            *cam,
+            xiapi::XI_PRM_LENS_APERTURE_VALUE.as_ptr() as *const c_char,
+            5.2,
+        );
+
+        let mut lens_aperture_value: f32 = 0.0;
+        xiapi::xiGetParamFloat(
+            *cam,
+            xiapi::XI_PRM_LENS_APERTURE_VALUE.as_ptr() as *const c_char,
+            &mut lens_aperture_value as *mut f32,
+        );
+
+        log::debug!("Lens mode: {}", lens_mode);
+        log::debug!("Lens aperture value: {}", lens_aperture_value);
+    }
+
     // Set camera parameters
     set_camera_parameters(&mut cam, &args)?;
 
+    // calculate frames before and after
+    let n_before = (args.t_before * args.fps) as usize;
+    let n_after = (args.t_after * args.fps) as usize;
+    log::debug!(
+        "Recording {} frames before and {} after trigger",
+        n_before,
+        n_after
+    );
+
     // setup buffers
-    let mut pre_buffer: VecDeque<Arc<ImageData>> =
-        VecDeque::with_capacity(args.t_before as usize * args.fps as usize);
-    let mut post_buffer: VecDeque<Arc<ImageData>> =
-        VecDeque::with_capacity(args.t_after as usize * args.fps as usize);
+    let mut pre_buffer: VecDeque<Arc<ImageData>> = VecDeque::with_capacity(n_before);
+    let mut post_buffer: VecDeque<Arc<ImageData>> = VecDeque::with_capacity(n_after);
     let mut switch = false;
 
     // Connect to ZMQ; return error if connection fails

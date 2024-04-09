@@ -61,7 +61,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     try:
-        ps = PowerSupply(port="/dev/ttyACM1")
+        ps = PowerSupply(port="/dev/powersupply")
         ps.set_voltage(PSU_VOLTAGE)
     except RuntimeError:
         logging.debug("Backlight power supply not connected.")
