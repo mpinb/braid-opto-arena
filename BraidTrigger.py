@@ -18,7 +18,6 @@ from helper_functions import (
     create_arduino_device,
     create_csv_writer,
     parse_chunk,
-    zmq_pubsub,
 )
 import json
 from rspowersupply import PowerSupply
@@ -210,6 +209,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall
                     continue
+
                 # Check for "update" message
                 elif "Update" in msg_dict:
                     curr_obj_id = msg_dict["Update"]["obj_id"]
@@ -218,6 +218,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                         obj_ids.append(curr_obj_id)
                         obj_birth_times[curr_obj_id] = tcall
                         continue
+
                 # Check for "death" message
                 elif "Death" in msg_dict:
                     curr_obj_id = msg_dict["Death"]
@@ -298,7 +299,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                             pos["timestamp"] = tcall
                             publisher.send(json.dumps(pos).encode("utf-8"))
                         else:
-                            logging.debug(f"No highspeed camera type specified.")
+                            logging.debug("No highspeed camera type specified.")
                             pass
 
                     logging.debug(

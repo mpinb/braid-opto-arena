@@ -2,6 +2,7 @@ use crate::KalmanEstimateRow;
 
 use super::structs::{ImageData, Packet};
 use crossbeam::channel::Receiver;
+use image::ImageFormat;
 use rayon::prelude::*;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
@@ -11,7 +12,7 @@ use std::io::Write;
 
 use std::fs::OpenOptions;
 
-pub fn save_images_to_disk(
+fn save_images_to_disk(
     images: &Vec<Arc<ImageData>>,
     save_path: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -21,7 +22,7 @@ pub fn save_images_to_disk(
         let filename = save_path.join(format!("{}.tiff", image.acq_nframe));
 
         // save the image to disk
-        match image.data.save(&filename) {
+        match image.data.save_with_format(&filename, ImageFormat::Tiff) {
             // print a debug message if the image was saved successfully
             Ok(_) => log::debug!("Saved {}", filename.display()),
             // print an error message if the image failed to save
@@ -77,7 +78,8 @@ pub fn process_packets(
             // if its an images packet, save the images to disk
             Packet::Images(images) => {
                 // create new folder with the format row.frame, row.obj_id at save_path
-                let save_path = save_path.join(format!("{}_{}", row.frame, row.obj_id));
+                let save_path =
+                    save_path.join(format!("obj_id_{}_frame_{}", row.obj_id, row.frame));
                 if !save_path.exists() {
                     create_dir_all(&save_path)?;
                 }

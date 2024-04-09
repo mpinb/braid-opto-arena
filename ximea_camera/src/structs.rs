@@ -12,13 +12,13 @@ pub struct Args {
     #[arg(long, default_value_t = 250.0)]
     pub fps: f32,
 
-    #[arg(long, default_value_t = 500.0)]
+    #[arg(long, default_value_t = 4000.0)]
     pub exposure: f32,
 
-    #[arg(long, default_value_t = 2496)]
+    #[arg(long, default_value_t = 3424)]
     pub width: u32,
 
-    #[arg(long, default_value_t = 2496)]
+    #[arg(long, default_value_t = 3424)]
     pub height: u32,
 
     #[arg(long, default_value_t = 0.5)]
@@ -43,6 +43,7 @@ pub struct ImageData {
 
 #[allow(non_snake_case)]
 #[derive(Serialize, Deserialize, Debug, Default, Copy, Clone)]
+#[serde(default)]
 pub struct KalmanEstimateRow {
     pub obj_id: u32,
     pub frame: u64,

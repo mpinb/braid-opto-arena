@@ -6,7 +6,7 @@ authors = ["Elhanan Buchsbaum"]
 
 [dependencies]
 xiapi-sys = { git = "https://github.com/Ximea-GmbH/xiapi-sys.git" }
-xiapi = { git = "https://github.com/Ximea-GmbH/xiapi.git" }
+xiapi = { git = "https://github.com/elhananby/xiapi.git" }
 tokio = { version = "1.37.0", features = ["full"] }
 crossbeam = "0.8"
 image = "0.24.8"
