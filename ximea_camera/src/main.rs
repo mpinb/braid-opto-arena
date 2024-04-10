@@ -78,7 +78,7 @@ fn main() -> Result<(), i32> {
 
     // create image buffer
     let buffer = cam.start_acquisition()?;
-    let mut image_data: Arc<ImageData> = Arc::new(ImageData::default());
+    //let mut image_data: Arc<ImageData> = Arc::new(ImageData::default());
 
     // start acquisition
     log::info!("Starting acquisition");
@@ -93,20 +93,17 @@ fn main() -> Result<(), i32> {
         let parsed_message = parse_message(msg.as_str().unwrap());
 
         // check if got "kill" in parsed_message
-        match &parsed_message {
-            MessageType::Text(data) => {
-                if data == "kill" {
-                    break;
-                }
+        if let MessageType::Text(data) = &parsed_message {
+            if data == "kill" {
+                break;
             }
-            _ => {}
         }
 
         // Get frame from camera
         let frame = buffer.next_image::<u8>(None)?;
 
         // Put frame data to struct
-        image_data = Arc::new(ImageData {
+        let image_data = Arc::new(ImageData {
             width: frame.width(),
             height: frame.height(),
             nframe: frame.nframe(),

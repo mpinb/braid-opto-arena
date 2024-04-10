@@ -1,6 +1,6 @@
 // External crate imports
-use ctrlc;
-use xiapi;
+
+
 
 // Standard library imports
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -64,14 +64,14 @@ fn get_offset_for_resolution(
     let mut offset_x = (max_resolution.0 - width) / 2;
     let mut offset_y = (max_resolution.1 - height) / 2;
 
-    offset_x = ((offset_x as f32 / 32.0).ceil() * 32 as f32) as u32;
-    offset_y = ((offset_y as f32 / 32.0).ceil() * 32 as f32) as u32;
+    offset_x = ((offset_x as f32 / 32.0).ceil() * 32_f32) as u32;
+    offset_y = ((offset_y as f32 / 32.0).ceil() * 32_f32) as u32;
     log::debug!("Offset x = {}, Offset y = {}", offset_x, offset_y);
     Ok((offset_x, offset_y))
 }
 
 fn adjust_exposure(exposure: f32, fps: &f32) -> f32 {
-    let max_exposure_for_fps = 1_000_000 as f32 / fps;
+    let max_exposure_for_fps = 1_000_000_f32 / fps;
 
     // if the exposure is greater than the max exposure for the fps
     // return the max exposure (-1.0 to make sure it's short enough) possible for the fps

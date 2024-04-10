@@ -21,7 +21,7 @@ use crate::{
 
 fn save_images_to_disk(
     images: &VecDeque<Arc<ImageData>>,
-    save_path: &PathBuf,
+    save_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Saving images to disk");
 
@@ -44,14 +44,13 @@ fn save_images_to_disk(
 
 fn save_video_metadata(
     images: &VecDeque<Arc<ImageData>>,
-    save_path: &PathBuf,
+    save_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Saving metadata to disk");
     // Open a file in write mode to save CSV data
     //let file = File::create(save_path.join("metadata.csv")).unwrap();
     let mut file = OpenOptions::new()
         .create_new(true)
-        .write(true)
         .append(true)
         .open(save_path.join("metadata.csv"))
         .unwrap();
@@ -59,7 +58,7 @@ fn save_video_metadata(
     writeln!(file, "nframe,acq_nframe,timestamp_raw,exposure_time").unwrap();
 
     // loop over data
-    for (_index, image) in images.iter().enumerate() {
+    for image in images.iter() {
         // Format other data as a line in a CSV file
         let line = format!(
             "{},{},{},{}",
@@ -83,7 +82,7 @@ pub fn frame_handler(
     // create folder to save files, if doesn't exist
     let save_path = Path::new(&save_folder);
     if !save_path.exists() {
-        create_dir_all(&save_path).unwrap();
+        create_dir_all(save_path).unwrap();
     }
 
     // define frame buffer
