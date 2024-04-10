@@ -66,6 +66,12 @@ pub struct KalmanEstimateRow {
 }
 
 // Adjusted for the enum
+pub enum MessageType {
+    Text(String),
+    JsonData(KalmanEstimateRow),
+    Empty,
+}
+
 pub enum Packet {
     Images(Vec<Arc<ImageData>>),
     Kill,

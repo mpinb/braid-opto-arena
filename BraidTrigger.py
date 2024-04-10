@@ -248,7 +248,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
                 # Check if object is in the trigger zone
                 in_position = (
-                    zmin <= pos["z"] <= zmax
+                    0.1 <= pos["z"] <= 0.2
                     and -0.05 <= pos["x"] <= 0.036
                     and -0.027 <= pos["y"] <= 0.06
                 )

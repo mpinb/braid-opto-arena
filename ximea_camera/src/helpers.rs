@@ -1,4 +1,6 @@
-use super::structs::Args;
+use crate::KalmanEstimateRow;
+
+use super::structs::{Args, MessageType};
 use ctrlc;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -43,6 +45,20 @@ fn adjust_exposure(exposure: f32, fps: &f32) -> f32 {
         exposure
     }
 }
+
+pub fn parse_message(message: &str) -> MessageType {
+    if message.trim().is_empty() {
+        MessageType::Empty
+    } else {
+        match serde_json::from_str::<KalmanEstimateRow>(message) {
+            Ok(data) => MessageType::JsonData(data),
+            Err(_) => MessageType::Text(message.to_string()),
+        }
+    }
+}
+
+
+
 pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(), i32> {
     // lens mode
     cam.set_lens_mode(xiapi::XI_SWITCH::XI_ON)?;

@@ -5,6 +5,7 @@ import ffmpeg
 from tqdm.contrib.concurrent import process_map
 import shutil
 
+
 def list_subfolders(folder_path):
     # List to hold all subfolders
     subfolders = []
@@ -21,17 +22,18 @@ def list_subfolders(folder_path):
 def tiff2vid(folder: str):
     try:
         vid_name = os.path.join(folder + ".mp4")
-#        print(f"Saving {vid_name}")
+        #        print(f"Saving {vid_name}")
         # create video
         (
             ffmpeg.input(
                 os.path.join(folder, "*.tiff"),
                 pattern_type="glob",
                 framerate=25,
-                loglevel="panic",
             )
             .output(
-                vid_name, pix_fmt="yuv420p", vcodec="libx264", preset="ultrafast", crf=17
+                vid_name,
+                vcodec="hevc_nvenc",
+                preset="fast",
             )
             .run()
         )
@@ -39,7 +41,7 @@ def tiff2vid(folder: str):
         print(f"Error converting {folder} to video")
 
     # delete the folder `folder`
-    shutil.rmtree(folder)
+    # shutil.rmtree(folder)
 
 
 def main(root_folder: str):
@@ -47,7 +49,7 @@ def main(root_folder: str):
     folders = list_subfolders(root_folder)
     if len(folders) == 0:
         folders = [root_folder]
-    
+
     # loop over folders
     # from tqdm import tqdm
     # for folder in tqdm(folders):
@@ -55,8 +57,9 @@ def main(root_folder: str):
 
     process_map(tiff2vid, folders, max_workers=8)
 
+
 if __name__ == "__main__":
     # fire.Fire(main)
     main(
-       root_folder="/home/buchsbaum/mnt/DATA/Videos/20240408_160254/",
+        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240409_165504/",
     )

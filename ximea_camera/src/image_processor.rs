@@ -1,9 +1,10 @@
 use crate::KalmanEstimateRow;
 
-use super::structs::{ImageData, Packet};
+use super::structs::{ImageData, MessageType, Packet};
 use crossbeam::channel::Receiver;
 use image::ImageFormat;
 use rayon::prelude::*;
+use std::collections::VecDeque;
 use std::fs::create_dir_all;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -100,4 +101,57 @@ pub fn process_packets(
     }
 
     Ok(())
+}
+
+
+pub fn frame_handler(receiver: Receiver<(Arc<ImageData>, MessageType)>, n_before: usize, n_after: usize) {
+    
+    // start frames writing thread
+    
+
+    // define control variables
+    let mut frame_buffer: VecDeque<Arc<ImageData>> = VecDeque::new();
+    let max_length = n_before + n_after;
+    let mut switch = false;
+    let mut counter = n_after;
+
+    loop {
+
+        // get data
+        let (image_data, incoming) = receiver.recv().unwrap();
+
+        match incoming {
+            MessageType::JsonData(kalman_row) => {
+                // do something with the kalman row
+            }
+            MessageType::Text(message) => {
+                // do something with the text message
+            }
+            MessageType::Empty => {
+                // do something with the empty message
+            }
+        }
+        
+        // pop front if buffer is full, and add to buffer
+        if frame_buffer.len() == max_length {
+            frame_buffer.pop_front();
+        }
+        frame_buffer.push_back(image_data);
+
+        // if the switch is defined (meaning, we are recording a video)
+        if switch {
+
+            // susbtract counter by 1
+            counter -= 1;
+
+            // if counter reaches zero, it means we captured enough frames
+            if counter == 0 {
+                // write frames to disk
+                
+                // and reset counter and switch
+                counter = n_after;
+                switch = false;
+            }
+        }
+    }
 }
