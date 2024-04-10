@@ -3,11 +3,12 @@ use crate::KalmanEstimateRow;
 use super::structs::{Args, MessageType};
 use ctrlc;
 
+use std::os::raw::c_char;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use xiapi;
-
+#[allow(dead_code)]
 pub fn time() -> f64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => {
@@ -57,34 +58,12 @@ pub fn parse_message(message: &str) -> MessageType {
     }
 }
 
-
-
 pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(), i32> {
     // lens mode
-    cam.set_lens_mode(xiapi::XI_SWITCH::XI_ON)?;
-    cam.set_lens_aperture_value(5.2)?;
+    // cam.set_lens_mode(xiapi::XI_SWITCH::XI_ON)?;
+    // cam.set_lens_aperture_value(5.2)?;
 
-    // exposure
-    let adjusted_exposure = adjust_exposure(args.exposure, &args.fps);
-    cam.set_exposure(adjusted_exposure)?;
-
-    // data format
-    cam.set_image_data_format(xiapi::XI_IMG_FORMAT::XI_MONO8)?;
-
-    // framerate
-    cam.set_acq_timing_mode(xiapi::XI_ACQ_TIMING_MODE::XI_ACQ_TIMING_MODE_FRAME_RATE_LIMIT)?;
-    cam.set_framerate(args.fps)?;
-
-    // bandwidth
-    cam.set_limit_bandwidth(cam.limit_bandwidth_maximum()?)?;
-    let buffer_size = cam.acq_buffer_size()?;
-    cam.set_acq_buffer_size(buffer_size * 4)?;
-    cam.set_buffers_queue_size(cam.buffers_queue_size_maximum()?)?;
-
-    // recent frame
-    cam.recent_frame()?;
-
-    // calculate offset for resolution
+    // resolution
     let max_resolution = cam.roi().unwrap();
     let (offset_x, offset_y) = get_offset_for_resolution(
         (max_resolution.width, max_resolution.height),
@@ -105,6 +84,29 @@ pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(),
         actual_roi.as_ref().unwrap().width,
         actual_roi.as_ref().unwrap().height
     );
+
+    // exposure
+    let adjusted_exposure = adjust_exposure(args.exposure, &args.fps);
+    cam.set_exposure(adjusted_exposure)?;
+
+    log::info!("Exposure set to: {}", adjusted_exposure);
+    log::info!("FPS set to: {}", args.fps);
+
+    // data format
+    cam.set_image_data_format(xiapi::XI_IMG_FORMAT::XI_MONO8)?;
+
+    // framerate
+    cam.set_acq_timing_mode(xiapi::XI_ACQ_TIMING_MODE::XI_ACQ_TIMING_MODE_FRAME_RATE_LIMIT)?;
+    cam.set_framerate(args.fps)?;
+
+    cam.set_limit_bandwidth(cam.limit_bandwidth_maximum()?)?;
+    let buffer_size = cam.acq_buffer_size()?;
+    cam.set_acq_buffer_size(buffer_size * 4)?;
+    cam.set_buffers_queue_size(cam.buffers_queue_size_maximum()?)?;
+
+    // recent frame
+    cam.recent_frame()?;
+
     Ok(())
 }
 

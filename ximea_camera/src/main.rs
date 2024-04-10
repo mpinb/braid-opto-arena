@@ -1,12 +1,10 @@
-use chrono::format::parse;
 use clap::Parser;
 use crossbeam::channel;
 use image::{ImageBuffer, Luma};
 use log;
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use xiapi;
+use xiapi::{self, xiGetImage, Image};
 
 mod structs;
 use structs::*;
@@ -14,12 +12,15 @@ use structs::*;
 mod helpers;
 use helpers::*;
 
-mod image_processor;
-use image_processor::process_packets;
-
-use crate::image_processor::frame_handler;
+mod frames;
+use crate::frames::frame_handler;
 
 fn main() -> Result<(), i32> {
+    // set logging level
+    if std::env::var_os("RUST_LOG").is_none() {
+        std::env::set_var("RUST_LOG", "debug");
+    }
+
     // setup logger
     env_logger::init();
 
@@ -55,56 +56,81 @@ fn main() -> Result<(), i32> {
 
     // Block until first message, which should be the save folder
     socket.recv(&mut msg, 0).unwrap();
+    let mut save_folder: String = String::new();
 
     match parse_message(msg.as_str().unwrap()) {
         MessageType::JsonData(data) => {
             log::error!("Expected text message, got JSON data: {:?}", data);
         }
         MessageType::Text(data) => {
-            let save_folder = data;
+            save_folder = data;
             log::info!("Got save folder: {}", &save_folder);
         }
         MessageType::Empty => {
-            log::error!("Empty message received");
+            //log::error!("Empty message received");
         }
     }
 
     // spawn writer thread
     let (sender, receiver) = channel::unbounded::<(Arc<ImageData>, MessageType)>();
-    let frame_handler = std::thread::spawn(move || frame_handler(receiver, n_before, n_after));
+    let frame_handler =
+        std::thread::spawn(move || frame_handler(receiver, n_before, n_after, save_folder));
 
     // create image buffer
     let buffer = cam.start_acquisition()?;
+    let mut image_data: Arc<ImageData> = Arc::new(ImageData::default());
 
     // start acquisition
     log::info!("Starting acquisition");
     while running.load(Ordering::SeqCst) {
         // receive message
-        socket.recv(&mut msg, zmq::DONTWAIT).unwrap();
+        match socket.recv(&mut msg, zmq::DONTWAIT) {
+            Ok(_) => log::info!("Received message: {}", msg.as_str().unwrap()),
+            Err(_) => {
+                // do nothing
+            }
+        }
         let parsed_message = parse_message(msg.as_str().unwrap());
-
         // Get frame from camera
+
         let frame = buffer.next_image::<u8>(None)?;
 
         // Put frame data to struct
-        let image_data = Arc::new(ImageData {
+        image_data = Arc::new(ImageData {
             width: frame.width(),
             height: frame.height(),
             nframe: frame.nframe(),
             acq_nframe: frame.acq_nframe(),
             timestamp_raw: frame.timestamp_raw(),
+            exposure_time: frame.exposure_time_us(),
             data: ImageBuffer::<Luma<u8>, Vec<u8>>::from(frame),
         });
 
         // send frame with the incoming parsed message
         match sender.send((image_data, parsed_message)) {
-            Ok(_) => log::debug!("Frame sent to writer thread."),
-            Err(e) => log::error!("Failed to send frame: {}", e),
+            Ok(_) => {}
+            Err(_e) => {} //log::error!("Failed to send frame: {}", e),
         }
     }
 
     // stop acquisition
     buffer.stop_acquisition()?;
+
+    // send kill signal
+    match sender.send((
+        Arc::new(ImageData::default()),
+        MessageType::Text("kill".to_string()),
+    )) {
+        Ok(_) => {
+            log::info!("Sent kill message to frame handler");
+        }
+        Err(_e) => {
+            log::error!("Failed to send kill trigger to frame handler.")
+        }
+    }
+
+    // stop frame handler
+    frame_handler.join().unwrap();
 
     Ok(())
 }

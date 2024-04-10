@@ -1,6 +1,6 @@
+use super::structs::{ImageData, MessageType};
 use crate::KalmanEstimateRow;
-
-use super::structs::{ImageData, MessageType, Packet};
+use chrono::prelude::*;
 use crossbeam::channel::Receiver;
 use image::ImageFormat;
 use rayon::prelude::*;
@@ -12,11 +12,14 @@ use std::sync::Arc;
 use std::io::Write;
 
 use std::fs::OpenOptions;
+use std::time::Instant;
 
 fn save_images_to_disk(
-    images: &Vec<Arc<ImageData>>,
+    images: &VecDeque<Arc<ImageData>>,
     save_path: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    log::info!("Saving images to disk");
+
     // loop over images and save to disk
     images.into_par_iter().for_each(|image| {
         // set the filename to save the image to (based on the acq_nframe field of the image)
@@ -25,9 +28,9 @@ fn save_images_to_disk(
         // save the image to disk
         match image.data.save_with_format(&filename, ImageFormat::Tiff) {
             // print a debug message if the image was saved successfully
-            Ok(_) => log::debug!("Saved {}", filename.display()),
+            Ok(_) => {}
             // print an error message if the image failed to save
-            Err(e) => eprintln!("Failed to save {}: {}", filename.display(), e),
+            Err(e) => log::debug!("Failed to save {}: {}", filename.display(), e),
         }
     });
 
@@ -35,9 +38,10 @@ fn save_images_to_disk(
 }
 
 fn save_video_metadata(
-    images: &Vec<Arc<ImageData>>,
+    images: &VecDeque<Arc<ImageData>>,
     save_path: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    log::info!("Saving metadata to disk");
     // Open a file in write mode to save CSV data
     //let file = File::create(save_path.join("metadata.csv")).unwrap();
     let mut file = OpenOptions::new()
@@ -47,14 +51,14 @@ fn save_video_metadata(
         .open(save_path.join("metadata.csv"))
         .unwrap();
 
-    writeln!(file, "width,height,nframe,acq_nframe,timestamp_raw").unwrap();
+    writeln!(file, "nframe,acq_nframe,timestamp_raw,exposure_time").unwrap();
 
     // loop over data
     for (_index, image) in images.iter().enumerate() {
         // Format other data as a line in a CSV file
         let line = format!(
-            "{},{},{},{},{}\n",
-            image.width, image.height, image.nframe, image.acq_nframe, image.timestamp_raw
+            "{},{},{},{}",
+            image.nframe, image.acq_nframe, image.timestamp_raw, image.exposure_time,
         );
         // Write the line to the file
         writeln!(file, "{}", line).unwrap();
@@ -62,76 +66,65 @@ fn save_video_metadata(
 
     Ok(())
 }
-pub fn process_packets(
+
+pub fn frame_handler(
+    receiver: Receiver<(Arc<ImageData>, MessageType)>,
+    n_before: usize,
+    n_after: usize,
     save_folder: String,
-    receiver: Receiver<(Packet, KalmanEstimateRow)>,
-) -> Result<(), std::io::Error> {
-    // create the save folder if it doesn't exist
+) {
+    log::info!("Starting frame handler");
+
+    // create folder to save files, if doesn't exist
     let save_path = Path::new(&save_folder);
     if !save_path.exists() {
-        create_dir_all(&save_path)?;
+        create_dir_all(&save_path).unwrap();
     }
 
-    // loop over packets and save images to disk
-    while let Ok((packet, row)) = receiver.recv() {
-        // match the packet type
-        match packet {
-            // if its an images packet, save the images to disk
-            Packet::Images(images) => {
-                // create new folder with the format row.frame, row.obj_id at save_path
-                let save_path =
-                    save_path.join(format!("obj_id_{}_frame_{}", row.obj_id, row.frame));
-                if !save_path.exists() {
-                    create_dir_all(&save_path)?;
-                }
-
-                // save all images to disk as tiff
-                save_images_to_disk(&images, &save_path).unwrap();
-
-                // save all the metadata from the images to disk
-                save_video_metadata(&images, &save_path).unwrap();
-            }
-
-            // if its a kill packet, print a message and break the loop
-            Packet::Kill => {
-                log::info!("Kill signal received, stopping.");
-                break;
-            }
-        }
-    }
-
-    Ok(())
-}
-
-
-pub fn frame_handler(receiver: Receiver<(Arc<ImageData>, MessageType)>, n_before: usize, n_after: usize) {
-    
-    // start frames writing thread
-    
+    // define frame buffer
+    let max_length = n_before + n_after;
+    let mut frame_buffer: VecDeque<Arc<ImageData>> = VecDeque::with_capacity(max_length);
 
     // define control variables
-    let mut frame_buffer: VecDeque<Arc<ImageData>> = VecDeque::new();
-    let max_length = n_before + n_after;
     let mut switch = false;
     let mut counter = n_after;
 
+    // define variable to save incoming data
+    let mut trigger_data: KalmanEstimateRow = Default::default();
+
+    // debug stuff
+    let mut recv_time: Instant = Instant::now();
+    let mut i_iter = 0;
+
     loop {
+        i_iter += 1;
+
+        if i_iter % 1000 == 0 {
+            log::info!("Backpressure on receiver: {:?}", receiver.len());
+        }
 
         // get data
         let (image_data, incoming) = receiver.recv().unwrap();
 
         match incoming {
             MessageType::JsonData(kalman_row) => {
-                // do something with the kalman row
+                // save kalman row to variable
+                trigger_data = kalman_row;
+                switch = true;
+                log::info!("Received Kalman data: {:?}", trigger_data);
+                recv_time = Instant::now();
             }
             MessageType::Text(message) => {
-                // do something with the text message
+                // break if message is kill
+                if message == "kill" {
+                    break;
+                }
             }
             MessageType::Empty => {
-                // do something with the empty message
+                // do nothing
             }
         }
-        
+
         // pop front if buffer is full, and add to buffer
         if frame_buffer.len() == max_length {
             frame_buffer.pop_front();
@@ -140,14 +133,31 @@ pub fn frame_handler(receiver: Receiver<(Arc<ImageData>, MessageType)>, n_before
 
         // if the switch is defined (meaning, we are recording a video)
         if switch {
-
             // susbtract counter by 1
             counter -= 1;
 
             // if counter reaches zero, it means we captured enough frames
             if counter == 0 {
+                let time_to_save = Instant::now();
                 // write frames to disk
-                
+                log::info!("Writing frames to disk");
+
+                // create folder if it doesn't exist
+                let save_folder = format!(
+                    "{}/obj_id_{}_frame_{}",
+                    save_folder, trigger_data.obj_id, trigger_data.frame
+                );
+                let save_folder = PathBuf::from(save_folder);
+
+                if !Path::new(&save_folder).exists() {
+                    create_dir_all(&save_folder).unwrap();
+                }
+
+                // save images to disk using parallel execution
+                save_images_to_disk(&frame_buffer, &save_folder).unwrap();
+                save_video_metadata(&frame_buffer, &save_folder).unwrap();
+                log::debug!("Time to save: {:?}", time_to_save.elapsed());
+
                 // and reset counter and switch
                 counter = n_after;
                 switch = false;

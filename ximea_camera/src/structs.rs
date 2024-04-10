@@ -9,16 +9,16 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub serial: u32,
 
-    #[arg(long, default_value_t = 250.0)]
+    #[arg(long, default_value_t = 400.0)]
     pub fps: f32,
 
-    #[arg(long, default_value_t = 4000.0)]
+    #[arg(long, default_value_t = 2000.0)]
     pub exposure: f32,
 
-    #[arg(long, default_value_t = 3424)]
+    #[arg(long, default_value_t = 2496)]
     pub width: u32,
 
-    #[arg(long, default_value_t = 3424)]
+    #[arg(long, default_value_t = 2496)]
     pub height: u32,
 
     #[arg(long, default_value_t = 0.5)]
@@ -31,7 +31,7 @@ pub struct Args {
     pub address: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ImageData {
     pub data: ImageBuffer<Luma<u8>, Vec<u8>>,
     pub width: u32,
@@ -39,6 +39,7 @@ pub struct ImageData {
     pub nframe: u32,
     pub acq_nframe: u32,
     pub timestamp_raw: u64,
+    pub exposure_time: u32,
 }
 
 #[allow(non_snake_case)]
@@ -72,6 +73,7 @@ pub enum MessageType {
     Empty,
 }
 
+#[allow(dead_code)]
 pub enum Packet {
     Images(Vec<Arc<ImageData>>),
     Kill,
