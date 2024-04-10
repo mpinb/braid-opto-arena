@@ -2,7 +2,6 @@
 use clap::Parser;
 use crossbeam::channel;
 use image::{ImageBuffer, Luma};
-use log;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -19,7 +18,7 @@ use structs::*;
 fn main() -> Result<(), i32> {
     // set logging level
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "debug");
+        std::env::set_var("RUST_LOG", "info");
     }
 
     // setup logger
@@ -92,8 +91,18 @@ fn main() -> Result<(), i32> {
             }
         }
         let parsed_message = parse_message(msg.as_str().unwrap());
-        // Get frame from camera
 
+        // check if got "kill" in parsed_message
+        match &parsed_message {
+            MessageType::Text(data) => {
+                if data == "kill" {
+                    break;
+                }
+            }
+            _ => {}
+        }
+
+        // Get frame from camera
         let frame = buffer.next_image::<u8>(None)?;
 
         // Put frame data to struct

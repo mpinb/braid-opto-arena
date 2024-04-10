@@ -1,6 +1,7 @@
 {
     "rust-analyzer.linkedProjects": [
         "./ximea_camera/Cargo.toml",
+        "./ximea_camera/Cargo.toml",
         "./ximea_camera/Cargo.toml"
     ]
 }

@@ -104,7 +104,7 @@ pub fn frame_handler(
         i_iter += 1;
 
         if i_iter % 1000 == 0 {
-            log::info!("Backpressure on receiver: {:?}", receiver.len());
+            log::debug!("Backpressure on receiver: {:?}", receiver.len());
         }
 
         // get data

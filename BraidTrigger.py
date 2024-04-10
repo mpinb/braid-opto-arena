@@ -335,8 +335,9 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
         # Close all processes
         logging.debug("Closing all camera processes.")
-        for cam in highspeed_cameras:
-            cam.join()
+        if params["highspeed"]["type"] == "basler":
+            for cam in highspeed_cameras:
+                cam.join()
 
         # Close all boards
         logging.debug("Closing all Arduino boards.")
