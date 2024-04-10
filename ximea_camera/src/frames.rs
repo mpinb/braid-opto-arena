@@ -1,18 +1,23 @@
-use super::structs::{ImageData, MessageType};
-use crate::KalmanEstimateRow;
-use chrono::prelude::*;
+// Standard library imports
+use std::{
+    collections::VecDeque,
+    fs::{create_dir_all, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+};
+
+// External crates
 use crossbeam::channel::Receiver;
 use image::ImageFormat;
 use rayon::prelude::*;
-use std::collections::VecDeque;
-use std::fs::create_dir_all;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use std::io::Write;
-
-use std::fs::OpenOptions;
-use std::time::Instant;
+// Current crate
+use crate::{
+    structs::{ImageData, MessageType},
+    KalmanEstimateRow,
+};
 
 fn save_images_to_disk(
     images: &VecDeque<Arc<ImageData>>,
@@ -93,7 +98,6 @@ pub fn frame_handler(
     let mut trigger_data: KalmanEstimateRow = Default::default();
 
     // debug stuff
-    let mut recv_time: Instant = Instant::now();
     let mut i_iter = 0;
 
     loop {
@@ -112,7 +116,6 @@ pub fn frame_handler(
                 trigger_data = kalman_row;
                 switch = true;
                 log::info!("Received Kalman data: {:?}", trigger_data);
-                recv_time = Instant::now();
             }
             MessageType::Text(message) => {
                 // break if message is kill

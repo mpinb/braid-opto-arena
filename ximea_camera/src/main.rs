@@ -1,19 +1,20 @@
+// External crate imports
 use clap::Parser;
 use crossbeam::channel;
 use image::{ImageBuffer, Luma};
 use log;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use xiapi::{self, xiGetImage, Image};
 
-mod structs;
-use structs::*;
-
-mod helpers;
-use helpers::*;
-
+// Local module declarations
 mod frames;
+mod helpers;
+mod structs;
+
+// Imports from local modules
 use crate::frames::frame_handler;
+use helpers::*;
+use structs::*;
 
 fn main() -> Result<(), i32> {
     // set logging level
