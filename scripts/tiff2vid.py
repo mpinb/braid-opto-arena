@@ -61,5 +61,5 @@ def main(root_folder: str):
 if __name__ == "__main__":
     # fire.Fire(main)
     main(
-        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240409_165504/",
+        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240410_145547/",
     )

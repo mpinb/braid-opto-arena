@@ -1,7 +1,3 @@
-// External crate imports
-
-
-
 // Standard library imports
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
