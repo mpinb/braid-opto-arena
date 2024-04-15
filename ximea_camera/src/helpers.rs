@@ -80,29 +80,33 @@ fn adjust_exposure(exposure: f32, fps: &f32) -> f32 {
 }
 
 fn set_lens_mode(cam: &mut xiapi::Camera, aperture: f32) -> Result<(), i32> {
-    // .set_lens_mode() is not reliable, so we will retry a few times
-    let max_retry = 5;
-    let retry_delay = std::time::Duration::from_secs(2);
-    let mut attemps = 0;
+    let mut max_retries = 5;
+    let delay = std::time::Duration::from_secs(2);
 
-    // loop until we set the lens mode
+    cam.set_lens_mode(xiapi::XI_SWITCH::XI_ON)?;
+    log::info!("Lens mode set to XI_ON");
+
     loop {
-        match cam.set_lens_mode(xiapi::XI_SWITCH::XI_ON) {
+        // match
+        match cam.set_lens_aperture_value(aperture) {
             Ok(_) => {
-                cam.set_lens_aperture_value(aperture)?;
-                break;
+                log::info!("Lens aperture value set to 5.2");
+                return Ok(()); // return Ok if the aperture is set successfully
             }
-            Err(_) => {
-                attemps += 1;
-                log::warn!("Failed to set lens mode, retrying...");
-                if attemps >= max_retry {
-                    return Err(-1);
+            Err(e) => {
+                log::debug!("Error setting lens aperture value: {}, retrying.", e);
+
+                max_retries -= 1;
+                if max_retries == 0 {
+                    log::error!("Max retries reached, exiting.");
+                    return Err(e); // return Err if the max retries are reached
                 }
-                std::thread::sleep(retry_delay);
+
+                std::thread::sleep(delay);
+                continue;
             }
         }
     }
-    Ok(())
 }
 
 fn set_resolution(cam: &mut xiapi::Camera, width: u32, height: u32) -> Result<(), i32> {

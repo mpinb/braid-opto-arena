@@ -22,7 +22,6 @@ def list_subfolders(folder_path):
 def tiff2vid(folder: str):
     try:
         vid_name = os.path.join(folder + ".mp4")
-        #        print(f"Saving {vid_name}")
         # create video
         (
             ffmpeg.input(
@@ -61,5 +60,5 @@ def main(root_folder: str):
 if __name__ == "__main__":
     # fire.Fire(main)
     main(
-        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240410_145547/",
+        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240411_152420/",
     )
