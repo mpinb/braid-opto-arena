@@ -61,6 +61,8 @@ fn main() -> Result<(), i32> {
     match parse_message(msg.as_str().unwrap()) {
         MessageType::JsonData(data) => {
             log::error!("Expected text message, got JSON data: {:?}", data);
+            // shutdown
+            return Err(1);
         }
         MessageType::Text(data) => {
             save_folder = data;

@@ -12,19 +12,19 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub serial: u32,
 
-    #[arg(long, default_value_t = 400.0)]
+    #[arg(long, default_value_t = 350.0)]
     pub fps: f32,
 
-    #[arg(long, default_value_t = 2500.0)]
+    #[arg(long, default_value_t = 4000.0)]
     pub exposure: f32,
 
-    #[arg(long, default_value_t = 5.2)]
+    #[arg(long, default_value_t = 10.0)]
     pub aperture: f32,
 
-    #[arg(long, default_value_t = 2496)]
+    #[arg(long, default_value_t = 3008)]
     pub width: u32,
 
-    #[arg(long, default_value_t = 2496)]
+    #[arg(long, default_value_t = 3008)]
     pub height: u32,
 
     #[arg(long, default_value_t = 0.5)]

@@ -1,3 +1,4 @@
+use std::ffi::{c_void, CString};
 // Standard library imports
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -22,7 +23,7 @@ pub fn time() -> f64 {
 /// Dealing with camera parameters
 pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(), i32> {
     // lens mode
-    set_lens_mode(cam, args.aperture)?;
+    set_lens_mode_with_retry(cam, args.aperture)?;
 
     // resolution
     set_resolution(cam, args.width, args.height)?;
@@ -45,6 +46,36 @@ pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(),
     let buffer_size = cam.acq_buffer_size()?;
     cam.set_acq_buffer_size(buffer_size * 4)?;
     cam.set_buffers_queue_size(cam.buffers_queue_size_maximum()?)?;
+
+    // Flat-field correction
+    // TODO: Implement flat-field correction
+    // unsafe {
+    //     let image = String::from("/home/buchsbaum/Documents/dark_image.tif");
+    //     let c_path = CString::new(image.clone()).expect("Failed to convert to CString");
+    //     let raw_ptr = c_path.as_ptr();
+    //     let c_void_ptr: *mut c_void = raw_ptr as *mut c_void;
+
+    //     xiapi::xiSetParamString(
+    //         **cam,
+    //         xiapi::XI_PRM_FFC_DARK_FIELD_FILE_NAME.as_ptr() as *const i8,
+    //         c_void_ptr,
+    //         image.len() as u32,
+    //     );
+
+    //     let image = String::from("/home/buchsbaum/Documents/mid_image.tif");
+    //     let c_path = CString::new(image.clone()).expect("Failed to convert to CString");
+    //     let raw_ptr = c_path.as_ptr();
+    //     let c_void_ptr: *mut c_void = raw_ptr as *mut c_void;
+
+    //     xiapi::xiSetParamString(
+    //         **cam,
+    //         xiapi::XI_PRM_FFC_FLAT_FIELD_FILE_NAME.as_ptr() as *const i8,
+    //         c_void_ptr,
+    //         image.len() as u32,
+    //     );
+
+    //     xiapi::xiSetParamInt(**cam, xiapi::XI_PRM_FFC.as_ptr() as *const i8, 1);
+    // }
 
     // recent frame
     cam.recent_frame()?;
@@ -79,7 +110,7 @@ fn adjust_exposure(exposure: f32, fps: &f32) -> f32 {
     }
 }
 
-fn set_lens_mode(cam: &mut xiapi::Camera, aperture: f32) -> Result<(), i32> {
+fn set_lens_mode_with_retry(cam: &mut xiapi::Camera, aperture: f32) -> Result<(), i32> {
     let mut max_retries = 5;
     let delay = std::time::Duration::from_secs(2);
 
