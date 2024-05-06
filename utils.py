@@ -9,15 +9,43 @@ import time
 import zmq
 import serial
 from tqdm.contrib.concurrent import thread_map
+import subprocess
+import zmq.utils.monitor as zmon
 
 
 def zmq_pubsub(
     addr: str = "127.0.0.1", port: str = "5555", topic: str = ""
 ) -> zmq.Socket:
+    logging.info("Creating PUB socket.")
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
     socket.bind(f"tcp://{addr}:{port}")
     return socket
+
+
+class Publisher:
+    def __init__(self, addr, port):
+        self.addr = addr
+        self.port = port
+        self.context = zmq.Context()
+        self.publisher = self.context.socket(zmq.PUB)
+        self.publisher.bind(f"tcp://{addr}:{port}")
+
+    def get_monitor_socket(self, events):
+        monitor_socket = self.context.socket(zmq.PAIR)
+        monitor_socket.connect(f"tcp://{self.addr}:{self.port}")
+        monitor_socket.monitor(events)
+        return monitor_socket
+
+    def recv_monitor_message(self, monitor_socket):
+        try:
+            msg = monitor_socket.recv(zmq.NOBLOCK)  # Non-blocking receive
+            return zmq.utils.monitor.parse_monitor_message(msg)
+        except zmq.Again:
+            return None
+
+    def send(self, message):
+        self.publisher.send(message)
 
 
 def copy_files_with_progress(src_folder, dest_folder):

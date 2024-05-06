@@ -50,15 +50,21 @@ def main(root_folder: str):
         folders = [root_folder]
 
     # loop over folders
-    # from tqdm import tqdm
-    # for folder in tqdm(folders):
-    #     tiff2vid(folder)
+    from tqdm import tqdm
 
-    process_map(tiff2vid, folders, max_workers=8)
+    for folder in tqdm(folders):
+        tiff2vid(folder)
+
+    # process_map(tiff2vid, folders, max_workers=8)
 
 
 if __name__ == "__main__":
-    # fire.Fire(main)
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root_folder", type=str, required=False)
+    args = parser.parse_args()
+
     main(
-        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240411_152420/",
+        root_folder="/home/buchsbaum/mnt/DATA/Videos/20240418_113218/",
     )

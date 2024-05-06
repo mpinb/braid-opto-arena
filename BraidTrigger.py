@@ -13,11 +13,12 @@ import tomllib
 import subprocess
 
 from basler_camera import start_highspeed_cameras
-from helper_functions import (
+from utils import (
     check_braid_folder,
     create_arduino_device,
     create_csv_writer,
     parse_chunk,
+    zmq_pubsub,
 )
 import json
 from rspowersupply import PowerSupply
@@ -52,11 +53,9 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         f.write(
             f"commit = {git.Repo(search_parent_directories=True).head.commit.hexsha}"
         )
+
     # create PUB socket
-    logging.info("Creating PUB socket.")
-    context = zmq.Context()
-    publisher = context.socket(zmq.PUB)
-    publisher.bind("tcp://127.0.0.1:5555")
+    publisher = zmq_pubsub()
 
     # Set power supply voltage (for backlighting)
     try:
@@ -85,13 +84,18 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Connect to cameras
     if args.highspeed:
+        # get the base folder to save the videos
         base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
         output_folder = f"/home/buchsbaum/mnt/DATA/Videos/{base_folder}/"
         params["video_save_folder"] = output_folder
+
+        # create it if it doesn't exist
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
 
+        # if were using the ximea camera
         if params["highspeed"]["type"] == "ximea":
+            # create monitor socket
             monitor_socket = publisher.get_monitor_socket(
                 zmq.EVENT_ACCEPTED | zmq.EVENT_DISCONNECTED
             )
@@ -113,6 +117,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 logging.error("Camera process not connected.")
                 raise ValueError("Camera process not connected.")
 
+        # if we want to use a basler camera
         elif params["highspeed"]["type"] == "basler":
             # Connect to camera trigger
             camera_trigger_board = create_arduino_device(
@@ -141,18 +146,20 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Start (dynamic) visual stimuli
     if args.static or args.looming or args.grating:
-        stim_recv, stim_send = mp.Pipe()
-        stimulus_process = mp.Process(
-            target=start_visual_stimuli,
-            args=(
-                params,
-                stim_recv,
-                kill_event,
-                args,
-            ),
-            name="VisualStimuli",
+        # create monitor socket
+        monitor_socket = publisher.get_monitor_socket(
+            zmq.EVENT_ACCEPTED | zmq.EVENT_DISCONNECTED
         )
-        stimulus_process.start()
+
+        # start visual stimuli process
+        # TODO #
+
+        # wait for the visual stimuli process to connect
+        evt_mon = zmon.recv_monitor_message(monitor_socket)
+        if evt_mon["event"] == zmq.EVENT_ACCEPTED:
+            logging.info("Visual process connected.")
+        else:
+            raise ValueError("Visual process not connected.")
 
     # Trigger parameters
     min_trajectory_time = params["trigger_params"].get(
@@ -310,7 +317,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     logging.debug("Triggering stim.")
                     stim_trigger_time = time.time()
                     if args.looming or args.grating:
-                        stim_send.send(pos)
+                        # stim_send.send(pos)
+                        pass
                     logging.debug(
                         f"Stim trigger time: {time.time()-stim_trigger_time:.5f}"
                     )
