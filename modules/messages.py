@@ -28,7 +28,7 @@ class Publisher:
                 self.rep_socket.send_string("Welcome")
                 logging.info("Handshake completed with a subscriber.")
         except zmq.Again as e:
-            logging.warning("No handshake request received yet.")
+            logging.warning(f"{e} No handshake request received yet.")
 
     def publish(self, topic, msg):
         self.pub_socket.send_string(f"{topic} {msg}")

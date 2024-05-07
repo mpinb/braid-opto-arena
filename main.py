@@ -38,7 +38,7 @@ def copy_files_to_folder(folder: str, file: str):
         )
 
 
-def initialize_power_supply(port="/dev/powersupply"):
+def initialize_backlighting_power_supply(port="/dev/powersupply"):
     try:
         ps = PowerSupply(port=port)
         ps.set_voltage(PSU_VOLTAGE)
@@ -48,21 +48,6 @@ def initialize_power_supply(port="/dev/powersupply"):
 
 def create_arduino_device(port: str, baudrate: int = 9600) -> serial.Serial:
     return serial.Serial(port, baudrate=baudrate, timeout=1)
-
-
-def create_csv_writer(folder: str, file: str):
-    # Open csv file
-    csv_file = open(os.path.join(folder, file), "a+")
-
-    # Initialize csv writer
-    logging.debug("Initializing csv writer.")
-    csv_writer = csv.writer(csv_file, delimiter=",")
-    if os.stat(csv_file.name).st_size == 0:
-        write_header = True
-    else:
-        write_header = False
-
-    return csv_file, csv_writer, write_header
 
 
 class CsvWriter:
@@ -144,7 +129,7 @@ def _get_opto_trigger_params(trigger_params: dict):
         )
 
 
-def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict):
+def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict, pos: dict):
     stim_duration, stim_intensity, stim_frequency = _get_opto_trigger_params(
         trigger_params
     )
@@ -152,7 +137,35 @@ def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict):
     opto_trigger_board.write(
         f"<{stim_duration},{stim_intensity},{stim_frequency}>".encode()
     )
-    return stim_duration, stim_intensity, stim_frequency
+    pos["stim_duration"] = stim_duration
+    pos["stim_intensity"] = stim_intensity
+    pos["stim_frequency"] = stim_frequency
+    return pos
+
+
+def check_position(pos, trigger_params):
+    radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+    if trigger_params["type"] == "radius":
+        in_position = (
+            radius < trigger_params["min_radius"]
+            and trigger_params["zmin"] <= pos["z"] <= trigger_params["zmax"]
+        )
+    elif trigger_params["type"] == "zone":
+        # Check if object is in the trigger zone
+        in_position = (
+            0.1 <= pos["z"] <= 0.2
+            and -0.084 <= pos["x"] <= 0.065
+            and -0.054 <= pos["y"] <= 0.095
+        )
+
+    return in_position
+
+
+def get_video_output_folder(
+    braid_folder: str, base_folder: str = "/home/buchsbaum/mnt/DATA/Videos/"
+):
+    base_folder = os.path.splitext(os.path.basename(braid_folder))[0]
+    return os.path.join((base_folder, braid_folder))
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -174,7 +187,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     copy_files_to_folder(params["folder"], params_file)
 
     # Set power supply voltage (for backlighting)
-    initialize_power_supply()
+    initialize_backlighting_power_supply()
 
     # Connect to arduino
     if args.opto:
@@ -185,12 +198,24 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # Connect to flydra2 proxy
     braid_proxy = Flydra2Proxy()
 
+    # create data publisher
+    pub = Publisher(pub_port=5556, handshake_port=5557)
+
     # Connect to cameras
     if args.highspeed:
-        # get the base folder to save the videos
-        base_folder = os.path.splitext(os.path.basename(params["folder"]))[0]
-        output_folder = f"/home/buchsbaum/mnt/DATA/Videos/{base_folder}/"
-        params["video_save_folder"] = output_folder
+        params["video_save_folder"] = get_video_output_folder(params["folder"])
+        # start camera here
+        pass
+
+    pub.wait_for_subscriber()
+    pub.publish("highspeed", params["video_save_folder"])
+
+    if args.static or args.looming or args.grating:
+        # start stimuli here
+        pass
+    
+    pub.wait_for_subscriber()
+    pub.publish("stimuli", "start")
 
     trigger_params = params["trigger_params"]
 
@@ -251,21 +276,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # Get position and radius
             pos = msg_dict["Update"]
-            radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
-            if trigger_params["type"] == "radius":
-                in_position = (
-                    radius < trigger_params["min_radius"]
-                    and trigger_params["zmin"] <= pos["z"] <= trigger_params["zmax"]
-                )
-            elif trigger_params["type"] == "zone":
-                # Check if object is in the trigger zone
-                in_position = (
-                    0.1 <= pos["z"] <= 0.2
-                    and -0.084 <= pos["x"] <= 0.065
-                    and -0.054 <= pos["y"] <= 0.095
-                )
 
-            if in_position:
+            if check_position(pos, trigger_params):
                 # Update last trigger time
                 ntrig += 1
                 last_trigger_time = tcall
@@ -276,15 +288,16 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
                 # Opto Trigger
                 if args.opto:
-                    (
-                        pos["opto_duration"],
-                        pos["opto_intensity"],
-                        pos["opto_frequency"],
-                    ) = trigger_opto(opto_trigger_board, trigger_params)
+                    pos = trigger_opto(opto_trigger_board, trigger_params, pos)
+
+                if args.highspeed:
+                    pass
+
+                if args.stimuli:
+                    pass
 
                 # Write data to csv
-                if args.opto:
-                    csv_writer.write(pos)
+                csv_writer.write(pos)
 
     except KeyboardInterrupt:
         pass

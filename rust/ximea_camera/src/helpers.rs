@@ -1,4 +1,3 @@
-use std::ffi::{c_void, CString};
 // Standard library imports
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
