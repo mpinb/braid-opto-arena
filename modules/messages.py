@@ -88,10 +88,10 @@ class Subscriber:
             return None
 
 
-# Example usage (comment out before executing or uploading)
-pub = Publisher(5555, 5556)
-sub = Subscriber(5555, 5556)
-if sub.handshake():
-    sub.subscribe("news")
-    pub.publish("news", "Hello world!")
-    print(sub.receive())
+if __name__ == "__main__":
+    pub = Publisher(5555, 5556)
+    sub = Subscriber(5555, 5556)
+    if sub.handshake():
+        sub.subscribe("news")
+        pub.publish("news", "Hello world!")
+        print(sub.receive())
