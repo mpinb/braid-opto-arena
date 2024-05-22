@@ -6,13 +6,14 @@ import requests
 import tomllib
 import json
 from modules.messages import Publisher, Subscriber
-from modules.utils import check_braid_folder, create_csv_writer
+from modules.utils import check_braid_folder
 from modules.rspowersupply import PowerSupply
 import serial
-from time import time
+import time
 import socket
 import random
 import csv
+import subprocess
 
 PSU_VOLTAGE = 30
 
@@ -27,7 +28,8 @@ def check_braid_running(root_folder: str, debug: bool) -> str:
     if not debug:
         return check_braid_folder(root_folder)
     else:
-        return "./.test/"
+        os.makedirs("test/", exist_ok=True)
+        return "test/"
 
 
 def copy_files_to_folder(folder: str, file: str):
@@ -201,25 +203,32 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # create data publisher
     pub = Publisher(pub_port=5556, handshake_port=5557)
 
+    if args.realtime_plotting:
+        import zmq
+
+        context = zmq.Context()
+        pub_plot = context.socket(zmq.PUB)
+        pub_plot.bind("tcp://*:12345")
+        subprocess.Popen(["python", "modules/plotting.py"])
+
     # Connect to cameras
     if args.highspeed:
         params["video_save_folder"] = get_video_output_folder(params["folder"])
         # start camera here
-        pass
+        pub.wait_for_subscriber()
+        pub.publish("", params["video_save_folder"])
 
-    pub.wait_for_subscriber()
-    pub.publish("highspeed", params["video_save_folder"])
+        pass
 
     if args.static or args.looming or args.grating:
         # start stimuli here
+        pub.wait_for_subscriber()
+        pub.publish("stimuli", "start")
         pass
-    
-    pub.wait_for_subscriber()
-    pub.publish("stimuli", "start")
 
     trigger_params = params["trigger_params"]
 
-    csv_writer = CsvWriter(os.path.join((params["folder"], "opto.csv")))
+    csv_writer = CsvWriter(os.path.join(params["folder"], "opto.csv"))
 
     # initialize main loop parameters
     obj_ids = []
@@ -276,6 +285,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # Get position and radius
             pos = msg_dict["Update"]
+            pub_plot.send_string(f"{pos['x']} {pos['y']} {pos['z']}")
 
             if check_position(pos, trigger_params):
                 # Update last trigger time
@@ -291,7 +301,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
                 if args.highspeed:
-                    pass
+                    pos["timestamp"] = tcall
+                    pub.publish("", json.dumps(pos).encode("utf-8"))
 
                 if args.stimuli:
                     pass
@@ -318,15 +329,17 @@ if __name__ == "__main__":
     parser.add_argument("--looming", action="store_true", default=False)
     parser.add_argument("--grating", action="store_true", default=False)
     parser.add_argument("--highspeed", action="store_true", default=False)
-    parser.add_argument("--debug", action="store_true", default=False)
+    parser.add_argument("--debug", action="store_true", default=True)
+    parser.add_argument("--realtime_plotting", action="store_true", default=True)
     args = parser.parse_args()
 
     for arg in vars(args):
         logging.info(f"{arg}: {getattr(args, arg)}")
 
     # Start main function
+    print("Starting main function.")
     main(
-        params_file="./data/params.toml",
+        params_file="./static/params.toml",
         root_folder="/home/buchsbaum/mnt/DATA/Experiments/",
         args=args,
     )

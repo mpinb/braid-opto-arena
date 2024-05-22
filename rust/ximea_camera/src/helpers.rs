@@ -163,14 +163,17 @@ fn set_resolution(cam: &mut xiapi::Camera, width: u32, height: u32) -> Result<()
 
 /// ZMQ handling
 
-pub fn connect_to_zmq(addr: &str) -> Result<zmq::Socket, zmq::Error> {
+pub fn connect_to_socket(port: &str, socket_type: zmq::SocketType) -> zmq::Socket {
     let context = zmq::Context::new();
-    let socket = context.socket(zmq::SUB)?;
-    socket.connect(format!("tcp://{}", addr).as_str())?;
-    socket.set_subscribe(b"").unwrap();
-    Ok(socket)
+    let socket = context.socket(socket_type).unwrap();
+    socket
+        .connect(format!("tcp://127.0.0.1:{}", port).as_str())
+        .unwrap();
+    if socket_type == zmq::SUB {
+        socket.set_subscribe(b"").unwrap();
+    };
+    socket
 }
-
 pub fn parse_message(message: &str) -> MessageType {
     if message.trim().is_empty() {
         MessageType::Empty

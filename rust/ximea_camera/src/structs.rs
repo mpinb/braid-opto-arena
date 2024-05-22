@@ -33,8 +33,17 @@ pub struct Args {
     #[arg(long, default_value_t = 1.0)]
     pub t_after: f32,
 
-    #[arg(long, default_value_t = String::from("127.0.0.1:5555"))]
+    #[arg(long, default_value_t = String::from("127.0.0.1"))]
     pub address: String,
+
+    #[arg(long, default_value_t = String::from("5555"))]
+    pub sub_port: String,
+
+    #[arg(long, default_value_t = String::from("5556"))]
+    pub req_port: String,
+
+    #[arg(long, default_value_t = false)]
+    pub debug: bool,
 }
 
 #[derive(Clone, Default)]

@@ -11,10 +11,10 @@ mod helpers;
 mod structs;
 
 // Imports from local modules
-use crate::frames::frame_handler;
+use frames::frame_handler;
 use helpers::*;
-use structs::*;
 
+use structs::*;
 fn main() -> Result<(), i32> {
     // set logging level
     if std::env::var_os("RUST_LOG").is_none() {
@@ -48,14 +48,35 @@ fn main() -> Result<(), i32> {
 
     // Connect to ZMQ; return error if connection fails
     log::info!("Connecting to ZMQ server at {}", args.address);
-    let socket = connect_to_zmq(&args.address).unwrap();
+    let handshake = connect_to_socket(&args.req_port, zmq::REQ);
+
+    // Send ready message to ZMQ over REQ
+    log::info!("Sending ready message to ZMQ PUB");
+    handshake.send("Hello", 0).unwrap();
+    match handshake.recv_string(0) {
+        Ok(Ok(msg)) if &msg == "Welcome " => {
+            log::info!("Handshake successfull");
+        }
+        Ok(Err(e)) => {
+            log::error!("Failed to receive message: {:?}", e);
+        }
+        Err(e) => {
+            log::error!("Failed to receive message: {}", e);
+        }
+        Ok(_) => {
+            log::error!("Handshake failed");
+            return Err(1);
+        }
+    }
+
+    let subscriber = connect_to_socket(&args.sub_port, zmq::SUB);
 
     // Wait for ready message from socket
     log::info!("Waiting for ready message from ZMQ PUB");
     let mut msg = zmq::Message::new();
 
     // Block until first message, which should be the save folder
-    socket.recv(&mut msg, 0).unwrap();
+    subscriber.recv(&mut msg, 0).unwrap();
     let mut save_folder: String = String::new();
 
     match parse_message(msg.as_str().unwrap()) {
@@ -86,7 +107,7 @@ fn main() -> Result<(), i32> {
     log::info!("Starting acquisition");
     while running.load(Ordering::SeqCst) {
         // receive message
-        match socket.recv(&mut msg, zmq::DONTWAIT) {
+        match subscriber.recv(&mut msg, zmq::DONTWAIT) {
             Ok(_) => log::info!("Received message: {}", msg.as_str().unwrap()),
             Err(_) => {
                 // do nothing
