@@ -23,7 +23,7 @@ class Publisher:
     def wait_for_subscriber(self):
         # Wait for a handshake message from subscriber
         try:
-            message = self.rep_socket.recv_string(zmq.NOBLOCK)  # Non-blocking receive
+            message = self.rep_socket.recv_string()  # Non-blocking receive
             if message == "Hello":
                 self.rep_socket.send_string("Welcome")
                 logging.info("Handshake completed with a subscriber.")

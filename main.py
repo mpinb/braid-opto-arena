@@ -5,7 +5,7 @@ import git
 import requests
 import tomllib
 import json
-from modules.messages import Publisher, Subscriber
+from modules.messages import Publisher
 from modules.utils import check_braid_folder
 from modules.rspowersupply import PowerSupply
 import serial
@@ -218,13 +218,11 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         pub.wait_for_subscriber()
         pub.publish("", params["video_save_folder"])
 
-        pass
-
     if args.static or args.looming or args.grating:
-        # start stimuli here
+        subprocess.Popen("python modules/stimuli.py")
         pub.wait_for_subscriber()
         pub.publish("stimuli", "start")
-        pass
+        
 
     trigger_params = params["trigger_params"]
 

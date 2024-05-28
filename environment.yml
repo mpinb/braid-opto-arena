@@ -1,0 +1,21 @@
+name: braid-trigger-env
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  - pip
+  - matplotlib
+  - numpy
+  - pandas
+  - tqdm
+  - pyqtgraph
+  - pip:
+    - pyserial
+    - requests
+    - GitPython
+    - pygame
+    - pyzmq
+    - PyQt5
