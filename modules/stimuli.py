@@ -2,9 +2,9 @@ import pygame
 import zmq
 import json
 import argparse
-
+import os
 from messages import Subscriber
-
+import logging
 
 class Stimulus:
     def __init__(self, screen):
@@ -16,6 +16,20 @@ class Stimulus:
     def render(self):
         raise NotImplementedError("Each stimulus must define a render method.")
 
+class StaticStimulus(Stimulus):
+    def __init__(self, screen, image_path):
+        super().__init__(screen)
+        self.image_path = image_path
+        self.bg = pygame.image.load(image_path)
+        self.bg = pygame.transform.scale(
+            self.bg, (self.screen.get_width(), self.screen.get_height())
+        )
+
+    def update(self):
+        pass
+
+    def render(self):
+        self.screen.blit(self.bg, (0, 0))
 
 class LoomingStimulus(Stimulus):
     def __init__(
@@ -79,34 +93,49 @@ class StimuliDisplay:
     def __init__(
         self, server_ip="localhost", sub_port=5556, handshake_port=5557, refresh_rate=60
     ):
-        self.refresh_rate = refresh_rate
+    
+        # Initialize zmq variables
         self.server_ip = server_ip
         self.sub_port = sub_port
         self.handshake_port = handshake_port
         self.subscriber = None
+
+        # Initialize display variables
+        self.refresh_rate = refresh_rate
         self.screen = None
         self.stimuli = {}
-        self.running = True
 
     def setup_display(self, screen_resolution=(640, 128)):
+
+        logging.debug(f"Process {os.getpid()} setting up display")
+        # Set the position of the window to the top left corner
+        os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
+        # Initialize the display
         pygame.init()
-        self.screen = pygame.display.set_mode(screen_resolution)
+        self.screen = pygame.display.set_mode(screen_resolution, pygame.NOFRAME)
         pygame.display.set_caption("Fly Tracking Stimuli Display")
 
     def setup_zmq(self, server_ip="localhost", sub_port=5556, handshake_port=5557):
+        logging.debug(f"Process {os.getpid()} setting up zmq")
+        # Initialize the subscriber
         self.subscriber = Subscriber(server_ip, sub_port, handshake_port)
         self.subscriber.subscribe("")
         self.subscriber.handshake()
 
     def run(self):
+        logging.info("Starting display server")
+        # Initialize the display and zmq
         self.setup_zmq()
         self.setup_display()
 
         clock = pygame.time.Clock()
+
+        # Main loop
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    self.running = False
+                    logging.debug("Received quit event")
+                    break
 
             try:
                 msg = self.socket.recv_string(zmq.NOBLOCK)
@@ -114,7 +143,8 @@ class StimuliDisplay:
                 msg = None
 
             if msg == "kill":
-                self.running = False
+                logging.debug("Received kill message")
+                break
             elif msg:
                 self.handle_message(msg)
 
@@ -125,6 +155,7 @@ class StimuliDisplay:
         pygame.quit()
 
     def handle_message(self, msg):
+        # Parse the message and create the appropriate stimulus
         try:
             data = json.loads(msg)
             if "type" in data:
@@ -141,6 +172,10 @@ class StimuliDisplay:
                 elif data["type"] == "grating":
                     self.stimuli["grating"] = GratingStimulus(
                         self.screen, data["width"], data["speed"], data["color"]
+                    )
+                elif data["type"] == "static":
+                    self.stimuli["static"] = StaticStimulus(
+                        self.screen, data["image_path"]
                     )
 
         except json.JSONDecodeError:
