@@ -13,7 +13,6 @@ center_x = 0              # arena center x in meters (in meters)
 center_y = 0              # arena center y in meters (in meters)
 
 [opto_params]
-#active = false
 duration = 300  # in milliseconds
 intensity = 255 # in 0-255 range
 frequency = 0   # in Hz
@@ -29,18 +28,15 @@ color = [1, 1, 1]
 units = "pix"
 
 [stim_params.static]
-#active = true
 image = "./data/static.jpg"
 
 [stim_params.grating]
-#active = false
 frequency = 0
 orientation = 0
 direction = 0
 color = "black"
 
 [stim_params.looming]
-#active = true
 stim_type = "linear"
 position = "random"
 max_radius = "random"

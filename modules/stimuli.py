@@ -5,6 +5,8 @@ import argparse
 import os
 from messages import Subscriber
 import logging
+import random
+from utils import CsvWriter
 
 class Stimulus:
     def __init__(self, screen):
@@ -15,6 +17,7 @@ class Stimulus:
 
     def render(self):
         raise NotImplementedError("Each stimulus must define a render method.")
+
 
 class StaticStimulus(Stimulus):
     def __init__(self, screen, image_path):
@@ -30,6 +33,7 @@ class StaticStimulus(Stimulus):
 
     def render(self):
         self.screen.blit(self.bg, (0, 0))
+
 
 class LoomingStimulus(Stimulus):
     def __init__(
@@ -90,33 +94,53 @@ class GratingStimulus(Stimulus):
 
 
 class StimuliDisplay:
-    def __init__(
-        self, server_ip="localhost", sub_port=5556, handshake_port=5557, refresh_rate=60
-    ):
-    
+    def __init__(self, args, refresh_rate=60):
+        self.args = args
+
         # Initialize zmq variables
-        self.server_ip = server_ip
-        self.sub_port = sub_port
-        self.handshake_port = handshake_port
+        self.server_ip = self.args.server_ip
+        self.sub_port = self.args.sub_port
+        self.handshake_port = self.args.handshake_port
         self.subscriber = None
 
         # Initialize display variables
         self.refresh_rate = refresh_rate
         self.screen = None
         self.stimuli = {}
+        self.static = os.path.abspath(args.static)
 
-    def setup_display(self, screen_resolution=(640, 128)):
+        # load params.toml file
+        with open("params.toml") as f:
+            self.params = json.load(f)
 
-        logging.debug(f"Process {os.getpid()} setting up display")
-        # Set the position of the window to the top left corner
+    def setup_static_stimuli(self):
+        logging.debug("Setting up static stimuli")
+
+        if self.args.static:
+            self.stimuli["static"] = StaticStimulus(self.screen, self.static)
+
+    def setup_dynamic_stimuli(self):
+        logging.debug("Setting up dynamic stimuli")
+
+        if self.args.looming:
+            if self.params["stim_params"]["looming"]["position"] == "random":
+                # set random position between 0 and 640
+                position = (random.randint(0, 640), self.screen.get_height() / 2)
+            if self.params["stim_params"]["looming"]["radius"] == "random":
+                radius = random.randint(self.screen.get_height()/2, self.screen.get_height())
+
+
+    def setup_display(self):
+        logging.debug("Initializing pygame.")
         os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
-        # Initialize the display
         pygame.init()
-        self.screen = pygame.display.set_mode(screen_resolution, pygame.NOFRAME)
+        self.screen = pygame.display.set_mode(
+            self.params["stim_params"]["window"]["size"], pygame.NOFRAME
+        )
         pygame.display.set_caption("Fly Tracking Stimuli Display")
 
     def setup_zmq(self, server_ip="localhost", sub_port=5556, handshake_port=5557):
-        logging.debug(f"Process {os.getpid()} setting up zmq")
+        logging.debug("Visual stimuli display connecting to server")
         # Initialize the subscriber
         self.subscriber = Subscriber(server_ip, sub_port, handshake_port)
         self.subscriber.subscribe("")
@@ -125,10 +149,12 @@ class StimuliDisplay:
     def run(self):
         logging.info("Starting display server")
         # Initialize the display and zmq
-        self.setup_zmq()
+        if self.server_ip is not None:
+            self.setup_zmq()
         self.setup_display()
 
         clock = pygame.time.Clock()
+        trigger = False
 
         # Main loop
         while self.running:
@@ -137,16 +163,21 @@ class StimuliDisplay:
                     logging.debug("Received quit event")
                     break
 
-            try:
-                msg = self.socket.recv_string(zmq.NOBLOCK)
-            except zmq.Again:
-                msg = None
+            if self.server_ip is not None:
+                try:
+                    msg = self.socket.recv_string(zmq.NOBLOCK)
+                except zmq.Again:
+                    msg = None
 
-            if msg == "kill":
-                logging.debug("Received kill message")
-                break
-            elif msg:
-                self.handle_message(msg)
+                if msg == "kill":
+                    logging.debug("Received kill message")
+                    break
+                else:
+                    trigger = True
+
+            if trigger:
+                self.setup_dynamic_stimuli()
+                trigger = False
 
             self.update_and_render_stimuli()
             pygame.display.flip()
@@ -154,39 +185,12 @@ class StimuliDisplay:
 
         pygame.quit()
 
-    def handle_message(self, msg):
-        # Parse the message and create the appropriate stimulus
-        try:
-            data = json.loads(msg)
-            if "type" in data:
-                if data["type"] == "looming":
-                    self.stimuli["looming"] = LoomingStimulus(
-                        self.screen,
-                        (data["x"], data["y"]),
-                        data["initial_size"],
-                        data["final_size"],
-                        data["color"],
-                        data["duration"],
-                        data["expansion_type"],
-                    )
-                elif data["type"] == "grating":
-                    self.stimuli["grating"] = GratingStimulus(
-                        self.screen, data["width"], data["speed"], data["color"]
-                    )
-                elif data["type"] == "static":
-                    self.stimuli["static"] = StaticStimulus(
-                        self.screen, data["image_path"]
-                    )
-
-        except json.JSONDecodeError:
-            print("Received non-JSON message:", msg)
-
     def update_and_render_stimuli(self):
-        self.screen.fill((255, 255, 255))  # Clear screen with black
+        self.screen.fill((255, 255, 255))  # Clear screen with white
         for key, value in self.stimuli.items():
             value.update()
             value.render()
-            
+
             # Remove looming stimuli that have reached their final size
             if (
                 isinstance(value, LoomingStimulus)
@@ -194,8 +198,8 @@ class StimuliDisplay:
             ):
                 del self.stimuli[key]
 
-# To run the display
-if __name__ == "__main__":
+
+def parse_cmd():
     parser = argparse.ArgumentParser(description="Stimuli Display")
     parser.add_argument(
         "--server_ip", type=str, default="localhost", help="Server IP address"
@@ -206,7 +210,30 @@ if __name__ == "__main__":
     parser.add_argument(
         "--handshake_port", type=int, default=5557, help="Handshake port number"
     )
+    parser.add_argument(
+        "--static",
+        type=bool,
+        default=True,
+        help="Whether to display static stimuli",
+    )
+    parser.add_argument(
+        "--looming",
+        type=bool,
+        default=False,
+        help="Whether to display looming stimuli",
+    )
+    parser.add_argument(
+        "--grating",
+        type=bool,
+        default=False,
+        help="Whether to display grating stimuli",
+    )
     args = parser.parse_args()
+    return args
 
-    display = StimuliDisplay(args.server_ip, args.sub_port, args.handshake_port)
+
+# To run the display
+if __name__ == "__main__":
+    args = parse_cmd()
+    display = StimuliDisplay(args)
     display.run()
