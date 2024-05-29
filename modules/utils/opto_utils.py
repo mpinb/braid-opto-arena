@@ -72,9 +72,9 @@ def check_position(pos, trigger_params):
         )
     elif trigger_params["type"] == "zone":
         in_position = (
-            0.1 <= pos["z"] <= 0.2
-            and -0.084 <= pos["x"] <= 0.065
-            and -0.054 <= pos["y"] <= 0.095
+            trigger_params["zmin"] <= pos["z"] <= trigger_params["zmax"]
+            and trigger_params["xmin"] <= pos["x"] <= trigger_params["xmax"]
+            and trigger_params["ymin"] <= pos["y"] <= trigger_params["ymax"]
         )
 
     return in_position

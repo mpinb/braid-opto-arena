@@ -9,6 +9,10 @@ min_trigger_interval = 5  # Minimum time between activations in seconds
 min_radius = 0.025        # Minimum radius for activation in meters
 zmin = 0.15               # Minimum z for activation in meters
 zmax = 0.25               # Maximum z for activation in meters
+xmin = -0.025             # Minimum x for activation in meters
+xmax = 0.025              # Maximum x for activation in meters
+ymin = -0.025             # Minimum y for activation in meters
+ymax = 0.025              # Maximum y for activation in meters
 center_x = 0              # Arena center x in meters
 center_y = 0              # Arena center y in meters
 

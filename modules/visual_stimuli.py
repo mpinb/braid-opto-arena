@@ -4,12 +4,13 @@ import os
 import random
 import time
 from abc import ABC, abstractmethod
-
+import numpy as np
 import pygame
 import toml
 import zmq
 from messages import Subscriber
 from utils.csv_writer import CsvWriter
+from scipy.interpolate import interp1d
 
 # Constants
 SCREEN_WIDTH = 640
@@ -132,6 +133,10 @@ class GratingStimulus(Stimulus):
     def update(self, screen, time_elapsed):
         # Implementation for grating stimulus
         pass
+
+
+def heading_to_screen(heading):
+    calibration_matrix = np.load()
 
 
 # Main function
