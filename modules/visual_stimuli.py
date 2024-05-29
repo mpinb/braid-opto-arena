@@ -67,7 +67,7 @@ class LoomingStimulus(Stimulus):
         elif self.position_type == "closed-loop" and heading_direction is not None:
             self.position = heading_direction
         else:
-            self.position = SCREEN_WIDTH // 2
+            self.position = self.position_type
         self.start_time = time.time()
         self.expanding = True
 
@@ -76,15 +76,36 @@ class LoomingStimulus(Stimulus):
             elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
             if elapsed < self.duration:
                 if self.type == "linear":
-                    radius = (elapsed / self.duration) * self.max_radius
+                    self.radius = (elapsed / self.duration) * self.max_radius
                 elif self.type == "exponential":
-                    radius = (
+                    self.radius = (
                         (2 ** (elapsed / self.duration) - 1) / (2 - 1) * self.max_radius
                     )
+
+                # Draw the circle normally
                 position = wrap_around_position(self.position, SCREEN_WIDTH)
                 pygame.draw.circle(
-                    screen, self.color, (position, SCREEN_HEIGHT // 2), int(radius)
+                    screen, self.color, (position, SCREEN_HEIGHT // 2), int(self.radius)
                 )
+
+                # Check for wrap-around and draw additional circles if necessary
+                if position - self.radius < 0:  # Circle extends past the left edge
+                    pygame.draw.circle(
+                        screen,
+                        self.color,
+                        (position + SCREEN_WIDTH, SCREEN_HEIGHT // 2),
+                        int(self.radius),
+                    )
+                if (
+                    position + self.radius > SCREEN_WIDTH
+                ):  # Circle extends past the right edge
+                    pygame.draw.circle(
+                        screen,
+                        self.color,
+                        (position - SCREEN_WIDTH, SCREEN_HEIGHT // 2),
+                        int(self.radius),
+                    )
+
             else:
                 self.expanding = False
 
@@ -121,22 +142,23 @@ def main(config_path, standalone):
     pygame.display.set_caption("Stimulus Display")
 
     # Load configuration
-    with open(config_path, "rb") as f:
-        config = toml.load(f)
+    # with open(config_path, "rb") as f:
+    config = toml.load(config_path)
 
     stim_config = config["stim_params"]
 
     # Create stimuli
     stimuli = []
-    if "static" in stim_config:
+    if stim_config["static"].get("active", False):
         stimuli.append(StaticImageStimulus(stim_config["static"]))
-    if "looming" in stim_config:
+    if stim_config["looming"].get("active", False):
         stimuli.append(LoomingStimulus(stim_config["looming"]))
-    if "grating" in stim_config:
+    if stim_config["grating"].get("active", False):
         stimuli.append(GratingStimulus(stim_config["grating"]))
 
     # CSV logging setup
-    csv_writer = CsvWriter(os.path.join(config["base_dir"], "stim.csv"))
+    if not standalone:
+        csv_writer = CsvWriter(os.path.join(config["base_dir"], "stim.csv"))
 
     # ZMQ setup if not standalone
     subscriber = None
@@ -188,7 +210,8 @@ def main(config_path, standalone):
         clock.tick(60)
 
     # Clean up
-    csv_writer.close()
+    if not standalone:
+        csv_writer.close()
     pygame.quit()
 
 
@@ -198,7 +221,11 @@ if __name__ == "__main__":
         "config_file", type=str, help="Path to the configuration file (.toml)"
     )
     parser.add_argument(
-        "base_dir", type=str, required=False, help="Base directory to save stim.csv"
+        "--base_dir",
+        type=str,
+        required=False,
+        default="",
+        help="Base directory to save stim.csv",
     )
     parser.add_argument(
         "--standalone",

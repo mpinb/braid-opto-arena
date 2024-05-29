@@ -19,6 +19,17 @@
             ]
         },
         {
+            "name": "visual_stimuli.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./modules/visual_stimuli.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "./params.toml",
+            ]
+        },
+        {
             "name": "ximea camera app debug",
             "type": "cppdbg",
             "request": "launch",

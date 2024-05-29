@@ -28,20 +28,23 @@ color = [1, 1, 1] # Color in RGB
 units = "pix"     # Units
 
 [stim_params.static]
+active = false
 image = "./data/static.jpg" # Path to static image
 
 [stim_params.grating]
+active = false
 frequency = 0   # Frequency
 orientation = 0 # Orientation
 direction = 0   # Direction
 color = "black" # Color
 
 [stim_params.looming]
-stim_type = "linear"  # Stimulus type
-position = "random"   # Position
-max_radius = "random" # Maximum radius
-duration = "random"   # Duration
-color = "black"       # Color
+active = true
+stim_type = "exponential" # Stimulus type
+position = 0              # Position
+max_radius = 64           # Maximum radius
+duration = 500            # Duration
+color = "black"           # Color
 
 [highspeed]
 type = "ximea" # Type of high-speed camera
