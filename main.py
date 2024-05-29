@@ -19,12 +19,15 @@ PSU_VOLTAGE = 30
 
 
 def read_parameters(params_file: str) -> dict:
+    """Reads the parameters from a toml file."""
     with open(params_file, "rb") as f:
         params = tomllib.load(f)
     return params
 
 
 def check_braid_running(root_folder: str, debug: bool) -> str:
+    """Checks if braid is running and returns the folder where the experiment data will be saved.
+    If debug is True, returns a test folder."""
     if not debug:
         return check_braid_folder(root_folder)
     else:
@@ -33,6 +36,7 @@ def check_braid_running(root_folder: str, debug: bool) -> str:
 
 
 def copy_files_to_folder(folder: str, file: str):
+    """Copies the params.toml file to the experiment folder."""
     shutil.copy(file, folder)
     with open(os.path.join(folder, "params.toml"), "w") as f:
         f.write(
@@ -41,6 +45,7 @@ def copy_files_to_folder(folder: str, file: str):
 
 
 def initialize_backlighting_power_supply(port="/dev/powersupply"):
+    """Initializes the backlighting power supply."""
     try:
         ps = PowerSupply(port=port)
         ps.set_voltage(PSU_VOLTAGE)
@@ -49,40 +54,54 @@ def initialize_backlighting_power_supply(port="/dev/powersupply"):
 
 
 def create_arduino_device(port: str, baudrate: int = 9600) -> serial.Serial:
+    """Creates an arduino device."""
     return serial.Serial(port, baudrate=baudrate, timeout=1)
 
 
 class CsvWriter:
+    """Class to write data to a csv file."""
+
     def __init__(self, filename):
+        """Initializes the csv writer."""
         self.filename = filename
         self.csv_file = open(filename, "a+")
         self.write_header = True
         self.csv_writer = csv.writer(self.csv_file)
 
     def write(self, data):
+        """Writes data to the csv file."""
+
+        # Write header if necessary
         if self.write_header:
             self.csv_writer.writerow(data.keys())
             self.write_header = False
+
+        # Write data to csv
         self.csv_writer.writerow(data.values())
         self.csv_file.flush()
 
     def check_header(self):
+        # Check if the file is empty
         if os.stat(self.filename).st_size > 0:
             self.write_header = False
 
     def close(self):
+        # Close the csv file
         self.csv_file.close()
 
 
 class Flydra2Proxy:
+    """Class to connect to the flydra2 proxy and get data from it."""
+
     def __init__(self, flydra2_url: str = "http://10.40.80.6:8397/"):
+        # Check if the flydra2 proxy is running
         self.flydra2_url = flydra2_url
         self.session = requests.session()
         r = self.session.get(self.flydra2_url)
         assert r.status_code == requests.codes.ok
 
     def data_stream(self):
-        """Generator that yields parsed data chunks from the event stream."""
+        # Generator that yields parsed data chunks from the event stream.
         events_url = self.flydra2_url + "events"
         r = self.session.get(
             events_url, stream=True, headers={"Accept": "text/event-stream"}
@@ -93,7 +112,7 @@ class Flydra2Proxy:
                 yield data
 
     def parse_chunk(self, chunk):
-        """Parses a chunk and extracts the data."""
+        # Parses a chunk and extracts the data.
         DATA_PREFIX = "data: "
         lines = chunk.strip().split("\n")
         assert len(lines) == 2
@@ -104,7 +123,7 @@ class Flydra2Proxy:
         return data
 
     def send_to_udp(self, udp_host, udp_port):
-        """Send parsed data to UDP after verifying version."""
+        # Send parsed data to UDP after verifying version.
         addr = (udp_host, udp_port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         for data in self.data_stream():
@@ -120,6 +139,7 @@ class Flydra2Proxy:
 
 
 def _get_opto_trigger_params(trigger_params: dict):
+    """Get the opto trigger parameters."""
     if random.random() < trigger_params["sham_perc"]:
         logging.debug("Sham opto.")
         return 0, 0, 0
@@ -132,6 +152,7 @@ def _get_opto_trigger_params(trigger_params: dict):
 
 
 def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict, pos: dict):
+    """Trigger the opto board."""
     stim_duration, stim_intensity, stim_frequency = _get_opto_trigger_params(
         trigger_params
     )
@@ -224,7 +245,6 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         # start stimuli here
         pub.wait_for_subscriber()
         pub.publish("stimuli", "start")
-        pass
 
     trigger_params = params["trigger_params"]
 
