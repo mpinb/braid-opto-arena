@@ -6,18 +6,16 @@ channels:
 
 dependencies:
   - python=3.11
-  - pip
   - matplotlib
   - numpy
   - pandas
   - tqdm
   - pyqtgraph
   - pre-commit
-  - pip:
-    - pyserial
-    - requests
-    - GitPython
-    - pygame
-    - pyzmq
-    - PyQt5
-    - ruff
+  - pyserial
+  - requests
+  - gitpython
+  - pygame
+  - pyzmq
+  - pyqt
+  - ruff
