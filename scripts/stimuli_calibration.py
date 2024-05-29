@@ -1,5 +1,5 @@
 import os
-
+import numpy as np
 import pygame
 
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
@@ -31,26 +31,28 @@ circle_color = (255, 0, 0)  # Red
 # Set the font and font size for the circle labels
 font = pygame.font.Font(None, 30)
 
-stimuli_position = list(range(0, 640 + 32, 32))
-
-# Calculate the x-position of the circle
-x = stimuli_position[20]
-print(x)
+stimuli_position = np.arange(0, 640 + 32, 128, dtype=int)
 
 # Calculate the y-position of the circle
 y = screen_height // 2
 
 # Draw the circle
-pygame.draw.circle(screen, circle_color, (int(x), y), circle_radius)
+for x in stimuli_position:
+    pygame.draw.circle(screen, circle_color, (int(x), y), circle_radius)
 
-# Create a text surface with the x-position label
-text_surface = font.render(str(int(x)), True, (0, 0, 0))  # Black
+    if x == 0:
+        text = "0/640"
+    else:
+        text = str(x)
 
-# Calculate the position of the text to center it within the circle
-text_rect = text_surface.get_rect(center=(int(x), y))
+    # Create a text surface with the x-position label
+    text_surface = font.render(text, True, (0, 0, 0))  # Black
 
-# Draw the text surface onto the screen
-screen.blit(text_surface, text_rect)
+    # Calculate the position of the text to center it within the circle
+    text_rect = text_surface.get_rect(center=(int(x), y))
+
+    # Draw the text surface onto the screen
+    screen.blit(text_surface, text_rect)
 
 # Update the screen
 pygame.display.flip()
