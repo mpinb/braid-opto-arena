@@ -1,8 +1,6 @@
-import glob
 import logging
 import multiprocessing as mp
 import os
-import shutil
 import time
 from collections import deque
 
@@ -24,13 +22,13 @@ def video_writer(video_writer_recv: mp.Pipe, output_folder: str):
         "-cq": "18",
         "-disable_force_termination": True,
     }
-    
+
     while True:
         logging.info("Waiting for data to write to video.")
         trigger_data, frame_buffer = video_writer_recv.recv()
         if trigger_data == "kill":
             break
-        
+
         logging.info(f"Recieved trigger data: {trigger_data}")
         t_write_start = time.time()
         ntrig = trigger_data["ntrig"]
@@ -110,7 +108,7 @@ def ximea_camera(
 
     frames_before = int(time_before * fps)
     frames_after = int(time_after * fps)
-    
+
     pre_buffer = deque(maxlen=frames_before)
     pre_nframes = deque(maxlen=frames_before)
     pre_acq_nframes = deque(maxlen=frames_before)
@@ -161,7 +159,7 @@ def ximea_camera(
         frame = img.get_image_data_numpy()
         nframe = img.nframe
         acq_nframe = img.acq_nframe
-        
+
         if not switch:
             pre_buffer.append(frame)
             pre_nframes.append(nframe)
@@ -181,25 +179,32 @@ def ximea_camera(
             switch = False
             break
 
-
     import numpy as np
-    logging.debug(f"pre_nframes mean: {np.mean(np.diff(pre_nframes))}, std: {np.std(np.diff(pre_nframes))}")
-    logging.debug(f"pre_acq_nframes mean: {np.mean(np.diff(pre_acq_nframes))}, std: {np.std(np.diff(pre_acq_nframes))}")
 
-    logging.debug(f"post_nframes mean: {np.mean(np.diff(post_nframes))}, std: {np.std(np.diff(post_nframes))}")
-    logging.debug(f"post_acq_nframes mean: {np.mean(np.diff(post_acq_nframes))}, std: {np.std(np.diff(post_acq_nframes))}")
+    logging.debug(
+        f"pre_nframes mean: {np.mean(np.diff(pre_nframes))}, std: {np.std(np.diff(pre_nframes))}"
+    )
+    logging.debug(
+        f"pre_acq_nframes mean: {np.mean(np.diff(pre_acq_nframes))}, std: {np.std(np.diff(pre_acq_nframes))}"
+    )
+
+    logging.debug(
+        f"post_nframes mean: {np.mean(np.diff(post_nframes))}, std: {np.std(np.diff(post_nframes))}"
+    )
+    logging.debug(
+        f"post_acq_nframes mean: {np.mean(np.diff(post_acq_nframes))}, std: {np.std(np.diff(post_acq_nframes))}"
+    )
 
     logging.debug(f"Stopping camera {cam_serial}.")
     cam.stop_acquisition()
     cam.close_device()
 
     logging.debug("Stopping video writer process.")
-    video_writer_send.send(["kill",  None])
+    video_writer_send.send(["kill", None])
     video_writer_p.join()
 
 
 if __name__ == "__main__":
-
     # set logging level to DEUBG
     logging.basicConfig(level=logging.DEBUG)
 
@@ -213,7 +218,12 @@ if __name__ == "__main__":
         target=ximea_camera,
         args=(
             None,
-            {"highspeed": {"parameters": {"time_before": 1, "time_after": 2, "fps": 200}}, "video_save_folder": "test_folder"},
+            {
+                "highspeed": {
+                    "parameters": {"time_before": 1, "time_after": 2, "fps": 200}
+                },
+                "video_save_folder": "test_folder",
+            },
             barrier,
             trigger_recv,
             kill_event,

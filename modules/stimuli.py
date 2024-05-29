@@ -6,7 +6,7 @@ import os
 from messages import Subscriber
 import logging
 import random
-from utils import CsvWriter
+
 
 class Stimulus:
     def __init__(self, screen):
@@ -127,8 +127,9 @@ class StimuliDisplay:
                 # set random position between 0 and 640
                 position = (random.randint(0, 640), self.screen.get_height() / 2)
             if self.params["stim_params"]["looming"]["radius"] == "random":
-                radius = random.randint(self.screen.get_height()/2, self.screen.get_height())
-
+                radius = random.randint(
+                    self.screen.get_height() / 2, self.screen.get_height()
+                )
 
     def setup_display(self):
         logging.debug("Initializing pygame.")

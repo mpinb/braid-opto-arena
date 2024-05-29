@@ -2,7 +2,6 @@ import glob
 import logging
 import multiprocessing as mp
 import os
-import shutil
 import time
 from collections import deque
 
@@ -34,9 +33,7 @@ def video_writer(video_writer_recv: mp.Pipe, output_folder: str):
         frame = trigger_data["frame"]
 
         # Create output folder and filename
-        output_file = (
-            f"{ntrig}_obj_id_{obj_id}_cam_{cam_serial}_frame_{frame}.mp4"  # noqa: E501
-        )
+        output_file = f"{ntrig}_obj_id_{obj_id}_cam_{cam_serial}_frame_{frame}.mp4"  # noqa: E501
         output_filename = os.path.join(output_folder, output_file)
 
         logging.debug("Starting WriteGear videowriter.")

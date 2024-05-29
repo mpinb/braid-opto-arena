@@ -13,12 +13,9 @@ from __future__ import print_function
 import argparse
 import csv
 import json
-import socket
-import time
 from queue import Queue
 from threading import Thread
 
-import pyvisa as visa
 import requests
 from ThorlabsPM100 import USBTMC, ThorlabsPM100
 

@@ -12,6 +12,7 @@ dependencies:
   - pandas
   - tqdm
   - pyqtgraph
+  - pre-commit
   - pip:
     - pyserial
     - requests
@@ -19,3 +20,4 @@ dependencies:
     - pygame
     - pyzmq
     - PyQt5
+    - ruff
