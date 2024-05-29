@@ -1,12 +1,15 @@
-import pygame
-import zmq
-import json
-import toml
-import csv
-import time
 import argparse
+import json
+import os
 import random
+import time
 from abc import ABC, abstractmethod
+
+import pygame
+import toml
+import zmq
+from messages import Subscriber
+from utils.csv_writer import CsvWriter
 
 # Constants
 SCREEN_WIDTH = 640
@@ -27,10 +30,15 @@ class Stimulus(ABC):
 class StaticImageStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
-        self.image = pygame.image.load(config["path"]).convert()
+        self.image = pygame.image.load(config["image"]).convert()
 
     def update(self, screen, time_elapsed):
         screen.blit(self.image, (0, 0))
+
+
+# Helper function for wrap-around
+def wrap_around_position(x, screen_width):
+    return x % screen_width
 
 
 # Looming stimulus
@@ -40,7 +48,7 @@ class LoomingStimulus(Stimulus):
         self.max_radius = self._get_value(config["max_radius"], 0, 100)
         self.duration = self._get_value(config["duration"], 150, 500)
         self.color = pygame.Color(config["color"])
-        self.position_type = config.get("position", "center")
+        self.position_type = config["position"]
         self.position = None
         self.start_time = None
         self.expanding = False
@@ -73,8 +81,9 @@ class LoomingStimulus(Stimulus):
                     radius = (
                         (2 ** (elapsed / self.duration) - 1) / (2 - 1) * self.max_radius
                     )
+                position = wrap_around_position(self.position, SCREEN_WIDTH)
                 pygame.draw.circle(
-                    screen, self.color, (self.position, SCREEN_HEIGHT // 2), int(radius)
+                    screen, self.color, (position, SCREEN_HEIGHT // 2), int(radius)
                 )
             else:
                 self.expanding = False
@@ -112,29 +121,29 @@ def main(config_path, standalone):
     pygame.display.set_caption("Stimulus Display")
 
     # Load configuration
-    config = toml.load(config_path)
+    with open(config_path, "rb") as f:
+        config = toml.load(f)
+
+    stim_config = config["stim_params"]
 
     # Create stimuli
     stimuli = []
-    for stim_config in config["stimuli"]:
-        if stim_config["type"] == "static":
-            stimuli.append(StaticImageStimulus(stim_config))
-        elif stim_config["type"] == "looming":
-            stimuli.append(LoomingStimulus(stim_config))
-        elif stim_config["type"] == "grating":
-            stimuli.append(GratingStimulus(stim_config))
+    if "static" in stim_config:
+        stimuli.append(StaticImageStimulus(stim_config["static"]))
+    if "looming" in stim_config:
+        stimuli.append(LoomingStimulus(stim_config["looming"]))
+    if "grating" in stim_config:
+        stimuli.append(GratingStimulus(stim_config["grating"]))
 
     # CSV logging setup
-    csv_file = open("stim.csv", mode="a", newline="")
-    csv_writer = csv.writer(csv_file)
+    csv_writer = CsvWriter(os.path.join(config["base_dir"], "stim.csv"))
 
     # ZMQ setup if not standalone
-    context, socket = None, None
+    subscriber = None
     if not standalone:
-        context = zmq.Context()
-        socket = context.socket(zmq.SUB)
-        socket.connect("tcp://localhost:5556")
-        socket.setsockopt_string(zmq.SUBSCRIBE, "")
+        subscriber = Subscriber(pub_port=5556, handshake_port=5557)
+        subscriber.handshake()
+        subscriber.subscribe("")
 
     # Main loop
     running = True
@@ -151,13 +160,14 @@ def main(config_path, standalone):
 
         if not standalone:
             try:
-                message = socket.recv_string(flags=zmq.NOBLOCK)
+                message = subscriber.receive()
                 if message == "kill":
                     running = False
                     break
                 else:
                     trigger_info = json.loads(message)
-                    heading_direction = trigger_info.get("heading_direction")
+                    heading_direction = trigger_info["heading_direction"]
+
                     # Handle trigger for looming stimulus
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):
@@ -165,7 +175,8 @@ def main(config_path, standalone):
                             updated_info = stim.get_trigger_info()
                             trigger_info.update(updated_info)
                             # Log the event
-                            csv_writer.writerow(trigger_info.values())
+                            csv_writer.write(trigger_info)
+
             except zmq.Again:
                 pass  # No message received
 
@@ -177,7 +188,7 @@ def main(config_path, standalone):
         clock.tick(60)
 
     # Clean up
-    csv_file.close()
+    csv_writer.close()
     pygame.quit()
 
 
@@ -187,8 +198,12 @@ if __name__ == "__main__":
         "config_file", type=str, help="Path to the configuration file (.toml)"
     )
     parser.add_argument(
+        "base_dir", type=str, required=False, help="Base directory to save stim.csv"
+    )
+    parser.add_argument(
         "--standalone",
         action="store_true",
+        default="False",
         help="Run the program in standalone mode without ZMQ",
     )
     args = parser.parse_args()

@@ -3,59 +3,59 @@ opto_trigger = '/dev/opto_trigger'
 camera_trigger = '/dev/camera_trigger'
 
 [trigger_params]
-type = "radius"
-min_trajectory_time = 1.0 # minimum trajectory time (in seconds)
-min_trigger_interval = 5  # minimum time between activations (in seconds)
-min_radius = 0.025        # minimum radius for activation (in meters)
-zmin = 0.15               # minimum z for activation (in meters)
-zmax = 0.25               # maximum z for activation (in meters)
-center_x = 0              # arena center x in meters (in meters)
-center_y = 0              # arena center y in meters (in meters)
+type = "radius"           # Type of trigger
+min_trajectory_time = 1.0 # Minimum trajectory time in seconds
+min_trigger_interval = 5  # Minimum time between activations in seconds
+min_radius = 0.025        # Minimum radius for activation in meters
+zmin = 0.15               # Minimum z for activation in meters
+zmax = 0.25               # Maximum z for activation in meters
+center_x = 0              # Arena center x in meters
+center_y = 0              # Arena center y in meters
 
 [opto_params]
-duration = 300  # in milliseconds
-intensity = 255 # in 0-255 range
-frequency = 0   # in Hz
-sham_perc = 0.1 # percentage of sham trials
+duration = 300  # Duration in milliseconds
+intensity = 255 # Intensity in 0-255 range
+frequency = 0   # Frequency in Hz
+sham_perc = 0.1 # Percentage of sham trials
 
 [stim_params]
 [stim_params.window]
-size = [640, 128]
-pos = [0, 0]
-fullscr = false
-screen = 1
-color = [1, 1, 1]
-units = "pix"
+size = [640, 128] # Window size in pixels
+pos = [0, 0]      # Position
+fullscr = false   # Full screen mode
+screen = 1        # Screen number
+color = [1, 1, 1] # Color in RGB
+units = "pix"     # Units
 
 [stim_params.static]
-image = "./data/static.jpg"
+image = "./data/static.jpg" # Path to static image
 
 [stim_params.grating]
-frequency = 0
-orientation = 0
-direction = 0
-color = "black"
+frequency = 0   # Frequency
+orientation = 0 # Orientation
+direction = 0   # Direction
+color = "black" # Color
 
 [stim_params.looming]
-stim_type = "linear"
-position = "random"
-max_radius = "random"
-duration = "random"
-color = "black"
+stim_type = "linear"  # Stimulus type
+position = "random"   # Position
+max_radius = "random" # Maximum radius
+duration = "random"   # Duration
+color = "black"       # Color
 
 [highspeed]
-type = "ximea"
+type = "ximea" # Type of high-speed camera
 
 [highspeed.cameras]
-camera1 = "23047980"
-camera2 = "23096298"
-camera3 = "23088879"
-camera4 = "23088882"
+camera1 = "23047980" # Camera 1 serial number
+camera2 = "23096298" # Camera 2 serial number
+camera3 = "23088879" # Camera 3 serial number
+camera4 = "23088882" # Camera 4 serial number
 
 [highspeed.parameters]
-pre_trigger_mode = true
-time_before = 1
-time_after = 2
-fps = 500
-ExposureTime = 1900
-SensorReadoutMode = "Fast"
+pre_trigger_mode = true      # Pre-trigger mode enabled
+time_before = 1              # Time before trigger in seconds
+time_after = 2               # Time after trigger in seconds
+fps = 500                    # Frames per second
+exposure_time = 1900         # Exposure time in microseconds
+sensor_readout_mode = "Fast" # Sensor readout mode

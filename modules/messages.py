@@ -80,7 +80,7 @@ class Subscriber:
 
     def receive(self):
         try:
-            message = self.sub_socket.recv_string()
+            message = self.sub_socket.recv_string(flags=zmq.NOBLOCK)
             logging.info(f"Received message: {message}")
             return message
         except zmq.Again:

@@ -3,20 +3,22 @@ import json
 import os
 import subprocess
 import time
+from collections import deque
+
+import numpy as np
 
 from modules.messages import Publisher
-from modules.utils import (
-    CsvWriter,
-    Flydra2Proxy,
-    check_braid_running,
-    check_position,
-    copy_files_to_folder,
+from modules.utils.config_utils import read_parameters_file
+from modules.utils.csv_writer import CsvWriter
+from modules.utils.file_utils import copy_files_to_folder
+from modules.utils.flydra_proxy import Flydra2Proxy
+from modules.utils.folder_utils import check_braid_running
+from modules.utils.hardware_utils import (
     create_arduino_device,
-    get_video_output_folder,
     initialize_backlighting_power_supply,
-    read_parameters_file,
-    trigger_opto,
 )
+from modules.utils.opto_utils import check_position, trigger_opto
+from modules.utils.video_utils import get_video_output_folder
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -81,6 +83,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     obj_birth_times = {}
     last_trigger_time = time.time()
     ntrig = 0
+    heading_direction = deque(maxlen=5)
 
     # Start main loop
     try:
@@ -131,7 +134,13 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # Get position and radius
             pos = msg_dict["Update"]
-            pub_plot.send_string(f"{pos['x']} {pos['y']} {pos['z']}")
+
+            # Calculate heading direction
+            heading_direction.append(np.arctan2(pos["yvel"], pos["xvel"]))
+            pos["heading_direction"] = np.nanmean(heading_direction)
+
+            if args.realtime_plotting:
+                pub_plot.send_string(f"{pos['x']} {pos['y']} {pos['z']}")
 
             if check_position(pos, trigger_params):
                 # Update last trigger time

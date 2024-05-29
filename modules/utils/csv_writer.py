@@ -26,7 +26,7 @@ class CsvWriter:
     def __init__(self, filename):
         self.filename = filename
         self.csv_file = open(filename, "a+")
-        self.write_header = True
+        self.write_header = self.check_header()
         self.csv_writer = csv.writer(self.csv_file)
 
     def write(self, data):
