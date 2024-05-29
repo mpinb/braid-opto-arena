@@ -40,19 +40,19 @@ void loop() {
     newData = false;
 
     digitalWrite(LED_PIN, HIGH);
-    
+
     if (frequency == 0) {
       Serial.println("ONOFF");
       analogWrite(9, intensity);
       delay(duration);
       analogWrite(9, 0);
-      
+
     } else {
       long interval = (1000 / frequency) / 2;
       Serial.println("Blink");
-      
+
       unsigned long start_time = millis();
-      
+
       while (millis() - start_time <= duration) {
         delay(interval);
         analogWrite(9, intensity);

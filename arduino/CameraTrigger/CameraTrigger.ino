@@ -18,20 +18,20 @@ void setup() {
 }
 
 void loop() {
-  
+
   unsigned long currentMicros = micros();
-  
+
   if (Serial.available() > 0){
     incoming = Serial.parseInt(SKIP_ALL, '\n');
     Serial << "Triggering camera(s) at " << incoming << " Hz" << endl;
     interval = 1000000/incoming/2; // In Microseconds
     Serial << "Interval = " << interval << endl;
   }
-  
+
   if (incoming == 0) {
-    return; 
+    return;
   }
-  
+
   if (currentMicros - previousMicros >= interval) {
     // save the last time you blinked the trigger
     previousMicros = currentMicros;
