@@ -55,18 +55,23 @@ class LoomingStimulus(Stimulus):
         self.expanding = False
         self.type = config["stim_type"]
 
+        if self.position_type == "closed-loop":
+            self.interp_screen_to_heading, self.interp_heading_to_screen = (
+                _generate_calibration_functions("./modules/calibration_matrix.npz")
+            )
+
     def _get_value(self, value, min_val, max_val):
         if value == "random":
             return random.randint(min_val, max_val)
         return value
 
     def start_expansion(self, heading_direction=None):
-        self.max_radius = self._get_value(self.config["max_radius"], 0, 100)
+        self.max_radius = self._get_value(self.config["max_radius"], 32, 64)
         self.duration = self._get_value(self.config["duration"], 150, 500)
         if self.position_type == "random":
             self.position = self._get_value("random", 0, SCREEN_WIDTH)
         elif self.position_type == "closed-loop" and heading_direction is not None:
-            self.position = heading_direction
+            self.position = self.interp_heading_to_screen(heading_direction)
         else:
             self.position = self.position_type
         self.start_time = time.time()
@@ -135,8 +140,38 @@ class GratingStimulus(Stimulus):
         pass
 
 
-def heading_to_screen(heading):
-    calibration_matrix = np.load()
+def _generate_calibration_functions(calibration_matrix_file):
+    calibration_matrix = np.load("./modules/calibration_matrix.npz")[
+        "calibration_matrix"
+    ]
+
+    # Create interpolation functions
+    screen_positions = calibration_matrix[:, 0]
+    heading_directions = calibration_matrix[:, 1]
+
+    # Interpolation function from screen position to heading direction
+    interp_screen_to_heading = interp1d(
+        screen_positions, heading_directions, kind="linear", fill_value="extrapolate"
+    )
+
+    # Interpolation function from heading direction to screen position
+    # Note: Ensure the heading directions are sorted for proper interpolation
+    sorted_indices = np.argsort(heading_directions)
+    sorted_heading_directions = heading_directions[sorted_indices]
+    sorted_screen_positions = screen_positions[sorted_indices]
+
+    interp_heading_to_screen = interp1d(
+        sorted_heading_directions,
+        sorted_screen_positions,
+        kind="linear",
+        fill_value="extrapolate",
+    )
+
+    return interp_screen_to_heading, interp_heading_to_screen
+
+
+def interpolate(interp_function, value):
+    return interp_function(value)
 
 
 # Main function
