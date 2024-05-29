@@ -2,6 +2,7 @@
 opto_trigger = '/dev/opto_trigger'
 camera_trigger = '/dev/camera_trigger'
 
+# opto trigger parameters
 [trigger_params]
 type = "radius"           # Type of trigger
 min_trajectory_time = 1.0 # Minimum trajectory time in seconds
@@ -16,13 +17,18 @@ ymax = 0.025              # Maximum y for activation in meters
 center_x = 0              # Arena center x in meters
 center_y = 0              # Arena center y in meters
 
+# opto light parameters
 [opto_params]
+active = false
 duration = 300  # Duration in milliseconds
 intensity = 255 # Intensity in 0-255 range
 frequency = 0   # Frequency in Hz
 sham_perc = 0.1 # Percentage of sham trials
 
+# stimulus setup
 [stim_params]
+
+# main window setup
 [stim_params.window]
 size = [640, 128] # Window size in pixels
 pos = [0, 0]      # Position
@@ -31,10 +37,12 @@ screen = 1        # Screen number
 color = [1, 1, 1] # Color in RGB
 units = "pix"     # Units
 
+# static stimulus setup
 [stim_params.static]
 active = false
 image = "./data/static.jpg" # Path to static image
 
+# grating stimulus setup
 [stim_params.grating]
 active = false
 frequency = 0   # Frequency
@@ -42,6 +50,7 @@ orientation = 0 # Orientation
 direction = 0   # Direction
 color = "black" # Color
 
+# looming stimulus setup
 [stim_params.looming]
 active = true
 stim_type = "exponential" # Stimulus type
@@ -50,15 +59,19 @@ max_radius = 64           # Maximum radius
 duration = 500            # Duration
 color = "black"           # Color
 
+# high-speed camera setup
 [highspeed]
+active = false
 type = "ximea" # Type of high-speed camera
 
+# high-speed cameras list
 [highspeed.cameras]
 camera1 = "23047980" # Camera 1 serial number
 camera2 = "23096298" # Camera 2 serial number
 camera3 = "23088879" # Camera 3 serial number
 camera4 = "23088882" # Camera 4 serial number
 
+# high-speed camera parameters
 [highspeed.parameters]
 pre_trigger_mode = true      # Pre-trigger mode enabled
 time_before = 1              # Time before trigger in seconds

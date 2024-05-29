@@ -15,7 +15,8 @@ dependencies:
   - pyserial
   - requests
   - gitpython
-  - pygame
   - pyzmq
   - pyqt
   - ruff
+  - scipy
+  - pygame

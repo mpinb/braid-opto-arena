@@ -6,19 +6,21 @@ import time
 from collections import deque
 
 import numpy as np
-
+import tomllib
 from modules.messages import Publisher
-from modules.utils.config_utils import read_parameters_file
+
 from modules.utils.csv_writer import CsvWriter
-from modules.utils.file_utils import copy_files_to_folder
+from modules.utils.files import (
+    check_braid_running,
+    copy_files_to_folder,
+    get_video_output_folder,
+)
 from modules.utils.flydra_proxy import Flydra2Proxy
-from modules.utils.folder_utils import check_braid_running
-from modules.utils.hardware_utils import (
+from modules.utils.hardware import (
     create_arduino_device,
     initialize_backlighting_power_supply,
 )
-from modules.utils.opto_utils import check_position, trigger_opto
-from modules.utils.video_utils import get_video_output_folder
+from modules.utils.opto import check_position, trigger_opto
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -31,19 +33,22 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     """
 
     # Load params
-    params = read_parameters_file(params_file)
+    with open(params_file, "rb") as f:
+        params = tomllib.load(f)
 
     # Check if braidz is running (see if folder was created)
     params["folder"] = check_braid_running(root_folder, args.debug)
+    braid_folder = params["folder"]
 
     # Copy the params file to the experiment folder
-    copy_files_to_folder(params["folder"], params_file)
+    copy_files_to_folder(braid_folder, params_file)
 
     # Set power supply voltage (for backlighting)
-    initialize_backlighting_power_supply()
+    if not args.debug:
+        initialize_backlighting_power_supply()
 
     # Connect to arduino
-    if args.opto:
+    if params["opto_params"].get("active", False):
         opto_trigger_board = create_arduino_device(
             port=params["arduino_devices"]["opto_trigger"]
         )
@@ -54,7 +59,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # create data publisher
     pub = Publisher(pub_port=5556, handshake_port=5557)
 
-    if args.realtime_plotting:
+    if args.plot:
         import zmq
 
         context = zmq.Context()
@@ -63,20 +68,30 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         subprocess.Popen(["python", "modules/plotting.py"])
 
     # Connect to cameras
-    if args.highspeed:
-        params["video_save_folder"] = get_video_output_folder(params["folder"])
+    if params["highspeed"].get("active", False):
+        params["video_save_folder"] = get_video_output_folder(braid_folder)
         # start camera here
         pub.wait_for_subscriber()
         pub.publish("", params["video_save_folder"])
 
-    if args.static or args.looming or args.grating:
-        subprocess.Popen("python modules/stimuli.py")
+    # check if any visual stimuli is active and start the visual stimuli process
+    if any(
+        [value.get("active", False) for key, value in params["stim_params"].items()]
+    ):
+        subprocess.Popen(
+            [
+                "python",
+                "./modules/visual_stimuli.py",
+                f"{params_file}",
+                "--base_dir",
+                f"{braid_folder}",
+            ]
+        )
         pub.wait_for_subscriber()
-        pub.publish("stimuli", "start")
 
     trigger_params = params["trigger_params"]
 
-    csv_writer = CsvWriter(os.path.join(params["folder"], "opto.csv"))
+    csv_writer = CsvWriter(os.path.join(braid_folder, "opto.csv"))
 
     # initialize main loop parameters
     obj_ids = []
@@ -150,17 +165,12 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 # Add trigger time to dict
                 pos["trigger_time"] = last_trigger_time
                 pos["ntrig"] = ntrig
-
+                pos["main_timestamp"] = tcall
                 # Opto Trigger
                 if args.opto:
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
-                if args.highspeed:
-                    pos["timestamp"] = tcall
-                    pub.publish("", json.dumps(pos).encode("utf-8"))
-
-                if args.stimuli:
-                    pass
+                pub.publish("", json.dumps(pos).encode("utf-8"))
 
                 # Write data to csv
                 csv_writer.write(pos)
@@ -179,22 +189,14 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--opto", action="store_true", default=False)
-    parser.add_argument("--static", action="store_true", default=False)
-    parser.add_argument("--looming", action="store_true", default=False)
-    parser.add_argument("--grating", action="store_true", default=False)
-    parser.add_argument("--highspeed", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=True)
-    parser.add_argument("--realtime_plotting", action="store_true", default=True)
+    parser.add_argument("--plot", action="store_true", default=False)
     args = parser.parse_args()
-
-    for arg in vars(args):
-        logging.info(f"{arg}: {getattr(args, arg)}")
 
     # Start main function
     print("Starting main function.")
     main(
-        params_file="./static/params.toml",
+        params_file="./params.toml",
         root_folder="/home/buchsbaum/mnt/DATA/Experiments/",
         args=args,
     )

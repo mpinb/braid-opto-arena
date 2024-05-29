@@ -175,10 +175,10 @@ def interpolate(interp_function, value):
 
 
 # Main function
-def main(config_path, standalone):
+def main(config_path, base_dir_path, standalone):
     # Initialize pygame
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.NOFRAME)
     pygame.display.set_caption("Stimulus Display")
 
     # Load configuration
@@ -198,7 +198,7 @@ def main(config_path, standalone):
 
     # CSV logging setup
     if not standalone:
-        csv_writer = CsvWriter(os.path.join(config["base_dir"], "stim.csv"))
+        csv_writer = CsvWriter(os.path.join(base_dir_path, "stim.csv"))
 
     # ZMQ setup if not standalone
     subscriber = None
@@ -226,7 +226,7 @@ def main(config_path, standalone):
                 if message == "kill":
                     running = False
                     break
-                else:
+                elif message is not None:
                     trigger_info = json.loads(message)
                     heading_direction = trigger_info["heading_direction"]
 
@@ -238,6 +238,8 @@ def main(config_path, standalone):
                             trigger_info.update(updated_info)
                             # Log the event
                             csv_writer.write(trigger_info)
+                else:
+                    pass
 
             except zmq.Again:
                 pass  # No message received
@@ -270,9 +272,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--standalone",
         action="store_true",
-        default="False",
+        default=False,
         help="Run the program in standalone mode without ZMQ",
     )
     args = parser.parse_args()
 
-    main(args.config_file, args.standalone)
+    main(args.config_file, args.base_dir, args.standalone)

@@ -1,6 +1,7 @@
 # hardware_utils.py
 import serial
-from rspowersupply import PowerSupply
+
+from modules.utils.rspowersupply import PowerSupply
 
 
 def initialize_backlighting_power_supply(port="/dev/powersupply", voltage=30):
