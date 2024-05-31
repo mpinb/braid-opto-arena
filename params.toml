@@ -54,7 +54,7 @@ color = "black" # Color
 [stim_params.looming]
 active = true
 stim_type = "exponential" # Stimulus type
-position = 0              # Position
+position = "closed-loop"  # Position
 max_radius = 64           # Maximum radius
 duration = 500            # Duration
 color = "black"           # Color

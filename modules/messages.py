@@ -32,7 +32,7 @@ class Publisher:
 
     def publish(self, topic, msg):
         self.pub_socket.send_string(f"{topic} {msg}")
-        logging.info(f"Published message on topic '{topic}': {msg}")
+        logging.debug(f"Published message on topic '{topic}': {msg}")
 
 
 class Subscriber:
@@ -81,8 +81,8 @@ class Subscriber:
     def receive(self):
         try:
             message = self.sub_socket.recv_string(zmq.NOBLOCK)
-            logging.info(f"Received message: {message}")
+            logging.debug(f"Received message: {message}")
             return message
         except zmq.Again:
-            logging.warning("No message received yet.")
+            logging.debug("No message received yet.")
             return None

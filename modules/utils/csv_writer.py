@@ -1,6 +1,4 @@
-# csv_writer.py
 import csv
-import os
 
 
 class CsvWriter:
@@ -47,11 +45,16 @@ class CsvWriter:
         """
         Checks if the header row needs to be written.
 
-        This method checks if the CSV file is empty. If it is not empty, it sets the `write_header` flag to False.
-
+        Returns:
+            bool: True if the header row needs to be written, False otherwise.
         """
-        if os.stat(self.filename).st_size > 0:
-            self.write_header = False
+        self.csv_file.seek(0)  # Move to the beginning of the file to read the first row
+        reader = csv.reader(self.csv_file)
+        try:
+            first_row = next(reader)
+            return not all(not str(item).isdigit() for item in first_row)
+        except StopIteration:
+            return True
 
     def close(self):
         """

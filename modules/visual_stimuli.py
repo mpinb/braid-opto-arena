@@ -10,11 +10,14 @@ import toml
 import zmq
 from messages import Subscriber
 from utils.csv_writer import CsvWriter
-from scipy.interpolate import interp1d
+
+# from scipy.interpolate import interp1d
+import logging
 
 # Constants
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
+os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
 
 
 # Base stimulus class
@@ -42,6 +45,13 @@ def wrap_around_position(x, screen_width):
     return x % screen_width
 
 
+def interp_angle(angle):
+    screen = [0, 128, 256, 384, 512]
+    heading = [1.518, 2.776, -2.198, -0.978, 0.213]
+
+    return np.interp(angle, heading, screen, period=2 * np.pi)
+
+
 # Looming stimulus
 class LoomingStimulus(Stimulus):
     def __init__(self, config):
@@ -55,11 +65,6 @@ class LoomingStimulus(Stimulus):
         self.expanding = False
         self.type = config["stim_type"]
 
-        if self.position_type == "closed-loop":
-            self.interp_screen_to_heading, self.interp_heading_to_screen = (
-                _generate_calibration_functions("./modules/calibration_matrix.npz")
-            )
-
     def _get_value(self, value, min_val, max_val):
         if value == "random":
             return random.randint(min_val, max_val)
@@ -71,13 +76,16 @@ class LoomingStimulus(Stimulus):
         if self.position_type == "random":
             self.position = self._get_value("random", 0, SCREEN_WIDTH)
         elif self.position_type == "closed-loop" and heading_direction is not None:
-            self.position = self.interp_heading_to_screen(heading_direction)
+            self.position = interp_angle(heading_direction)
+            logging.debug(
+                f"visual_stimuli.py: heading_direction: {heading_direction}, position: {self.position}"
+            )
         else:
             self.position = self.position_type
         self.start_time = time.time()
         self.expanding = True
 
-    def update(self, screen, time_elapsed):
+    def update(self, screen):
         if self.expanding:
             elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
             if elapsed < self.duration:
@@ -93,6 +101,11 @@ class LoomingStimulus(Stimulus):
                 pygame.draw.circle(
                     screen, self.color, (position, SCREEN_HEIGHT // 2), int(self.radius)
                 )
+
+                # also draw the rounded position in red text for debugging
+                # font = pygame.font.Font(None, 36)
+                # text = font.render(f"{round(position)}", True, (255, 0, 0))
+                # screen.blit(text, (position, SCREEN_HEIGHT // 2))
 
                 # Check for wrap-around and draw additional circles if necessary
                 if position - self.radius < 0:  # Circle extends past the left edge
@@ -140,40 +153,6 @@ class GratingStimulus(Stimulus):
         pass
 
 
-def _generate_calibration_functions(calibration_matrix_file):
-    calibration_matrix = np.load("./modules/calibration_matrix.npz")[
-        "calibration_matrix"
-    ]
-
-    # Create interpolation functions
-    screen_positions = calibration_matrix[:, 0]
-    heading_directions = calibration_matrix[:, 1]
-
-    # Interpolation function from screen position to heading direction
-    interp_screen_to_heading = interp1d(
-        screen_positions, heading_directions, kind="linear", fill_value="extrapolate"
-    )
-
-    # Interpolation function from heading direction to screen position
-    # Note: Ensure the heading directions are sorted for proper interpolation
-    sorted_indices = np.argsort(heading_directions)
-    sorted_heading_directions = heading_directions[sorted_indices]
-    sorted_screen_positions = screen_positions[sorted_indices]
-
-    interp_heading_to_screen = interp1d(
-        sorted_heading_directions,
-        sorted_screen_positions,
-        kind="linear",
-        fill_value="extrapolate",
-    )
-
-    return interp_screen_to_heading, interp_heading_to_screen
-
-
-def interpolate(interp_function, value):
-    return interp_function(value)
-
-
 # Main function
 def main(config_path, base_dir_path, standalone):
     # Initialize pygame
@@ -205,11 +184,14 @@ def main(config_path, base_dir_path, standalone):
     if not standalone:
         subscriber = Subscriber(pub_port=5556, handshake_port=5557)
         subscriber.handshake()
+        print("visual_stimuli.py: Handshake successful")
         subscriber.subscribe("")
+        print("visual_stimuli.py: Subscribed to all messages")
 
     # Main loop
     running = True
     clock = pygame.time.Clock()
+    print("visual_stimuli.py: Starting main loop")
     while running:
         time_elapsed = clock.get_time()
         for event in pygame.event.get():
@@ -229,7 +211,7 @@ def main(config_path, base_dir_path, standalone):
                 elif message is not None:
                     trigger_info = json.loads(message)
                     heading_direction = trigger_info["heading_direction"]
-
+                    print(f"Got heading direction: {heading_direction}")
                     # Handle trigger for looming stimulus
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):

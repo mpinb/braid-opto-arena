@@ -23,6 +23,32 @@ from modules.utils.hardware import (
 from modules.utils.opto import check_position, trigger_opto
 
 
+class RealTimeHeadingCalculator:
+    def __init__(self, window_size=10):
+        self.window_size = window_size
+        self.xvel_buffer = deque(maxlen=window_size)
+        self.yvel_buffer = deque(maxlen=window_size)
+        self.zvel_buffer = deque(maxlen=window_size)
+
+    def add_data_point(self, xvel, yvel, zvel):
+        self.xvel_buffer.append(xvel)
+        self.yvel_buffer.append(yvel)
+        self.zvel_buffer.append(zvel)
+
+    def calculate_smoothed_velocities(self):
+        smoothed_xvel = np.mean(self.xvel_buffer)
+        smoothed_yvel = np.mean(self.yvel_buffer)
+        smoothed_zvel = np.mean(self.zvel_buffer)
+        return smoothed_xvel, smoothed_yvel, smoothed_zvel
+
+    def calculate_heading(self):
+        smoothed_xvel, smoothed_yvel, smoothed_zvel = (
+            self.calculate_smoothed_velocities()
+        )
+        heading = np.arctan2(smoothed_yvel, smoothed_xvel)
+        return heading
+
+
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
     """Main BraidTrigger function. Starts up all processes and triggers.
     Loop over data incoming from the flydra2 proxy and tests if a trigger should be sent.
@@ -96,9 +122,9 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # initialize main loop parameters
     obj_ids = []
     obj_birth_times = {}
+    headings = {}
     last_trigger_time = time.time()
     ntrig = 0
-    heading_direction = deque(maxlen=5)
 
     # Start main loop
     try:
@@ -115,11 +141,17 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 curr_obj_id = msg_dict["Birth"]["obj_id"]
                 obj_ids.append(curr_obj_id)
                 obj_birth_times[curr_obj_id] = tcall
+                headings[curr_obj_id] = RealTimeHeadingCalculator()
                 continue
 
             # Check for "update" message
             elif "Update" in msg_dict:
                 curr_obj_id = msg_dict["Update"]["obj_id"]
+                headings[curr_obj_id].add_data_point(
+                    msg_dict["Update"]["xvel"],
+                    msg_dict["Update"]["yvel"],
+                    msg_dict["Update"]["zvel"],
+                )
                 if curr_obj_id not in obj_ids:
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall
@@ -151,10 +183,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             pos = msg_dict["Update"]
 
             # Calculate heading direction
-            heading_direction.append(np.arctan2(pos["yvel"], pos["xvel"]))
-            pos["heading_direction"] = np.nanmean(heading_direction)
-
-            if args.realtime_plotting:
+            if args.plot:
                 pub_plot.send_string(f"{pos['x']} {pos['y']} {pos['z']}")
 
             if check_position(pos, trigger_params):
@@ -166,11 +195,13 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 pos["trigger_time"] = last_trigger_time
                 pos["ntrig"] = ntrig
                 pos["main_timestamp"] = tcall
+                pos["heading_direction"] = headings[curr_obj_id].calculate_heading()
+
                 # Opto Trigger
-                if args.opto:
+                if params["opto_params"].get("active", False):
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
-                pub.publish("", json.dumps(pos).encode("utf-8"))
+                pub.publish("", json.dumps(pos))
 
                 # Write data to csv
                 csv_writer.write(pos)
@@ -189,7 +220,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--debug", action="store_true", default=True)
+    parser.add_argument("--debug", action="store_true", default=False)
     parser.add_argument("--plot", action="store_true", default=False)
     args = parser.parse_args()
 
