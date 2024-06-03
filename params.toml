@@ -39,8 +39,8 @@ units = "pix"     # Units
 
 # static stimulus setup
 [stim_params.static]
-active = false
-image = "./data/static.jpg" # Path to static image
+active = true
+image = "modules/static.jpg" # Path to static image
 
 # grating stimulus setup
 [stim_params.grating]
@@ -56,7 +56,7 @@ active = true
 stim_type = "exponential" # Stimulus type
 position = "closed-loop"  # Position
 max_radius = 64           # Maximum radius
-duration = 500            # Duration
+duration = 300            # Duration
 color = "black"           # Color
 
 # high-speed camera setup

@@ -147,11 +147,16 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             # Check for "update" message
             elif "Update" in msg_dict:
                 curr_obj_id = msg_dict["Update"]["obj_id"]
+
+                # Calculate heading direction
+                if curr_obj_id not in headings:
+                    headings[curr_obj_id] = RealTimeHeadingCalculator()
                 headings[curr_obj_id].add_data_point(
                     msg_dict["Update"]["xvel"],
                     msg_dict["Update"]["yvel"],
                     msg_dict["Update"]["zvel"],
                 )
+
                 if curr_obj_id not in obj_ids:
                     obj_ids.append(curr_obj_id)
                     obj_birth_times[curr_obj_id] = tcall

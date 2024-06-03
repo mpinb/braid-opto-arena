@@ -35,6 +35,7 @@ class StaticImageStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
         self.image = pygame.image.load(config["image"]).convert()
+        self.image = pygame.transform.scale(self.image, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
     def update(self, screen, time_elapsed):
         screen.blit(self.image, (0, 0))
@@ -75,17 +76,20 @@ class LoomingStimulus(Stimulus):
         self.duration = self._get_value(self.config["duration"], 150, 500)
         if self.position_type == "random":
             self.position = self._get_value("random", 0, SCREEN_WIDTH)
-        elif self.position_type == "closed-loop" and heading_direction is not None:
-            self.position = interp_angle(heading_direction)
-            logging.debug(
-                f"visual_stimuli.py: heading_direction: {heading_direction}, position: {self.position}"
-            )
+        elif self.position_type == "closed-loop":
+            if heading_direction is not None:
+                self.position = interp_angle(heading_direction)
+                logging.debug(
+                    f"visual_stimuli.py: heading_direction: {heading_direction}, position: {self.position}"
+                )
+            else:
+                self.position = self._get_value("random", 0, SCREEN_WIDTH)
         else:
             self.position = self.position_type
         self.start_time = time.time()
         self.expanding = True
 
-    def update(self, screen):
+    def update(self, screen, time_elapsed):
         if self.expanding:
             elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
             if elapsed < self.duration:
@@ -197,10 +201,12 @@ def main(config_path, base_dir_path, standalone):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_k:
-                for stim in stimuli:
-                    if isinstance(stim, LoomingStimulus):
-                        stim.start_expansion()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_k:
+                    print("visual_stimuli.py: Key pressed: K")
+                    for stim in stimuli:
+                        if isinstance(stim, LoomingStimulus):
+                            stim.start_expansion()
 
         if not standalone:
             try:
