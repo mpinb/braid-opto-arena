@@ -1,6 +1,7 @@
-import zmq
 import logging
 import time
+
+import zmq
 
 # Setup basic logging
 logging.basicConfig(
@@ -30,9 +31,19 @@ class Publisher:
         except zmq.Again as e:
             logging.warning(f"{e} No handshake request received yet.")
 
-    def publish(self, topic, msg):
+    def publish(
+        self,
+        msg,
+        topic="",
+    ):
         self.pub_socket.send_string(f"{topic} {msg}")
         logging.debug(f"Published message on topic '{topic}': {msg}")
+
+    def close(self):
+        self.pub_socket.close()
+        self.rep_socket.close()
+        self.context.term()
+        logging.info("Closed publisher sockets and terminated context.")
 
 
 class Subscriber:
@@ -74,7 +85,7 @@ class Subscriber:
 
         return False
 
-    def subscribe(self, topic):
+    def subscribe(self, topic=""):
         self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, topic)
         logging.info(f"Subscribed to topic '{topic}'.")
 
@@ -86,3 +97,9 @@ class Subscriber:
         except zmq.Again:
             logging.debug("No message received yet.")
             return None
+
+    def close(self):
+        self.sub_socket.close()
+        self.req_socket.close()
+        self.context.term()
+        logging.info("Closed subscriber sockets and terminated context.")

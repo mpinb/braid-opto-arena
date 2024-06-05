@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pygame
 import toml
-import zmq
 from messages import Subscriber
 from utils.csv_writer import CsvWriter
 
@@ -165,7 +164,6 @@ def main(config_path, base_dir_path, standalone):
     pygame.display.set_caption("Stimulus Display")
 
     # Load configuration
-    # with open(config_path, "rb") as f:
     config = toml.load(config_path)
 
     stim_config = config["stim_params"]
@@ -188,49 +186,50 @@ def main(config_path, base_dir_path, standalone):
     if not standalone:
         subscriber = Subscriber(pub_port=5556, handshake_port=5557)
         subscriber.handshake()
-        print("visual_stimuli.py: Handshake successful")
-        subscriber.subscribe("")
-        print("visual_stimuli.py: Subscribed to all messages")
+        logging.debug("visual_stimuli.py: Handshake successful")
+        subscriber.subscribe()
+        logging.debug("visual_stimuli.py: Subscribed to all messages")
 
     # Main loop
-    running = True
     clock = pygame.time.Clock()
-    print("visual_stimuli.py: Starting main loop")
-    while running:
+    logging.info("visual_stimuli.py: Starting main loop")
+    while True:
         time_elapsed = clock.get_time()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
+                # keep_running = False
+                break
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_k:
-                    print("visual_stimuli.py: Key pressed: K")
+                    logging.info("visual_stimuli.py: Key pressed: K")
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):
                             stim.start_expansion()
 
         if not standalone:
-            try:
-                message = subscriber.receive()
-                if message == "kill":
-                    running = False
-                    break
-                elif message is not None:
-                    trigger_info = json.loads(message)
-                    heading_direction = trigger_info["heading_direction"]
-                    print(f"Got heading direction: {heading_direction}")
-                    # Handle trigger for looming stimulus
-                    for stim in stimuli:
-                        if isinstance(stim, LoomingStimulus):
-                            stim.start_expansion(heading_direction)
-                            updated_info = stim.get_trigger_info()
-                            trigger_info.update(updated_info)
-                            # Log the event
-                            csv_writer.write(trigger_info)
-                else:
-                    pass
+            message = subscriber.receive()
+            logging.debug(f"Got message from subscriber: {message}")
 
-            except zmq.Again:
-                pass  # No message received
+            if message == "kill":
+                logging.info("visual_stimuli.py: Received kill message. Exiting...")
+                break
+
+            elif message is not None:
+                trigger_info = json.loads(message)
+                heading_direction = trigger_info["heading_direction"]
+                logging.debug(f"Got heading direction: {heading_direction}")
+
+                # Handle trigger for looming stimulus
+                for stim in stimuli:
+                    if isinstance(stim, LoomingStimulus):
+                        stim.start_expansion(heading_direction)
+                        updated_info = stim.get_trigger_info()
+                        trigger_info.update(updated_info)
+
+                        # Log the event
+                        csv_writer.write(trigger_info)
+            else:
+                pass
 
         # Update screen
         screen.fill((255, 255, 255))
@@ -242,6 +241,7 @@ def main(config_path, base_dir_path, standalone):
     # Clean up
     if not standalone:
         csv_writer.close()
+    subscriber.close()
     pygame.quit()
 
 

@@ -18,7 +18,7 @@ from modules.utils.files import (
 from modules.utils.flydra_proxy import Flydra2Proxy
 from modules.utils.hardware import (
     create_arduino_device,
-    initialize_backlighting_power_supply,
+    backlighting_power_supply,
 )
 from modules.utils.opto import check_position, trigger_opto
 
@@ -57,7 +57,6 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         params_file (str): a path to the params.toml file
         root_folder (str): the root folder where the experiment folder will be created
     """
-
     # Load params
     with open(params_file, "rb") as f:
         params = tomllib.load(f)
@@ -71,7 +70,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     if not args.debug:
-        initialize_backlighting_power_supply()
+        backlighting_power_supply()
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
@@ -127,6 +126,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     ntrig = 0
 
     # Start main loop
+    logging.info("Starting main loop.")
     try:
         for data in braid_proxy.data_stream():
             tcall = time.time()  # Get current time
@@ -189,7 +189,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # Calculate heading direction
             if args.plot:
-                pub_plot.send_string(f"{pos['x']} {pos['y']} {pos['z']}")
+                pub_plot.send_string(json.dumps(pos))
 
             if check_position(pos, trigger_params):
                 # Update last trigger time
@@ -204,15 +204,39 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
                 # Opto Trigger
                 if params["opto_params"].get("active", False):
+                    logging.info("Triggering opto.")
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
-                pub.publish("", json.dumps(pos))
+                pub.publish(json.dumps(pos))
 
                 # Write data to csv
                 csv_writer.write(pos)
 
     except KeyboardInterrupt:
-        pass
+        logging.info("KeyboardInterrupt received, shutting down.")
+
+        # send kill message to all processes
+        logging.info("Sending kill message to all processes.")
+        pub.publish("kill")
+
+        # and plotting if needed
+        if args.plot:
+            logging.info("Sending kill message to plotting process.")
+            pub_plot.send_string("kill")
+            pub_plot.close()
+            context.destroy()
+
+        # close the csv_writer
+        logging.info("Closing csv_writer.")
+        csv_writer.close()
+
+        # shut down the light
+        logging.info("Shutting down backlighting power supply.")
+        backlighting_power_supply(voltage=0)
+
+        # close zmq sockets
+        logging.info("Closing publisher sockets.")
+        pub.close()
 
 
 if __name__ == "__main__":

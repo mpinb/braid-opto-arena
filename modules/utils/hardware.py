@@ -4,7 +4,7 @@ import serial
 from modules.utils.rspowersupply import PowerSupply
 
 
-def initialize_backlighting_power_supply(port="/dev/powersupply", voltage=30):
+def backlighting_power_supply(port="/dev/powersupply", voltage=30):
     """
     Initializes the backlighting power supply.
 

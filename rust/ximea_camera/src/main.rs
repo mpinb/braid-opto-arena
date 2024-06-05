@@ -25,8 +25,8 @@ fn main() -> Result<(), i32> {
     env_logger::init();
 
     // setup ctrl-c handler
-    let running = Arc::new(AtomicBool::new(true));
-    setup_ctrlc_handler(running.clone());
+    // let running = Arc::new(AtomicBool::new(true));
+    // setup_ctrlc_handler(running.clone());
 
     // Parse command line arguments
     let args = Args::parse();
@@ -105,7 +105,7 @@ fn main() -> Result<(), i32> {
 
     // start acquisition
     log::info!("Starting acquisition");
-    while running.load(Ordering::SeqCst) {
+    loop {
         // receive message
         match subscriber.recv(&mut msg, zmq::DONTWAIT) {
             Ok(_) => log::info!("Received message: {}", msg.as_str().unwrap()),
@@ -138,7 +138,9 @@ fn main() -> Result<(), i32> {
 
         // send frame with the incoming parsed message
         match sender.send((image_data, parsed_message)) {
-            Ok(_) => {}
+            Ok(_) => {
+                log::info!("Sent frame to frame handler");
+            }
             Err(_e) => {} //log::error!("Failed to send frame: {}", e),
         }
     }
