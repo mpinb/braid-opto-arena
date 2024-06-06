@@ -76,23 +76,23 @@ fn main() -> Result<(), i32> {
     let mut msg = zmq::Message::new();
 
     // Block until first message, which should be the save folder
-    subscriber.recv(&mut msg, 0).unwrap();
-    let mut save_folder: String = String::new();
+    // subscriber.recv(&mut msg, 0).unwrap();
+    let save_folder: args.save_folder.clone();
 
-    match parse_message(msg.as_str().unwrap()) {
-        MessageType::JsonData(data) => {
-            log::error!("Expected text message, got JSON data: {:?}", data);
-            // shutdown
-            return Err(1);
-        }
-        MessageType::Text(data) => {
-            save_folder = data;
-            log::info!("Got save folder: {}", &save_folder);
-        }
-        MessageType::Empty => {
-            //log::error!("Empty message received");
-        }
-    }
+    // match parse_message(msg.as_str().unwrap()) {
+    //     MessageType::JsonData(data) => {
+    //         log::error!("Expected text message, got JSON data: {:?}", data);
+    //         // shutdown
+    //         return Err(1);
+    //     }
+    //     MessageType::Text(data) => {
+    //         save_folder = data;
+    //         log::info!("Got save folder: {}", &save_folder);
+    //     }
+    //     MessageType::Empty => {
+    //         //log::error!("Empty message received");
+    //     }
+    // }
 
     // spawn writer thread
     let (sender, receiver) = channel::unbounded::<(Arc<ImageData>, MessageType)>();
@@ -148,7 +148,7 @@ fn main() -> Result<(), i32> {
     // stop acquisition
     buffer.stop_acquisition()?;
 
-    // send kill signal
+    // send kill signal to writer thread
     match sender.send((
         Arc::new(ImageData::default()),
         MessageType::Text("kill".to_string()),

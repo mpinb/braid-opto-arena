@@ -217,6 +217,7 @@ def main(config_path, base_dir_path, standalone):
             elif message is not None:
                 trigger_info = json.loads(message)
                 heading_direction = trigger_info["heading_direction"]
+                logging.info(f"visual_stimuli.py: triggering stimulus {trigger_info}")
                 logging.debug(f"Got heading direction: {heading_direction}")
 
                 # Handle trigger for looming stimulus

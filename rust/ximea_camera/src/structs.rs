@@ -44,6 +44,9 @@ pub struct Args {
 
     #[arg(long, default_value_t = false)]
     pub debug: bool,
+
+    #[arg(long, default_value_t = String::from("None"))]
+    pub save_folder: String,
 }
 
 #[derive(Clone, Default)]

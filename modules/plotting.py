@@ -1,102 +1,74 @@
 import zmq
-import json
-import sys
-import numpy as np
-from collections import deque
-from qtpy.QtWidgets import QApplication
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import logging
+from qtpy import QtCore, QtWidgets
+from qtpy.QtCharts import QtCharts
+from typing import Optional
+import json
 
-# Parameters
-N = 100  # Number of elements to plot
-
-# Initialize deque for storing the data
-frames = deque(maxlen=N)
-x_data = deque(maxlen=N)
-y_data = deque(maxlen=N)
-xvel_data = deque(maxlen=N)
-yvel_data = deque(maxlen=N)
-angular_velocity_data = deque(maxlen=N)
-
-# Setup ZMQ context and SUB socket
-context = zmq.Context()
-socket = context.socket(zmq.SUB)
-socket.connect("tcp://localhost:12345")
-socket.setsockopt_string(zmq.SUBSCRIBE, "")
-
-# Initialize the Qt application
-app = QApplication(sys.argv)
-
-# Initialize the Matplotlib figure and axes
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 8))
-
-# Set up the axes
-ax1.set_title("X-Y Position")
-ax1.set_xlim(0, 10)
-ax1.set_ylim(0, 10)
-ax1.set_xlabel("X")
-ax1.set_ylabel("Y")
-
-ax2.set_title("Linear Velocity")
-ax2.set_xlim(0, N)
-ax2.set_ylim(-1, 1)
-ax2.set_xlabel("Frame")
-ax2.set_ylabel("Velocity")
-
-ax3.set_title("Angular Velocity")
-ax3.set_xlim(0, N)
-ax3.set_ylim(-np.pi, np.pi)
-ax3.set_xlabel("Frame")
-ax3.set_ylabel("Angular Velocity")
-
-# Line objects for updating the plot
-(line1,) = ax1.plot([], [], "bo")
-(line2,) = ax2.plot([], [], "r-")
-(line3,) = ax3.plot([], [], "g-")
+logger = logging.getLogger(__name__)
 
 
-# Function to initialize the plot
-def init():
-    line1.set_data([], [])
-    line2.set_data([], [])
-    line3.set_data([], [])
-    return line1, line2, line3
+class RealTimePlotter(QtWidgets.QMainWindow):
+    def __init__(
+        self,
+        zmq_port: int = None,
+        zmq_context: Optional[zmq.Context] = None,
+    ):
+        super().__init__()
+        self.zmq_port = zmq_port
+        self.message_poll_time_ms = 100
+        self.sub = None
+        self.reset()
 
+    def __del__(self):
+        self.unbind()
 
-# Function to update the plot
-def update(frame):
-    while True:
-        try:
-            message = socket.recv_string(zmq.NOBLOCK)
+    def close(self):
+        self.unbind()
+        super().close()
 
-            if message == "kill":
-                logging.info("plotter received kill message, shutting down.")
-                plt.close(fig)
-                return line1, line2, line3
-            else:
-                data = json.loads(message)
+    def unbind(self):
+        # disconnect from all zmq socket
+        if self.sub is not None:
+            self.sub.unbind(self.sub.LAST_ENDPOINT)
+            self.sub.close()
+            self.sub = None
 
-            frames.append(data["frame"])
-            x_data.append(data["x"])
-            y_data.append(data["y"])
-            xvel_data.append(data["xvel"])
-            yvel_data.append(data["yvel"])
-            angular_velocity = np.arctan2(data["yvel"], data["xvel"])
-            angular_velocity_data.append(angular_velocity)
+        if not self.ctx_given and self.ctx is not None:
+            self.ctx.term()
+            self.ctx = None
 
-        except zmq.Again:
-            break
+    def reset(self):
+        # create a plot to show x-y data
+        self.xyplot = QtCharts.QChart()
+        self.xyplot.legend().hide()
+        self.xyplot.setTitle("X-Y Plot")
 
-    line1.set_data(x_data, y_data)
-    line2.set_data(frames, xvel_data)
-    line3.set_data(frames, angular_velocity_data)
-    return line1, line2, line3
+    def setup_zmq(self, zmq_context: Optional[zmq.Context] = None):
+        """connect to zmq ports and listen to updates"""
+        self.ctx_given = zmq_context is not None
+        self.ctx = zmq.Context() if zmq_context is None else zmq_context
 
+        # publisher address
+        pubilsher_address = f"tcp://127.0.0.1:{self.zmq_port}"
 
-# Create animation
-ani = FuncAnimation(fig, update, init_func=init, blit=True, interval=100)
+        # subscriber
+        self.sub = self.ctx.socket(zmq.SUB)
+        self.sub.subscribe("")
+        self.sub.bind(pubilsher_address)
 
-# Start the Qt event loop
-plt.show()
-app.exec()
+        # set timer to poll for messages
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.check_messages)
+        self.timer.start(self.message_poll_time_ms)
+
+    def check_messages(
+        self, timeout: int = 10, times_to_check: int = 10, do_update: bool = True
+    ):
+        if self.sub and self.sub.poll(timeout, zmq.POLLIN):
+            msg = json.loads(self.sub.recv_string())
+
+            if msg["event"] == "update":
+                pass
+            elif msg["event"] == "kill":
+                self.close()
