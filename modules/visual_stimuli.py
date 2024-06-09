@@ -70,6 +70,28 @@ class LoomingStimulus(Stimulus):
             return random.randint(min_val, max_val)
         return value
 
+    def generate_looming_array(
+        self, max_radius, duration, l_v=10, distance_from_screen=25, hz=60
+    ):
+        # get looming duration in frames from ms
+        n_frames = int(duration / (1000 / hz))
+
+        # generate the angular looming size
+        r = np.flip([2 * np.arctan(l_v / i) for i in range(1, n_frames)])
+
+        # calculate the looming size on screen
+        looming_size_on_screen = np.tan(r / 2) * distance_from_screen
+
+        # normalize from 0 to 1
+        looming_size_on_screen = (
+            looming_size_on_screen - np.min(looming_size_on_screen)
+        ) / (np.max(looming_size_on_screen) - np.min(looming_size_on_screen))
+
+        # scale to max_radius
+        looming_size_on_screen = looming_size_on_screen * max_radius
+
+        return looming_size_on_screen
+
     def start_expansion(self, heading_direction=None):
         self.max_radius = self._get_value(self.config["max_radius"], 32, 64)
         self.duration = self._get_value(self.config["duration"], 150, 500)
@@ -85,30 +107,32 @@ class LoomingStimulus(Stimulus):
                 self.position = self._get_value("random", 0, SCREEN_WIDTH)
         else:
             self.position = self.position_type
+        if self.type == "exponential":
+            self.exp_radii_array = self.generate_looming_array(
+                self.max_radius, self.duration
+            )
         self.start_time = time.time()
+
+        # control stimulus by framerate
+        self.curr_frame = 0
+        self.n_frames = int(self.duration / (1000 / 60))
+
         self.expanding = True
 
     def update(self, screen, time_elapsed):
         if self.expanding:
-            elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
-            if elapsed < self.duration:
+            # elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
+            if self.curr_frame < self.n_frames:
                 if self.type == "linear":
-                    self.radius = (elapsed / self.duration) * self.max_radius
+                    self.radius = (self.curr_frame / self.n_frames) * self.max_radius
                 elif self.type == "exponential":
-                    self.radius = (
-                        (2 ** (elapsed / self.duration) - 1) / (2 - 1) * self.max_radius
-                    )
+                    self.radius = self.exp_radii_array[self.curr_frame]
 
                 # Draw the circle normally
                 position = wrap_around_position(self.position, SCREEN_WIDTH)
                 pygame.draw.circle(
                     screen, self.color, (position, SCREEN_HEIGHT // 2), int(self.radius)
                 )
-
-                # also draw the rounded position in red text for debugging
-                # font = pygame.font.Font(None, 36)
-                # text = font.render(f"{round(position)}", True, (255, 0, 0))
-                # screen.blit(text, (position, SCREEN_HEIGHT // 2))
 
                 # Check for wrap-around and draw additional circles if necessary
                 if position - self.radius < 0:  # Circle extends past the left edge
@@ -127,7 +151,7 @@ class LoomingStimulus(Stimulus):
                         (position - SCREEN_WIDTH, SCREEN_HEIGHT // 2),
                         int(self.radius),
                     )
-
+                self.curr_frame += 1
             else:
                 self.expanding = False
 
