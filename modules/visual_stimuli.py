@@ -70,7 +70,7 @@ class LoomingStimulus(Stimulus):
             return random.randint(min_val, max_val)
         return value
 
-    def generate_looming_array(
+    def generate_natural_looming(
         self, max_radius, duration, l_v=10, distance_from_screen=25, hz=60
     ):
         # get looming duration in frames from ms
@@ -92,6 +92,11 @@ class LoomingStimulus(Stimulus):
 
         return looming_size_on_screen
 
+    def generate_exponential_looming(self, max_radius, duration, hz=60):
+        n_frames = int(duration / (1000 / hz))
+        radii_array = np.logspace(0, np.log10(max_radius), n_frames)
+        return radii_array
+
     def start_expansion(self, heading_direction=None):
         self.max_radius = self._get_value(self.config["max_radius"], 32, 64)
         self.duration = self._get_value(self.config["duration"], 150, 500)
@@ -108,7 +113,11 @@ class LoomingStimulus(Stimulus):
         else:
             self.position = self.position_type
         if self.type == "exponential":
-            self.exp_radii_array = self.generate_looming_array(
+            self.radii_array = self.generate_exponential_looming(
+                self.max_radius, self.duration
+            )
+        elif self.type == "natural":
+            self.radii_array = self.generate_natural_looming(
                 self.max_radius, self.duration
             )
         self.start_time = time.time()
@@ -122,11 +131,11 @@ class LoomingStimulus(Stimulus):
     def update(self, screen, time_elapsed):
         if self.expanding:
             # elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
-            if self.curr_frame < self.n_frames:
+            if self.curr_frame < self.n_frames - 1:
                 if self.type == "linear":
                     self.radius = (self.curr_frame / self.n_frames) * self.max_radius
-                elif self.type == "exponential":
-                    self.radius = self.exp_radii_array[self.curr_frame]
+                else:
+                    self.radius = self.radii_array[self.curr_frame]
 
                 # Draw the circle normally
                 position = wrap_around_position(self.position, SCREEN_WIDTH)

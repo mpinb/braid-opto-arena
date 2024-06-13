@@ -53,11 +53,11 @@ color = "black" # Color
 # looming stimulus setup
 [stim_params.looming]
 active = true
-stim_type = "exponential" # Stimulus type
-position = "closed-loop"  # Position
-max_radius = 64           # Maximum radius
-duration = 300            # Duration
-color = "black"           # Color
+stim_type = "natural"    # Stimulus type
+position = "closed-loop" # Position
+max_radius = 64          # Maximum radius
+duration = 300           # Duration
+color = "black"          # Color
 
 # high-speed camera setup
 [highspeed]
