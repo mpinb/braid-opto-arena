@@ -3,6 +3,11 @@ import random
 import logging
 import serial
 
+from utils.log_config import setup_logging
+
+setup_logging(level="INFO")
+logger = logging.getLogger(__name__)
+
 
 def _get_opto_trigger_params(trigger_params: dict):
     """
@@ -17,7 +22,7 @@ def _get_opto_trigger_params(trigger_params: dict):
         stim_intensity, and stim_frequency from the trigger_params dictionary.
     """
     if random.random() < trigger_params["sham_perc"]:
-        logging.debug("Sham opto.")
+        logger.debug("Sham opto.")
         return 0, 0, 0
     else:
         return (
@@ -40,6 +45,7 @@ def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict, pos: d
         dict: The updated position dictionary with the stimulus duration, intensity, and frequency.
 
     """
+
     stim_duration, stim_intensity, stim_frequency = _get_opto_trigger_params(
         trigger_params
     )
@@ -50,6 +56,10 @@ def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict, pos: d
     pos["stim_duration"] = stim_duration
     pos["stim_intensity"] = stim_intensity
     pos["stim_frequency"] = stim_frequency
+
+    logger.debug(
+        f"Trigger opto with stim_duration: {stim_duration}, stim_intensity: {stim_intensity}, stim_frequency: {stim_frequency}"
+    )
     return pos
 
 
@@ -64,7 +74,12 @@ def check_position(pos, trigger_params):
     Returns:
         bool: True if the position satisfies the trigger conditions, False otherwise.
     """
-    radius = (pos["x"] ** 2 + pos["y"] ** 2) ** 0.5
+
+    # calculate x position corrected for the center of the arena
+    radius = (
+        (pos["x"] - trigger_params["center_x"]) ** 2
+        + (pos["y"] - trigger_params["center_y"]) ** 2
+    ) ** 0.5
     if trigger_params["type"] == "radius":
         in_position = (
             radius < trigger_params["min_radius"]

@@ -32,8 +32,8 @@ def tiff2vid(folder: str):
             )
             .run()
         )
-    except:
-        print(f"Error converting {folder} to video")
+    except Exception as e:
+        print(f"Error converting {folder} to video, {e}")
 
     # delete the folder `folder`
     # shutil.rmtree(folder)

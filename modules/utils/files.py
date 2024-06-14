@@ -8,6 +8,11 @@ import time
 import git
 from tqdm.contrib.concurrent import thread_map
 
+from modules.utils.log_config import setup_logging
+
+setup_logging(level="INFO")
+logger = logging.getLogger(__name__)
+
 
 def check_braid_folder(root_folder: str) -> str:
     """
@@ -24,14 +29,14 @@ def check_braid_folder(root_folder: str) -> str:
     curr_braid_folder = list(p.glob("*.braid"))
 
     if len(curr_braid_folder) == 0:
-        logging.info(f"Waiting for .braid folder to be created in {root_folder}....")
+        logger.info(f"Waiting for .braid folder to be created in {root_folder}....")
 
     while len(curr_braid_folder) == 0:
         time.sleep(1)
         p = pathlib.Path(root_folder)
         curr_braid_folder = list(p.glob("*.braid"))
 
-    logging.info(f"\nFolder {curr_braid_folder[0].as_posix()} found.")
+    logger.info(f"\nFolder {curr_braid_folder[0].as_posix()} found.")
 
     return curr_braid_folder[0].as_posix()
 

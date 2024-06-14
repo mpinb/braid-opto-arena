@@ -14,6 +14,11 @@ import signal
 # from scipy.interpolate import interp1d
 import logging
 
+from utils.log_config import setup_logging
+
+setup_logging(level="INFO")
+logger = logging.getLogger(__name__)
+
 # Constants
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
@@ -115,7 +120,7 @@ class LoomingStimulus(Stimulus):
         elif self.position_type == "closed-loop":
             if heading_direction is not None:
                 self.position = interp_angle(heading_direction)
-                logging.debug(
+                logger.debug(
                     f"visual_stimuli.py: heading_direction: {heading_direction}, position: {self.position}"
                 )
             else:
@@ -229,13 +234,13 @@ def main(config_path, base_dir_path, standalone):
     if not standalone:
         subscriber = Subscriber(pub_port=5556, handshake_port=5557)
         subscriber.handshake()
-        logging.debug("visual_stimuli.py: Handshake successful")
+        logger.debug("visual_stimuli.py: Handshake successful")
         subscriber.subscribe("trigger")
-        logging.debug("visual_stimuli.py: Subscribed to all messages")
+        logger.debug("visual_stimuli.py: Subscribed to all messages")
 
     # Main loop
     clock = pygame.time.Clock()
-    logging.info("visual_stimuli.py: Starting main loop")
+    logger.info("visual_stimuli.py: Starting main loop")
     while True:
         time_elapsed = clock.get_time()
         for event in pygame.event.get():
@@ -244,24 +249,24 @@ def main(config_path, base_dir_path, standalone):
                 break
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_k:
-                    logging.info("visual_stimuli.py: Key pressed: K")
+                    logger.info("visual_stimuli.py: Key pressed: K")
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):
                             stim.start_expansion()
 
         if not standalone:
-            message = subscriber.receive()
-            logging.debug(f"Got message from subscriber: {message}")
+            _, message = subscriber.receive()
+            logger.debug(f"Got message from subscriber: {message}")
 
             if message == "kill":
-                logging.info("visual_stimuli.py: Received kill message. Exiting...")
+                logger.info("visual_stimuli.py: Received kill message. Exiting...")
                 break
 
             elif message is not None:
                 trigger_info = json.loads(message)
                 heading_direction = trigger_info["heading_direction"]
-                logging.info(f"visual_stimuli.py: triggering stimulus {trigger_info}")
-                logging.debug(f"Got heading direction: {heading_direction}")
+                logger.info(f"visual_stimuli.py: triggering stimulus {trigger_info}")
+                logger.debug(f"Got heading direction: {heading_direction}")
 
                 # Handle trigger for looming stimulus
                 for stim in stimuli:
@@ -285,7 +290,9 @@ def main(config_path, base_dir_path, standalone):
     # Clean up
     if not standalone:
         csv_writer.close()
+
     subscriber.close()
+    pygame.display.quit()
     pygame.quit()
 
 

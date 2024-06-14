@@ -16,7 +16,7 @@ pub struct Args {
     #[arg(long, default_value_t = 350.0)]
     pub fps: f32,
 
-    #[arg(long, default_value_t = 4000.0)]
+    #[arg(long, default_value_t = 1200.0)]
     pub exposure: f32,
 
     #[arg(long, default_value_t = 10.0)]

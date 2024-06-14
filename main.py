@@ -22,6 +22,13 @@ from modules.utils.hardware import (
 )
 from modules.utils.opto import check_position, trigger_opto
 
+from modules.utils.log_config import setup_logging
+import logging
+
+# Setup logger
+setup_logging(level="DEBUG")
+logger = logging.getLogger(__name__)
+
 
 class RealTimeHeadingCalculator:
     def __init__(self, window_size=10):
@@ -70,7 +77,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     if not args.debug:
-        backlighting_power_supply(voltage=0)
+        backlighting_power_supply(voltage=30)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
@@ -94,7 +101,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Connect to cameras
     if params["highspeed"].get("active", False):
-        logging.info("Opening highspeed camera.")
+        logger.info("Opening highspeed camera.")
         params["video_save_folder"] = get_video_output_folder(braid_folder)
         video_save_folder = params["video_save_folder"]
         subprocess.Popen(
@@ -109,13 +116,13 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         subprocess.Popen(["python", "./modules/lens_controller.py"])
         pub.wait_for_subscriber()
 
-        logging.info("Highspeed camera connected.")
+        logger.info("Highspeed camera connected.")
 
     # check if any visual stimuli is active and start the visual stimuli process
     if any(
         [value.get("active", False) for key, value in params["stim_params"].items()]
     ):
-        logging.info("Starting visual stimuli process.")
+        logger.info("Starting visual stimuli process.")
         subprocess.Popen(
             [
                 "python",
@@ -126,7 +133,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             ]
         )
         pub.wait_for_subscriber()
-        logging.info("Visual stimuli process connected.")
+        logger.info("Visual stimuli process connected.")
 
     trigger_params = params["trigger_params"]
 
@@ -140,9 +147,14 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     ntrig = 0
 
     # Start main loop
-    logging.info("Starting main loop.")
+    logger.info("Starting main loop.")
+    start_time = time.time()
     try:
         for data in braid_proxy.data_stream():
+            # break loop if the time is up (in hours)
+            if (time.time() - start_time) >= params["max_runtime"] * 3600:
+                break
+
             tcall = time.time()  # Get current time
 
             try:
@@ -160,11 +172,11 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # Check for "update" message
             elif "Update" in msg_dict:
-                # publish to the lens controller
-                pub.publish(json.dumps(msg_dict["Update"]), "lens")
-
                 # Get object id
                 curr_obj_id = msg_dict["Update"]["obj_id"]
+
+                # publish to the lens controller
+                pub.publish(json.dumps(msg_dict["Update"]), "lens")
 
                 # Calculate heading direction
                 if curr_obj_id not in headings:
@@ -194,12 +206,12 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             if (tcall - obj_birth_times[curr_obj_id]) < trigger_params[
                 "min_trajectory_time"
             ]:
-                # logging.warning(f"Trajectory too short for object {curr_obj_id}")
+                # logger.warning(f"Trajectory too short for object {curr_obj_id}")
                 continue
 
             # if the trigger interval is too short, skip
             if tcall - last_trigger_time < trigger_params["min_trigger_interval"]:
-                # logging.warning(f"Trigger interval too short for object {curr_obj_id}")
+                # logger.warning(f"Trigger interval too short for object {curr_obj_id}")
                 continue
 
             # Get position
@@ -222,7 +234,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
                 # Opto Trigger
                 if params["opto_params"].get("active", False):
-                    logging.info("Triggering opto.")
+                    logger.info("Triggering opto.")
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
                 pub.publish(json.dumps(pos), "trigger")
@@ -231,40 +243,34 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 csv_writer.write(pos)
 
     except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt received, shutting down.")
+        logger.info("KeyboardInterrupt received, shutting down.")
 
-        # send kill message to all processes
-        logging.info("Sending kill message to all processes.")
-        pub.publish("kill")
+    # send kill message to all processes
+    logger.info("Sending kill message to all processes.")
+    pub.publish("trigger", "kill")
+    pub.publish("lens", "kill")
 
-        # and plotting if needed
-        if args.plot:
-            logging.info("Sending kill message to plotting process.")
-            pub_plot.send_string("kill")
-            pub_plot.close()
-            context.destroy()
+    # and plotting if needed
+    if args.plot:
+        logger.info("Sending kill message to plotting process.")
+        pub_plot.send_string("kill")
+        pub_plot.close()
+        context.destroy()
 
-        # close the csv_writer
-        logging.info("Closing csv_writer.")
-        csv_writer.close()
+    # close the csv_writer
+    logger.info("Closing csv_writer.")
+    csv_writer.close()
 
-        # shut down the light
-        logging.info("Shutting down backlighting power supply.")
-        backlighting_power_supply(voltage=0)
+    # shut down the light
+    logger.info("Shutting down backlighting power supply.")
+    backlighting_power_supply(voltage=0)
 
-        # close zmq sockets
-        logging.info("Closing publisher sockets.")
-        pub.close()
+    # close zmq sockets
+    logger.info("Closing publisher sockets.")
+    pub.close()
 
 
 if __name__ == "__main__":
-    import logging
-
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(processName)s: %(asctime)s - %(message)s",
-    )
-
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--debug", action="store_true", default=False)

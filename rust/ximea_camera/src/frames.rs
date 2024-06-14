@@ -62,6 +62,7 @@ fn save_video_to_disk(images: &VecDeque<Arc<ImageData>>, save_path: &Path) {
     let x264_opts = DEFAULT_X264_OPTS;
 
     octx.write_header().unwrap();
+
 }
 
 fn save_video_metadata(

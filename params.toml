@@ -1,3 +1,5 @@
+max_runtime = 12 # Maximum runtime in hours
+
 [arduino_devices]
 opto_trigger = '/dev/opto_trigger'
 camera_trigger = '/dev/camera_trigger'
@@ -10,12 +12,12 @@ min_trigger_interval = 5  # Minimum time between activations in seconds
 min_radius = 0.05         # Minimum radius for activation in meters
 zmin = 0.15               # Minimum z for activation in meters
 zmax = 0.25               # Maximum z for activation in meters
-xmin = -0.025             # Minimum x for activation in meters
-xmax = 0.025              # Maximum x for activation in meters
-ymin = -0.025             # Minimum y for activation in meters
-ymax = 0.025              # Maximum y for activation in meters
-center_x = 0              # Arena center x in meters
-center_y = 0              # Arena center y in meters
+xmin = -0.05              # Minimum x for activation in meters
+xmax = 0.145              # Maximum x for activation in meters
+ymin = -0.06              # Minimum y for activation in meters
+ymax = 0.165              # Maximum y for activation in meters
+center_x = -0.022         # Arena center x in meters
+center_y = 0.037          # Arena center y in meters
 
 # opto light parameters
 [opto_params]
@@ -52,12 +54,12 @@ color = "black" # Color
 
 # looming stimulus setup
 [stim_params.looming]
-active = false
-stim_type = "natural"    # Stimulus type
-position = "closed-loop" # Position
-max_radius = 64          # Maximum radius
-duration = 300           # Duration
-color = "black"          # Color
+active = true
+stim_type = "exponential" # Stimulus type
+position = "closed-loop"  # Position
+max_radius = 64           # Maximum radius
+duration = 300            # Duration
+color = "black"           # Color
 
 # high-speed camera setup
 [highspeed]

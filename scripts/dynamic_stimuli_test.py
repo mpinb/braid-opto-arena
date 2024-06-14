@@ -31,12 +31,12 @@ def parse_chunk(chunk):
 def stimuli(HEADING):
     # Initialize pygame
     pygame.init()
-    screen = pygame.display.set_mode((640, 128), pygame.NOFRAME)
+    pygame.display.set_mode((640, 128), pygame.NOFRAME)
     clock = pygame.time.Clock()
 
     while not KILL_EVENT.is_set():
         try:
-            heading = HEADING.get_nowait()
+            HEADING.get_nowait()
         except mp.queues.Empty:
             pass
 

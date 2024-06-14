@@ -3,8 +3,9 @@ import json
 import socket
 import logging
 from typing import Generator, Dict
+from log_config import setup_logging
 
-logging.basicConfig(level=logging.INFO)
+setup_logging(level="INFO")
 logger = logging.getLogger(__name__)
 
 

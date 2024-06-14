@@ -29,7 +29,7 @@ pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(),
 
     // exposure
     let adjusted_exposure = adjust_exposure(args.exposure, &args.fps);
-    cam.set_exposure(adjusted_exposure)?;
+    cam.set_exposure(args.exposure)?;
 
     log::info!("Exposure set to: {}", adjusted_exposure);
     log::info!("FPS set to: {}", args.fps);

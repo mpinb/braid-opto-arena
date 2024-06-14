@@ -89,12 +89,15 @@ class Subscriber:
         self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, topic)
         logging.info(f"Subscribed to topic '{topic}'.")
 
-    def receive(self):
+    def receive(self, block=False):
         try:
-            message = self.sub_socket.recv_string(zmq.NOBLOCK)
-            _, actual_message = message.split(" ", 1)
+            if block:
+                message = self.sub_socket.recv_string()
+            else:
+                message = self.sub_socket.recv_string(zmq.NOBLOCK)
+            topic, actual_message = message.split(" ", 1)
             logging.debug(f"Received message: {message}")
-            return actual_message
+            return topic, actual_message
         except zmq.Again:
             logging.debug("No message received yet.")
             return None
