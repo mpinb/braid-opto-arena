@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 import cv2
 from ximea import xiapi
 from opto import Opto
@@ -7,6 +6,7 @@ import time
 import argparse
 from skimage.measure import shannon_entropy
 from tqdm import tqdm
+import os
 
 
 def open_controller(dev="/dev/ttyACM0"):
@@ -80,10 +80,17 @@ def find_optimal_focus_for_liquid_lens(position: float, current: int):
     cam.start_acquisition()
 
     current_array = np.arange(current - 50, current + 50, 1)
-    focus_metrics = {
-        key: np.zeros(len(current_array))
-        for key in ["current", "laplacian", "sobel", "variance_intensity", "entropy"]
-    }
+    # focus_metrics = {
+    #     key: np.zeros(len(current_array))
+    #     for key in ["current", "laplacian", "sobel", "variance_intensity", "entropy"]
+    # }
+
+    # create calibration folder if it doesn't exist
+    try:
+        save_path = f"/calibration/{int(position)}/"
+        os.makedirs(save_path)
+    except FileExistsError:
+        pass
 
     for i, curr in enumerate(tqdm(current_array)):
         time.sleep(1)
@@ -91,53 +98,56 @@ def find_optimal_focus_for_liquid_lens(position: float, current: int):
         time.sleep(0.1)
         cam.get_image(img)
         data = img.get_image_data_numpy()
-        metrics = calculate_focus_metrics(data)
 
-        focus_metrics["current"][i] = curr
-        for key in metrics:
-            focus_metrics[key][i] = metrics[key]
+        # save grayscale image to disk
+        cv2.imwrite(f"{save_path}/{curr}.png", data)
+        # metrics = calculate_focus_metrics(data)
 
-        # resize frame by a factor of 4
-        image_resized = cv2.cvtColor(
-            cv2.resize(data, (data.shape[1] // 4, data.shape[0] // 4)),
-            cv2.COLOR_GRAY2BGR,
-        )
-        cv2.putText(
-            image_resized,
-            f"{curr}",
-            (50, 50),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
-        cv2.imshow("Image", image_resized)
-        cv2.waitKey(1)
+        # focus_metrics["current"][i] = curr
+        # for key in metrics:
+        #     focus_metrics[key][i] = metrics[key]
 
-    normalized_metrics = normalize_metrics(
-        {k: v for k, v in focus_metrics.items() if k != "current"}
-    )
+        # # resize frame by a factor of 4
+        # image_resized = cv2.cvtColor(
+        #     cv2.resize(data, (data.shape[1] // 4, data.shape[0] // 4)),
+        #     cv2.COLOR_GRAY2BGR,
+        # )
+        # cv2.putText(
+        #     image_resized,
+        #     f"{curr}",
+        #     (50, 50),
+        #     cv2.FONT_HERSHEY_SIMPLEX,
+        #     1,
+        #     (255, 255, 255),
+        #     2,
+        #     cv2.LINE_AA,
+        # )
+        # cv2.imshow("Image", image_resized)
+        # cv2.waitKey(1)
 
-    # Define weights for each focus metric
-    weights = {
-        "laplacian": 0.25,
-        "sobel": 0.25,
-        "variance_intensity": 0.2,
-        "entropy": 0.15,
-    }
+    # normalized_metrics = normalize_metrics(
+    #     {k: v for k, v in focus_metrics.items() if k != "current"}
+    # )
 
-    composite_scores = compute_composite_score(normalized_metrics, weights)
-    best_focus_index = np.argmax(composite_scores)
-    best_focus_current = current_array[best_focus_index]
+    # # Define weights for each focus metric
+    # weights = {
+    #     "laplacian": 0.25,
+    #     "sobel": 0.25,
+    #     "variance_intensity": 0.2,
+    #     "entropy": 0.15,
+    # }
 
-    print(
-        f"Best Focus Found at Current: {best_focus_current}, Composite Score: {composite_scores[best_focus_index]}"
-    )
+    # composite_scores = compute_composite_score(normalized_metrics, weights)
+    # best_focus_index = np.argmax(composite_scores)
+    # best_focus_current = current_array[best_focus_index]
 
-    df = pd.DataFrame(focus_metrics)
-    df["composite_score"] = composite_scores
-    df.to_csv(f"{position}_calibration_matrix.csv", index=False)
+    # print(
+    #     f"Best Focus Found at Current: {best_focus_current}, Composite Score: {composite_scores[best_focus_index]}"
+    # )
+
+    # df = pd.DataFrame(focus_metrics)
+    # df["composite_score"] = composite_scores
+    # df.to_csv(f"{position}_calibration_matrix.csv", index=False)
 
     cam.stop_acquisition()
     cam.close_device()

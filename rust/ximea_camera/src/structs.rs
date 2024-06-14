@@ -2,6 +2,7 @@
 use clap::Parser;
 use image::{ImageBuffer, Luma};
 use serde::{Deserialize, Serialize};
+use serde_json::Error as SerdeError;
 
 // Standard library imports, alphabetized
 use std::sync::Arc;
@@ -36,10 +37,10 @@ pub struct Args {
     #[arg(long, default_value_t = String::from("127.0.0.1"))]
     pub address: String,
 
-    #[arg(long, default_value_t = String::from("5555"))]
+    #[arg(long, default_value_t = String::from("5556"))]
     pub sub_port: String,
 
-    #[arg(long, default_value_t = String::from("5556"))]
+    #[arg(long, default_value_t = String::from("5557"))]
     pub req_port: String,
 
     #[arg(long, default_value_t = false)]
@@ -85,10 +86,12 @@ pub struct KalmanEstimateRow {
 }
 
 // Adjusted for the enum
+#[derive(Debug)]
 pub enum MessageType {
-    Text(String),
-    JsonData(KalmanEstimateRow),
     Empty,
+    JsonData(KalmanEstimateRow),
+    Text(String),
+    InvalidJson(String, SerdeError), // New variant to include parsing error details
 }
 
 #[allow(dead_code)]

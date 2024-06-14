@@ -109,5 +109,6 @@ def get_video_output_folder(
     Returns:
         str: The output folder path for the video.
     """
-    base_folder = os.path.splitext(os.path.basename(braid_folder))[0]
-    return os.path.join((base_folder, braid_folder))
+
+    braid_folder = os.path.splitext(os.path.basename(braid_folder))[0]
+    return os.path.join(base_folder, braid_folder)

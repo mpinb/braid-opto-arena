@@ -52,7 +52,7 @@ color = "black" # Color
 
 # looming stimulus setup
 [stim_params.looming]
-active = true
+active = false
 stim_type = "natural"    # Stimulus type
 position = "closed-loop" # Position
 max_radius = 64          # Maximum radius
@@ -61,7 +61,7 @@ color = "black"          # Color
 
 # high-speed camera setup
 [highspeed]
-active = false
+active = true
 type = "ximea" # Type of high-speed camera
 
 # high-speed cameras list

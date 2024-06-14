@@ -22,7 +22,7 @@ pub fn time() -> f64 {
 /// Dealing with camera parameters
 pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(), i32> {
     // lens mode
-    set_lens_mode_with_retry(cam, args.aperture)?;
+    //set_lens_mode_with_retry(cam, args.aperture)?;
 
     // resolution
     set_resolution(cam, args.width, args.height)?;
@@ -170,17 +170,25 @@ pub fn connect_to_socket(port: &str, socket_type: zmq::SocketType) -> zmq::Socke
         .connect(format!("tcp://127.0.0.1:{}", port).as_str())
         .unwrap();
     if socket_type == zmq::SUB {
-        socket.set_subscribe(b"").unwrap();
+        socket.set_subscribe(b"trigger").unwrap();
     };
     socket
 }
 pub fn parse_message(message: &str) -> MessageType {
     if message.trim().is_empty() {
-        MessageType::Empty
-    } else {
-        match serde_json::from_str::<KalmanEstimateRow>(message) {
-            Ok(data) => MessageType::JsonData(data),
-            Err(_) => MessageType::Text(message.to_string()),
+        return MessageType::Empty;
+    }
+
+    match serde_json::from_str::<KalmanEstimateRow>(message) {
+        Ok(data) => MessageType::JsonData(data),
+        Err(e) => {
+            if e.is_data() {
+                // If the error is due to data format issues, return InvalidJson
+                MessageType::InvalidJson(message.to_string(), e)
+            } else {
+                // For other types of errors, treat it as a plain text message
+                MessageType::Text(message.to_string())
+            }
         }
     }
 }

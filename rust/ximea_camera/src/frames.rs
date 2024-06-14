@@ -19,6 +19,14 @@ use crate::{
     KalmanEstimateRow,
 };
 
+use log;
+extern crate ffmpeg_next as ffmpeg;
+use ffmpeg::{
+    codec, decoder, encoder, format, frame, media, picture, Dictionary, Packet, Rational,
+};
+
+const DEFAULT_X264_OPTS: &str = "preset=medium";
+
 fn save_images_to_disk(
     images: &VecDeque<Arc<ImageData>>,
     save_path: &Path,
@@ -40,6 +48,20 @@ fn save_images_to_disk(
     });
 
     Ok(())
+}
+
+fn save_video_to_disk(images: &VecDeque<Arc<ImageData>>, save_path: &Path) {
+    log::info!("Saving video to disk");
+
+    let output_file = save_path.join("video.mp4");
+    // Initialize ffmpeg library
+    ffmpeg_next::init().unwrap();
+
+    let mut octx = format::output(&output_file).unwrap();
+    let codec = encoder::find(codec::Id::H264);
+    let x264_opts = DEFAULT_X264_OPTS;
+
+    octx.write_header().unwrap();
 }
 
 fn save_video_metadata(
@@ -108,7 +130,6 @@ pub fn frame_handler(
 
         // get data
         let (image_data, incoming) = receiver.recv().unwrap();
-
         match incoming {
             MessageType::JsonData(kalman_row) => {
                 // save kalman row to variable
@@ -119,11 +140,15 @@ pub fn frame_handler(
             MessageType::Text(message) => {
                 // break if message is kill
                 if message == "kill" {
+                    log::info!("Received kill message");
                     break;
                 }
             }
             MessageType::Empty => {
                 // do nothing
+            }
+            _ => {
+                log::warn!("Received unknown message type");
             }
         }
 

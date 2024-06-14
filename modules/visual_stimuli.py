@@ -9,6 +9,7 @@ import pygame
 import toml
 from messages import Subscriber
 from utils.csv_writer import CsvWriter
+import signal
 
 # from scipy.interpolate import interp1d
 import logging
@@ -17,6 +18,15 @@ import logging
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
+
+
+# Function to ignore SIGINT (Ctrl+C)
+def ignore_signal(signum, frame):
+    print("SIGINT signal ignored")
+
+
+# Set the handler for SIGINT to the ignore function
+signal.signal(signal.SIGINT, ignore_signal)
 
 
 # Base stimulus class
@@ -220,7 +230,7 @@ def main(config_path, base_dir_path, standalone):
         subscriber = Subscriber(pub_port=5556, handshake_port=5557)
         subscriber.handshake()
         logging.debug("visual_stimuli.py: Handshake successful")
-        subscriber.subscribe()
+        subscriber.subscribe("trigger")
         logging.debug("visual_stimuli.py: Subscribed to all messages")
 
     # Main loop

@@ -53,6 +53,9 @@ fn main() -> Result<(), i32> {
     // Send ready message to ZMQ over REQ
     log::info!("Sending ready message to ZMQ PUB");
     handshake.send("Hello", 0).unwrap();
+    let message = handshake.recv_string(0);
+    println!("Received message: {:?}", message);
+
     match handshake.recv_string(0) {
         Ok(Ok(msg)) if &msg == "Welcome " => {
             log::info!("Handshake successfull");
@@ -73,26 +76,10 @@ fn main() -> Result<(), i32> {
 
     // Wait for ready message from socket
     log::info!("Waiting for ready message from ZMQ PUB");
-    let mut msg = zmq::Message::new();
 
     // Block until first message, which should be the save folder
     // subscriber.recv(&mut msg, 0).unwrap();
-    let save_folder: args.save_folder.clone();
-
-    // match parse_message(msg.as_str().unwrap()) {
-    //     MessageType::JsonData(data) => {
-    //         log::error!("Expected text message, got JSON data: {:?}", data);
-    //         // shutdown
-    //         return Err(1);
-    //     }
-    //     MessageType::Text(data) => {
-    //         save_folder = data;
-    //         log::info!("Got save folder: {}", &save_folder);
-    //     }
-    //     MessageType::Empty => {
-    //         //log::error!("Empty message received");
-    //     }
-    // }
+    let save_folder = args.save_folder.clone();
 
     // spawn writer thread
     let (sender, receiver) = channel::unbounded::<(Arc<ImageData>, MessageType)>();
@@ -107,13 +94,36 @@ fn main() -> Result<(), i32> {
     log::info!("Starting acquisition");
     loop {
         // receive message
-        match subscriber.recv(&mut msg, zmq::DONTWAIT) {
-            Ok(_) => log::info!("Received message: {}", msg.as_str().unwrap()),
-            Err(_) => {
-                // do nothing
+        let msg = match subscriber.recv_string(zmq::DONTWAIT) {
+            Ok(Ok(full_message)) => {
+                let parts: Vec<&str> = full_message.splitn(2, ' ').collect();
+                if parts.len() == 2 {
+                    let topic = parts[0];
+                    let message = parts[1];
+                    log::debug!("Received message: {:?} {:?}", topic, message);
+                    Some(message.to_string())
+                } else {
+                    log::warn!("Received message with no topic: {:?}", full_message);
+                    Some(full_message)
+                }
             }
+            Ok(Err(_)) => {
+                log::debug!("Failed to receive message");
+                None
+            }
+            Err(e) => {
+                log::debug!("Failed to receive message: {:?}", e);
+                None
+            }
+        };
+
+        // parse message
+        let mut parsed_message = MessageType::Empty;
+        if let Some(message) = msg {
+            parsed_message = parse_message(&message);
+        } else {
+            log::debug!("No valid message received.");
         }
-        let parsed_message = parse_message(msg.as_str().unwrap());
 
         // check if got "kill" in parsed_message
         if let MessageType::Text(data) = &parsed_message {
@@ -139,9 +149,11 @@ fn main() -> Result<(), i32> {
         // send frame with the incoming parsed message
         match sender.send((image_data, parsed_message)) {
             Ok(_) => {
-                log::info!("Sent frame to frame handler");
+                log::debug!("Sent frame to frame handler");
             }
-            Err(_e) => {} //log::error!("Failed to send frame: {}", e),
+            Err(_e) => {
+                log::warn!("Failed to send frame to frame handler");
+            } //log::error!("Failed to send frame: {}", e),
         }
     }
 

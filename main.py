@@ -70,7 +70,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     if not args.debug:
-        backlighting_power_supply()
+        backlighting_power_supply(voltage=0)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
@@ -94,15 +94,28 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Connect to cameras
     if params["highspeed"].get("active", False):
+        logging.info("Opening highspeed camera.")
         params["video_save_folder"] = get_video_output_folder(braid_folder)
-        # start camera here
+        video_save_folder = params["video_save_folder"]
+        subprocess.Popen(
+            [
+                "rust/ximea_camera/target/release/ximea_camera",
+                "--save-folder",
+                f"{video_save_folder}",
+            ]
+        )
         pub.wait_for_subscriber()
-        pub.publish("", params["video_save_folder"])
+
+        subprocess.Popen(["python", "./modules/lens_controller.py"])
+        pub.wait_for_subscriber()
+
+        logging.info("Highspeed camera connected.")
 
     # check if any visual stimuli is active and start the visual stimuli process
     if any(
         [value.get("active", False) for key, value in params["stim_params"].items()]
     ):
+        logging.info("Starting visual stimuli process.")
         subprocess.Popen(
             [
                 "python",
@@ -113,6 +126,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             ]
         )
         pub.wait_for_subscriber()
+        logging.info("Visual stimuli process connected.")
 
     trigger_params = params["trigger_params"]
 
@@ -146,6 +160,10 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
             # Check for "update" message
             elif "Update" in msg_dict:
+                # publish to the lens controller
+                pub.publish(json.dumps(msg_dict["Update"]), "lens")
+
+                # Get object id
                 curr_obj_id = msg_dict["Update"]["obj_id"]
 
                 # Calculate heading direction
@@ -184,7 +202,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 # logging.warning(f"Trigger interval too short for object {curr_obj_id}")
                 continue
 
-            # Get position and radius
+            # Get position
             pos = msg_dict["Update"]
 
             # Calculate heading direction
@@ -207,7 +225,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     logging.info("Triggering opto.")
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
-                pub.publish(json.dumps(pos))
+                pub.publish(json.dumps(pos), "trigger")
 
                 # Write data to csv
                 csv_writer.write(pos)

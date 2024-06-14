@@ -92,8 +92,9 @@ class Subscriber:
     def receive(self):
         try:
             message = self.sub_socket.recv_string(zmq.NOBLOCK)
+            _, actual_message = message.split(" ", 1)
             logging.debug(f"Received message: {message}")
-            return message
+            return actual_message
         except zmq.Again:
             logging.debug("No message received yet.")
             return None

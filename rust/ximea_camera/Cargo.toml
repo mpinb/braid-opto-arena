@@ -19,6 +19,7 @@ zmq = "0.10.0"
 ctrlc = "3.4"
 chrono = "0.4.37"
 rayon = "1.10.0"
+ffmpeg-next = "7.0.2"
 
 [[example]]
 name = "set_lens_mode"
