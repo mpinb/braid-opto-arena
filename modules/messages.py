@@ -5,7 +5,9 @@ import zmq
 
 # Setup basic logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(filename)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 
@@ -95,12 +97,14 @@ class Subscriber:
                 message = self.sub_socket.recv_string()
             else:
                 message = self.sub_socket.recv_string(zmq.NOBLOCK)
+
             topic, actual_message = message.split(" ", 1)
             logging.debug(f"Received message: {message}")
             return topic, actual_message
+
         except zmq.Again:
             logging.debug("No message received yet.")
-            return None
+            return None, None
 
     def close(self):
         self.sub_socket.close()

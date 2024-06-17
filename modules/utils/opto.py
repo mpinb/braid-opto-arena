@@ -3,7 +3,7 @@ import random
 import logging
 import serial
 
-from utils.log_config import setup_logging
+from modules.utils.log_config import setup_logging
 
 setup_logging(level="INFO")
 logger = logging.getLogger(__name__)

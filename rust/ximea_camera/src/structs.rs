@@ -13,7 +13,7 @@ pub struct Args {
     #[arg(long, default_value_t = 0)]
     pub serial: u32,
 
-    #[arg(long, default_value_t = 350.0)]
+    #[arg(long, default_value_t = 500.0)]
     pub fps: f32,
 
     #[arg(long, default_value_t = 1200.0)]
@@ -22,11 +22,17 @@ pub struct Args {
     #[arg(long, default_value_t = 10.0)]
     pub aperture: f32,
 
-    #[arg(long, default_value_t = 3008)]
+    #[arg(long, default_value_t = 2016)]
     pub width: u32,
 
-    #[arg(long, default_value_t = 3008)]
+    #[arg(long, default_value_t = 2016)]
     pub height: u32,
+
+    #[arg(long, default_value_t = 1216)]
+    pub offset_x: u32,
+
+    #[arg(long, default_value_t = 126)]
+    pub offset_y: u32,
 
     #[arg(long, default_value_t = 0.5)]
     pub t_before: f32,

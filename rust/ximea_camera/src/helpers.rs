@@ -25,7 +25,7 @@ pub fn set_camera_parameters(cam: &mut xiapi::Camera, args: &Args) -> Result<(),
     //set_lens_mode_with_retry(cam, args.aperture)?;
 
     // resolution
-    set_resolution(cam, args.width, args.height)?;
+    set_resolution(cam, args.width, args.height, args.offset_x, args.offset_y)?;
 
     // exposure
     let adjusted_exposure = adjust_exposure(args.exposure, &args.fps);
@@ -139,10 +139,16 @@ fn set_lens_mode_with_retry(cam: &mut xiapi::Camera, aperture: f32) -> Result<()
     }
 }
 
-fn set_resolution(cam: &mut xiapi::Camera, width: u32, height: u32) -> Result<(), i32> {
+fn set_resolution(
+    cam: &mut xiapi::Camera,
+    width: u32,
+    height: u32,
+    offset_x: u32,
+    offset_y: u32,
+) -> Result<(), i32> {
     let max_resolution = cam.roi().unwrap();
-    let (offset_x, offset_y) =
-        get_offset_for_resolution((max_resolution.width, max_resolution.height), width, height)?;
+
+    //let (offset_x, offset_y) = get_offset_for_resolution((max_resolution.width, max_resolution.height), width, height)?;
 
     let roi = xiapi::Roi {
         offset_x,

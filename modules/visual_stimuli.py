@@ -27,7 +27,7 @@ os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
 
 # Function to ignore SIGINT (Ctrl+C)
 def ignore_signal(signum, frame):
-    print("SIGINT signal ignored")
+    pass
 
 
 # Set the handler for SIGINT to the ignore function
@@ -121,7 +121,7 @@ class LoomingStimulus(Stimulus):
             if heading_direction is not None:
                 self.position = interp_angle(heading_direction)
                 logger.debug(
-                    f"visual_stimuli.py: heading_direction: {heading_direction}, position: {self.position}"
+                    f" heading_direction: {heading_direction}, position: {self.position}"
                 )
             else:
                 self.position = self._get_value("random", 0, SCREEN_WIDTH)
@@ -234,13 +234,13 @@ def main(config_path, base_dir_path, standalone):
     if not standalone:
         subscriber = Subscriber(pub_port=5556, handshake_port=5557)
         subscriber.handshake()
-        logger.debug("visual_stimuli.py: Handshake successful")
+        logger.debug(" Handshake successful")
         subscriber.subscribe("trigger")
-        logger.debug("visual_stimuli.py: Subscribed to all messages")
+        logger.debug(" Subscribed to all messages")
 
     # Main loop
     clock = pygame.time.Clock()
-    logger.info("visual_stimuli.py: Starting main loop")
+    logger.info(" Starting main loop")
     while True:
         time_elapsed = clock.get_time()
         for event in pygame.event.get():
@@ -249,7 +249,7 @@ def main(config_path, base_dir_path, standalone):
                 break
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_k:
-                    logger.info("visual_stimuli.py: Key pressed: K")
+                    logger.info("Key pressed: K")
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):
                             stim.start_expansion()
@@ -259,13 +259,13 @@ def main(config_path, base_dir_path, standalone):
             logger.debug(f"Got message from subscriber: {message}")
 
             if message == "kill":
-                logger.info("visual_stimuli.py: Received kill message. Exiting...")
+                logger.info("Received kill message. Exiting...")
                 break
 
             elif message is not None:
                 trigger_info = json.loads(message)
                 heading_direction = trigger_info["heading_direction"]
-                logger.info(f"visual_stimuli.py: triggering stimulus {trigger_info}")
+                logger.info("Triggering stimulus")
                 logger.debug(f"Got heading direction: {heading_direction}")
 
                 # Handle trigger for looming stimulus

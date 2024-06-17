@@ -8,6 +8,7 @@ from scipy.interpolate import interp1d
 import json
 import signal
 from utils.log_config import setup_logging
+import time
 
 # Setup logging
 setup_logging(level="DEBUG")
@@ -54,7 +55,10 @@ class LiquidLens:
         logger.debug("Loading calibration data from ~/calibration_array.csv")
         calibration = pd.read_csv("~/calibration_array.csv")
         self.interp_current = interp1d(
-            calibration["braid_position"], calibration["current"]
+            calibration["braid_position"],
+            calibration["current"],
+            kind="linear",
+            fill_value="extrapolate",
         )
 
     def _setup_zmq(self):
@@ -62,27 +66,38 @@ class LiquidLens:
         logger.debug(f"Setting up subscriber on port {self.sub_port}")
         self.subscriber = Subscriber(self.sub_port, self.handshake_port)
         self.subscriber.handshake()
-        logger.info("lens_controller.py - Handshake complete")
+        logger.info("Handshake complete")
         self.subscriber.subscribe()
-        logger.info("lens_controller.py - Subscribed to messages")
+        logger.info("Subscribed to messages")
 
     def run(self):
         """Controls the lens based on received ZMQ messages, adjusting the lens position with a variable update rate."""
         logger.info("Starting liquid lens control loop")
+        trigger_time = time.time()
+        obj_id_to_track = None
+        # trigger = False
         while True:
+            # receive the message from the subscriber with blocking
             topic, message = self.subscriber.receive(block=True)
             if message == "kill":
                 break
 
+            # Check if the message is a trigger message
             message = json.loads(message)
             if topic == "trigger":
-                logger.debug("Received first ")
+                logger.debug("Received first trigger from the camera")
+                # trigger = True
                 obj_id_to_track = message["obj_id"]
+                trigger_time = time.time()
 
-            if message["obj_id"] == obj_id_to_track:
-                current = self.interp_current(message["z"])
-                self.current(current)
-                logger.debug(f"Position: {message["z"]}; Current: {message["z"]}")
+            # if the object_id from the non-trigger message matches the object_id from the trigger message
+            # and the time since the trigger message is less than 2 seconds
+            # then update the current position of the lens
+            if message["obj_id"] == obj_id_to_track and time.time() - trigger_time < 2:
+                z = message["z"]
+                current = self.interp_current(z)
+                self.device.current(current)
+                logger.debug(f"Position: {z}; Current: {current}")
 
         self.close()
 
