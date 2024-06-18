@@ -204,28 +204,65 @@ class GratingStimulus(Stimulus):
         pass
 
 
+def connect_to_zmq(pub_port: int = 5556, handshake_port: int = 5557):
+    subscriber = Subscriber(pub_port, handshake_port)
+    subscriber.handshake()
+    logger.debug("Handshake successful")
+    subscriber.subscribe("trigger")
+    logger.debug("Subscribed to all messages")
+    return subscriber
+
+
+def create_stimuli(config):
+    stim_config = config["stim_params"]
+    stimuli = []
+    stimulus_classes = {
+        "static": StaticImageStimulus,
+        "looming": LoomingStimulus,
+        "grating": GratingStimulus,
+    }
+
+    for stim_type, StimulusClass in stimulus_classes.items():
+        if stim_config[stim_type].get("active", False):
+            stimuli.append(StimulusClass(stim_config[stim_type]))
+
+    return stimuli
+
+
+# Main function
 def main(config_file, base_dir, standalone):
     # Initialize pygame
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    clock = pygame.time.Clock()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.NOFRAME)
+    pygame.display.set_caption("Stimulus Display")
 
-    # Load configuration and stimuli
+    # Load configuration
     with open(config_file, "r") as f:
         config = toml.load(f)
 
-    stimuli = []  # Load your stimuli here based on config
-    subscriber = Subscriber(config["zmq_address"]) if not standalone else None
-    csv_writer = (
-        CsvWriter(os.path.join(base_dir, "stim.csv")) if not standalone else None
-    )
+    # Create stimuli
+    stimuli = create_stimuli(config)
 
+    # CSV logging setup
+    if not standalone:
+        csv_writer = CsvWriter(os.path.join(base_dir, "stim.csv"))
+        subscriber = connect_to_zmq()
+
+    # Main loop
+    clock = pygame.time.Clock()
+    logger.info("Starting main loop")
     try:
         while True:
             time_elapsed = clock.get_time()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     raise SystemExit
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_k:
+                        logger.info("Key pressed: K")
+                        for stim in stimuli:
+                            if isinstance(stim, LoomingStimulus):
+                                stim.start_expansion()
 
             if not standalone:
                 _, message = subscriber.receive()
@@ -261,11 +298,13 @@ def main(config_file, base_dir, standalone):
 
     except SystemExit:
         pass
+
     finally:
         # Clean up
         if not standalone:
             csv_writer.close()
             subscriber.close()
+
         pygame.display.quit()
         pygame.quit()
 

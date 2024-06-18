@@ -8,6 +8,7 @@ from messages import Subscriber
 from opto import Opto
 from scipy.interpolate import interp1d
 from utils.log_config import setup_logging
+import time
 
 # Setup logging
 setup_logging(level="DEBUG")
@@ -25,7 +26,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 
 # Load data from params file
 margins = 0.01
-PARAMS = toml.load("../params.toml")
+PARAMS = toml.load("/home/buchsbaum/src/BraidTrigger/params.toml")
 XMIN = PARAMS["trigger_params"]["xmin"] - margins
 XMAX = PARAMS["trigger_params"]["xmax"] + margins
 YMIN = PARAMS["trigger_params"]["ymin"] - margins
@@ -72,6 +73,11 @@ class LiquidLens:
     def _setup_zmq(self):
         """Setup the ZMQ subscriber."""
         self.subscriber = Subscriber(self.sub_port, self.handshake_port)
+        logger.debug("Handshaking with the publisher.")
+        self.subscriber.handshake()
+        logger.debug("Subscribing to 'lens' topic.")
+        self.subscriber.subscribe("lens")
+        logger.info("Finished zmq setup")
 
     def is_within_predefined_zone(self, data):
         x, y, z = data["x"], data["y"], data["z"]
@@ -80,7 +86,7 @@ class LiquidLens:
     def run(self):
         try:
             while True:
-                message = self.subscriber.receive()
+                topic, message = self.subscriber.receive()
                 if message is None:
                     continue
 
@@ -98,24 +104,30 @@ class LiquidLens:
                     logger.debug(f"Can't parse message: {message}")
                     continue
 
+                # check if data contains "obj_id" key
+                if "obj_id" not in data:
+                    logger.debug(f"Data does not contain 'obj_id' key: {data}")
+                    continue
+
                 if self.current_tracked_object is None:
                     if self.is_within_predefined_zone(data):
                         logger.info(f"Tracking object {data['obj_id']}")
+                        tracking_start_time = time.time()
                         self.current_tracked_object = data["obj_id"]
                         self.update_lens(data["z"])
                 else:
-                    if data.get("obj_id") == self.current_tracked_object:
+                    if data["obj_id"] == self.current_tracked_object:
                         if self.is_within_predefined_zone(data):
                             self.update_lens(data["z"])
                         else:
                             logger.info(
-                                f"Object {self.current_tracked_object} left the tracking zone."
+                                f"Object {self.current_tracked_object} left the tracking zone after {time.time() - tracking_start_time} seconds."
                             )
                             self.current_tracked_object = None
         except SystemExit:
             logger.info("Exiting due to signal.")
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            logger.warning(f"Unexpected error: {e}")
         finally:
             self.close()
 
