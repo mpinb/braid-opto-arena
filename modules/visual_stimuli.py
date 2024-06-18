@@ -16,7 +16,7 @@ import logging
 
 from utils.log_config import setup_logging
 
-setup_logging(level="INFO")
+setup_logging(level="INFO", color="yellow")
 logger = logging.getLogger(__name__)
 
 # Constants

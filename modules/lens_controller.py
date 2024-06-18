@@ -11,7 +11,7 @@ from utils.log_config import setup_logging
 import time
 
 # Setup logging
-setup_logging(level="DEBUG")
+setup_logging(level="DEBUG", color="cyan")
 logger = logging.getLogger(__name__)
 
 

@@ -31,7 +31,7 @@ fn save_images_to_disk(
     images: &VecDeque<Arc<ImageData>>,
     save_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Saving images to disk");
+    log::debug!("Saving images to disk");
 
     // loop over images and save to disk
     images.into_par_iter().for_each(|image| {
@@ -62,14 +62,13 @@ fn save_video_to_disk(images: &VecDeque<Arc<ImageData>>, save_path: &Path) {
     let x264_opts = DEFAULT_X264_OPTS;
 
     octx.write_header().unwrap();
-
 }
 
 fn save_video_metadata(
     images: &VecDeque<Arc<ImageData>>,
     save_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    log::info!("Saving metadata to disk");
+    log::debug!("Saving metadata to disk");
     // Open a file in write mode to save CSV data
     //let file = File::create(save_path.join("metadata.csv")).unwrap();
     let mut file = OpenOptions::new()
@@ -136,7 +135,7 @@ pub fn frame_handler(
                 // save kalman row to variable
                 trigger_data = kalman_row;
                 switch = true;
-                log::info!("Received Kalman data: {:?}", trigger_data);
+                log::debug!("Received Kalman data: {:?}", trigger_data);
             }
             MessageType::Text(message) => {
                 // break if message is kill
