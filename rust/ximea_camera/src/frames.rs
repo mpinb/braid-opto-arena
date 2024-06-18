@@ -19,10 +19,10 @@ use crate::{
     KalmanEstimateRow,
 };
 
-use log;
+
 extern crate ffmpeg_next as ffmpeg;
 use ffmpeg::{
-    codec, decoder, encoder, format, frame, media, picture, Dictionary, Packet, Rational,
+    codec, encoder, format,
 };
 
 const DEFAULT_X264_OPTS: &str = "preset=medium";
@@ -50,7 +50,7 @@ fn save_images_to_disk(
     Ok(())
 }
 
-fn save_video_to_disk(images: &VecDeque<Arc<ImageData>>, save_path: &Path) {
+fn save_video_to_disk(_images: &VecDeque<Arc<ImageData>>, save_path: &Path) {
     log::info!("Saving video to disk");
 
     let output_file = save_path.join("video.mp4");
@@ -58,8 +58,8 @@ fn save_video_to_disk(images: &VecDeque<Arc<ImageData>>, save_path: &Path) {
     ffmpeg_next::init().unwrap();
 
     let mut octx = format::output(&output_file).unwrap();
-    let codec = encoder::find(codec::Id::H264);
-    let x264_opts = DEFAULT_X264_OPTS;
+    let _codec = encoder::find(codec::Id::H264);
+    let _x264_opts = DEFAULT_X264_OPTS;
 
     octx.write_header().unwrap();
 }

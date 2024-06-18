@@ -2,7 +2,7 @@
 use clap::Parser;
 use crossbeam::channel;
 use image::{ImageBuffer, Luma};
-use std::sync::atomic::{AtomicBool, Ordering};
+
 use std::sync::Arc;
 
 // Local module declarations

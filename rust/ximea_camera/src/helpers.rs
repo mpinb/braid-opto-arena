@@ -146,7 +146,7 @@ fn set_resolution(
     offset_x: u32,
     offset_y: u32,
 ) -> Result<(), i32> {
-    let max_resolution = cam.roi().unwrap();
+    let _max_resolution = cam.roi().unwrap();
 
     //let (offset_x, offset_y) = get_offset_for_resolution((max_resolution.width, max_resolution.height), width, height)?;
 
