@@ -114,6 +114,13 @@ class LiquidLens:
                         self.current_tracked_object = data["obj_id"]
                         self.update_lens(data["z"])
                 else:
+                    # the issue is here - since this script only receives 'Update'
+                    # messages, and misses all other types, it might reach this
+                    # point, but never enter it, thus never resetting the
+                    # 'current_object_tracked' variables
+
+                    # i need to add parsing for 'Birth' and 'Death' messages as well,
+                    # or maybe a time limit 
                     if data["obj_id"] == self.current_tracked_object:
                         if self.is_within_predefined_zone(data):
                             self.update_lens(data["z"])
