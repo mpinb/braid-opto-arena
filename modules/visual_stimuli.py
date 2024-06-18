@@ -204,96 +204,70 @@ class GratingStimulus(Stimulus):
         pass
 
 
-# Main function
-def main(config_path, base_dir_path, standalone):
+def main(config_file, base_dir, standalone):
     # Initialize pygame
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.NOFRAME)
-    pygame.display.set_caption("Stimulus Display")
-
-    # Load configuration
-    config = toml.load(config_path)
-
-    stim_config = config["stim_params"]
-
-    # Create stimuli
-    stimuli = []
-    if stim_config["static"].get("active", False):
-        stimuli.append(StaticImageStimulus(stim_config["static"]))
-    if stim_config["looming"].get("active", False):
-        stimuli.append(LoomingStimulus(stim_config["looming"]))
-    if stim_config["grating"].get("active", False):
-        stimuli.append(GratingStimulus(stim_config["grating"]))
-
-    # CSV logging setup
-    if not standalone:
-        csv_writer = CsvWriter(os.path.join(base_dir_path, "stim.csv"))
-
-    # ZMQ setup if not standalone
-    subscriber = None
-    if not standalone:
-        subscriber = Subscriber(pub_port=5556, handshake_port=5557)
-        subscriber.handshake()
-        logger.debug(" Handshake successful")
-        subscriber.subscribe("trigger")
-        logger.debug(" Subscribed to all messages")
-
-    # Main loop
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     clock = pygame.time.Clock()
-    logger.info(" Starting main loop")
-    while True:
-        time_elapsed = clock.get_time()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                # keep_running = False
-                break
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_k:
-                    logger.info("Key pressed: K")
+
+    # Load configuration and stimuli
+    with open(config_file, "r") as f:
+        config = toml.load(f)
+
+    stimuli = []  # Load your stimuli here based on config
+    subscriber = Subscriber(config["zmq_address"]) if not standalone else None
+    csv_writer = (
+        CsvWriter(os.path.join(base_dir, "stim.csv")) if not standalone else None
+    )
+
+    try:
+        while True:
+            time_elapsed = clock.get_time()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    raise SystemExit
+
+            if not standalone:
+                _, message = subscriber.receive()
+                logger.debug(f"Got message from subscriber: {message}")
+
+                if message == "kill":
+                    logger.info("Received kill message. Exiting...")
+                    break
+
+                elif message is not None:
+                    trigger_info = json.loads(message)
+                    heading_direction = trigger_info["heading_direction"]
+                    logger.info("Triggering stimulus")
+                    logger.debug(f"Got heading direction: {heading_direction}")
+
+                    # Handle trigger for looming stimulus
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):
-                            stim.start_expansion()
+                            stim.start_expansion(heading_direction)
+                            updated_info = stim.get_trigger_info()
+                            trigger_info.update(updated_info)
 
+                            # Log the event
+                            csv_writer.write(trigger_info)
+
+            # Update screen
+            screen.fill((255, 255, 255))
+            for stim in stimuli:
+                stim.update(screen, time_elapsed)
+
+            pygame.display.flip()
+            clock.tick(60)
+
+    except SystemExit:
+        pass
+    finally:
+        # Clean up
         if not standalone:
-            _, message = subscriber.receive()
-            logger.debug(f"Got message from subscriber: {message}")
-
-            if message == "kill":
-                logger.info("Received kill message. Exiting...")
-                break
-
-            elif message is not None:
-                trigger_info = json.loads(message)
-                heading_direction = trigger_info["heading_direction"]
-                logger.info("Triggering stimulus")
-                logger.debug(f"Got heading direction: {heading_direction}")
-
-                # Handle trigger for looming stimulus
-                for stim in stimuli:
-                    if isinstance(stim, LoomingStimulus):
-                        stim.start_expansion(heading_direction)
-                        updated_info = stim.get_trigger_info()
-                        trigger_info.update(updated_info)
-
-                        # Log the event
-                        csv_writer.write(trigger_info)
-            else:
-                pass
-
-        # Update screen
-        screen.fill((255, 255, 255))
-        for stim in stimuli:
-            stim.update(screen, time_elapsed)
-        pygame.display.flip()
-        clock.tick(60)
-
-    # Clean up
-    if not standalone:
-        csv_writer.close()
-
-    subscriber.close()
-    pygame.display.quit()
-    pygame.quit()
+            csv_writer.close()
+            subscriber.close()
+        pygame.display.quit()
+        pygame.quit()
 
 
 if __name__ == "__main__":

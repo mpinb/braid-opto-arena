@@ -77,7 +77,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     if not args.debug:
-        backlighting_power_supply(voltage=30)
+        backlighting_power_supply(voltage=31)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
@@ -109,6 +109,18 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 "rust/ximea_camera/target/release/ximea_camera",
                 "--save-folder",
                 f"{video_save_folder}",
+                "--fps",
+                "500",
+                "--exposure",
+                "1400",
+                "--height",
+                "2016",
+                "--width",
+                "2016",
+                "--offset-x",
+                "1216",
+                "--offset-y",
+                "126",
             ]
         )
         pub.wait_for_subscriber()

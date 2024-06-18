@@ -16,8 +16,8 @@ xmin = -0.05              # Minimum x for activation in meters
 xmax = 0.075              # Maximum x for activation in meters
 ymin = -0.04              # Minimum y for activation in meters
 ymax = 0.08               # Maximum y for activation in meters
-center_x = -0.022         # Arena center x in meters
-center_y = 0.037          # Arena center y in meters
+center_x = 0         # Arena center x in meters
+center_y = 0          # Arena center y in meters
 
 # opto light parameters
 [opto_params]

@@ -93,17 +93,25 @@ class Subscriber:
 
     def receive(self, block=False):
         try:
-            if block:
-                message = self.sub_socket.recv_string()
-            else:
-                message = self.sub_socket.recv_string(zmq.NOBLOCK)
+            # Receive the message, with or without blocking based on the 'block' parameter
+            message = self.sub_socket.recv_string(flags=0 if block else zmq.NOBLOCK)
 
+            # Split the message into topic and actual message
             topic, actual_message = message.split(" ", 1)
             logging.debug(f"Received message: {message}")
+
             return topic, actual_message
 
-        except zmq.Again:
-            logging.debug("No message received yet.")
+        except zmq.Again as e:
+            logging.debug("No message received yet: %s", e)
+            return None, None
+
+        except ValueError as e:
+            logging.error("Error parsing message: %s", e)
+            return None, None
+
+        except Exception as e:
+            logging.error("Unexpected error: %s", e)
             return None, None
 
     def close(self):

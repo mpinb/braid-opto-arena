@@ -60,6 +60,17 @@
             ],
             "preLaunchTask": "build",
             "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "tiff2vid.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "./scripts/tiff2vid.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "/home/buchsbaum/mnt/DATA/Videos/20240617_164709/",
+            ]
         }
     ]
 }
