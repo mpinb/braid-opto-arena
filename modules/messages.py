@@ -1,14 +1,9 @@
-import logging
 import time
 
 import zmq
+from modules.utils.log_config import setup_logging
 
-# Setup basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(filename)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+logger = setup_logging(logger_name="Messages", level="INFO", color="cyan")
 
 
 class Publisher:
@@ -29,9 +24,9 @@ class Publisher:
             message = self.rep_socket.recv_string()  # Non-blocking receive
             if message == "Hello":
                 self.rep_socket.send_string("Welcome")
-                logging.info("Handshake completed with a subscriber.")
+                logger.info("Handshake completed with a subscriber.")
         except zmq.Again as e:
-            logging.warning(f"{e} No handshake request received yet.")
+            logger.warning(f"{e} No handshake request received yet.")
 
     def publish(
         self,
@@ -39,13 +34,13 @@ class Publisher:
         topic="",
     ):
         self.pub_socket.send_string(f"{topic} {msg}")
-        logging.debug(f"Published message on topic '{topic}': {msg}")
+        logger.debug(f"Published message on topic '{topic}': {msg}")
 
     def close(self):
         self.pub_socket.close()
         self.rep_socket.close()
         self.context.term()
-        logging.info("Closed publisher sockets and terminated context.")
+        logger.info("Closed publisher sockets and terminated context.")
 
 
 class Subscriber:
@@ -76,20 +71,20 @@ class Subscriber:
                 self.req_socket.send_string("Hello")
                 reply = self.req_socket.recv_string()
                 if reply == "Welcome":
-                    logging.info("Handshake successful.")
+                    logger.info("Handshake successful.")
                     return True
                 else:
-                    logging.warning("Handshake failed. Unexpected reply.")
+                    logger.warning("Handshake failed. Unexpected reply.")
             except zmq.ZMQError as e:
-                logging.error(f"Handshake error: {e}")
+                logger.error(f"Handshake error: {e}")
             time.sleep(self.retry_timeout)  # wait before retrying
-        logging.error("Handshake failed after maximum retry attempts.")
+        logger.error("Handshake failed after maximum retry attempts.")
 
         return False
 
     def subscribe(self, topic=""):
         self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, topic)
-        logging.info(f"Subscribed to topic '{topic}'.")
+        logger.info(f"Subscribed to topic '{topic}'.")
 
     def receive(self, block=False):
         try:
@@ -98,24 +93,24 @@ class Subscriber:
 
             # Split the message into topic and actual message
             topic, actual_message = message.split(" ", 1)
-            logging.debug(f"Received message: {message}")
+            logger.debug(f"Received message: {message}")
 
             return topic, actual_message
 
-        except zmq.Again as e:
-            logging.debug("No message received yet: %s", e)
+        except zmq.Again:
+            # logger.debug("No message received yet: %s", e)
             return None, None
 
         except ValueError as e:
-            logging.error("Error parsing message: %s", e)
+            logger.error("Error parsing message: %s", e)
             return None, None
 
         except Exception as e:
-            logging.error("Unexpected error: %s", e)
+            logger.error("Unexpected error: %s", e)
             return None, None
 
     def close(self):
         self.sub_socket.close()
         self.req_socket.close()
         self.context.term()
-        logging.info("Closed subscriber sockets and terminated context.")
+        logger.info("Closed subscriber sockets and terminated context.")

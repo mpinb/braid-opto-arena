@@ -7,8 +7,8 @@ from collections import deque
 
 import numpy as np
 import tomllib
-from modules.messages import Publisher
 
+from modules.messages import Publisher
 from modules.utils.csv_writer import CsvWriter
 from modules.utils.files import (
     check_braid_running,
@@ -17,17 +17,21 @@ from modules.utils.files import (
 )
 from modules.utils.flydra_proxy import Flydra2Proxy
 from modules.utils.hardware import (
-    create_arduino_device,
     backlighting_power_supply,
+    create_arduino_device,
 )
+from modules.utils.log_config import setup_logging
 from modules.utils.opto import check_position, trigger_opto
 
-from modules.utils.log_config import setup_logging
-import logging
+# Get the root directory of the project
+root_dir = os.path.abspath(os.path.dirname(__file__))
+
+# Set the PYTHONPATH environment variable
+env = os.environ.copy()
+env["PYTHONPATH"] = root_dir
 
 # Setup logger
-setup_logging(level="DEBUG")
-logger = logging.getLogger(__name__)
+logger = setup_logging(logger_name="Main", level="INFO")
 
 
 class RealTimeHeadingCalculator:
@@ -106,7 +110,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         video_save_folder = params["video_save_folder"]
         subprocess.Popen(
             [
-                "rust/ximea_camera/target/release/ximea_camera",
+                "libs/ximea_camera/target/release/ximea_camera",
                 "--save-folder",
                 f"{video_save_folder}",
                 "--fps",
@@ -125,7 +129,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         )
         pub.wait_for_subscriber()
 
-        subprocess.Popen(["python", "./modules/lens_controller.py"])
+        subprocess.Popen(["python", "./modules/lens_controller.py"], env=env)
         pub.wait_for_subscriber()
 
         logger.info("Highspeed camera connected.")
@@ -142,7 +146,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 f"{params_file}",
                 "--base_dir",
                 f"{braid_folder}",
-            ]
+            ],
+            env=env,
         )
         pub.wait_for_subscriber()
         logger.info("Visual stimuli process connected.")

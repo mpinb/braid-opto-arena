@@ -1,5 +1,4 @@
 import filecmp
-import logging
 import os
 import pathlib
 import shutil
@@ -10,8 +9,7 @@ from tqdm.contrib.concurrent import thread_map
 
 from modules.utils.log_config import setup_logging
 
-setup_logging(level="INFO")
-logger = logging.getLogger(__name__)
+logger = setup_logging(logger_name="Files", level="INFO", color="green")
 
 
 def check_braid_folder(root_folder: str) -> str:
@@ -65,7 +63,7 @@ def copy_files_with_progress(src_folder, dest_folder):
         shutil.copy2(src_file_path, dest_file_path)
 
         if filecmp.cmp(src_file_path, dest_file_path, shallow=False):
-            logging.debug(f"File {src_file_path} copied successfully.")
+            logger.debug(f"File {src_file_path} copied successfully.")
             os.remove(src_file_path)
 
     files = [

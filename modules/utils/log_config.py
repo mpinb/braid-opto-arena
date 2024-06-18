@@ -2,13 +2,13 @@ import logging
 import colorlog
 
 
-def setup_logging(level="INFO", color="white"):
+def setup_logging(logger_name, level="INFO", color="white"):
     numeric_level = getattr(logging, level.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError(f"Invalid log level: {level}")
 
-    # Create a logger
-    logger = logging.getLogger()
+    # Create a logger with the specified name
+    logger = logging.getLogger(logger_name)
     logger.setLevel(numeric_level)
 
     # Remove any existing handlers
@@ -21,7 +21,7 @@ def setup_logging(level="INFO", color="white"):
 
     # Create a formatter with color
     formatter = colorlog.ColoredFormatter(
-        "%(log_color)s%(asctime)s - %(filename)s - %(levelname)s - %(message)s",
+        "%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         log_colors={
             "DEBUG": color,
@@ -35,14 +35,14 @@ def setup_logging(level="INFO", color="white"):
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
-    # Additional configurations can be added here, such as handlers, file logging, etc.
+    return logger
 
 
-# Example of how to call setup_logging from a different script
+# Example usage of the setup_logging function
 if __name__ == "__main__":
-    setup_logging(level="DEBUG", color="cyan")
-    logging.debug("This is a debug message.")
-    logging.info("This is an info message.")
-    logging.warning("This is a warning message.")
-    logging.error("This is an error message.")
-    logging.critical("This is a critical message.")
+    logger = setup_logging(logger_name="example", level="INFO", color="cyan")
+    logger.debug("This is a debug message.")
+    logger.info("This is an info message.")
+    logger.warning("This is a warning message.")
+    logger.error("This is an error message.")
+    logger.critical("This is a critical message.")

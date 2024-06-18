@@ -1,6 +1,5 @@
 import argparse
 import json
-import logging
 import signal
 import pandas as pd
 import toml
@@ -11,8 +10,7 @@ from utils.log_config import setup_logging
 import time
 
 # Setup logging
-setup_logging(level="DEBUG", color="cyan")
-logger = logging.getLogger(__name__)
+logger = setup_logging(logger_name="LensController", level="INFO", color="cyan")
 
 
 # Function to handle SIGINT (Ctrl+C) and SIGTERM

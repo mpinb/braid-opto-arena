@@ -1,12 +1,10 @@
 import requests
 import json
 import socket
-import logging
 from typing import Generator, Dict
 from modules.utils.log_config import setup_logging
 
-setup_logging(level="INFO")
-logger = logging.getLogger(__name__)
+logger = setup_logging(logger_name="Flydra2Proxy", level="INFO")
 
 
 class Flydra2Proxy:

@@ -3,10 +3,8 @@ import serial
 
 from modules.utils.rspowersupply import PowerSupply
 from modules.utils.log_config import setup_logging
-import logging
 
-setup_logging(level="INFO")
-logger = logging.getLogger(__name__)
+logger = setup_logging(logger_name="Hardware", level="INFO")
 
 
 def backlighting_power_supply(port="/dev/powersupply", voltage=30):

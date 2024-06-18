@@ -12,12 +12,9 @@ from utils.csv_writer import CsvWriter
 import signal
 
 # from scipy.interpolate import interp1d
-import logging
-
 from utils.log_config import setup_logging
 
-setup_logging(level="INFO", color="yellow")
-logger = logging.getLogger(__name__)
+logger = setup_logging(logger_name="VisualStimuli", level="INFO", color="yellow")
 
 # Constants
 SCREEN_WIDTH = 640
