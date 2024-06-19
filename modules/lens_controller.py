@@ -1,13 +1,14 @@
 import argparse
 import json
 import signal
+import time
+
 import pandas as pd
 import toml
 from messages import Subscriber
 from opto import Opto
 from scipy.interpolate import interp1d
 from utils.log_config import setup_logging
-import time
 
 # Setup logging
 logger = setup_logging(logger_name="LensController", level="INFO", color="cyan")
@@ -78,8 +79,12 @@ class LiquidLens:
         logger.info("Finished zmq setup")
 
     def is_within_predefined_zone(self, data):
-        x, y, z = data["x"], data["y"], data["z"]
-        return XMIN <= x <= XMAX and YMIN <= y <= YMAX and ZMIN <= z <= ZMAX
+        # check if data contains all required keys
+        if not all(key in data for key in ["x", "y", "z"]):
+            return False
+        else:
+            x, y, z = data["x"], data["y"], data["z"]
+            return XMIN <= x <= XMAX and YMIN <= y <= YMAX and ZMIN <= z <= ZMAX
 
     def run(self):
         try:
@@ -88,68 +93,72 @@ class LiquidLens:
                 if message is None:
                     continue
 
-                # Check if message is the "kill" command
                 if message == "kill":
                     logger.info("Received kill message. Exiting...")
                     break
 
                 try:
-                    # Try to parse message as JSON
                     msg = json.loads(message)
                     logger.debug(f"Received JSON data: {msg}")
                 except json.JSONDecodeError:
-                    # Handle message as a simple string
-                    logger.warning(f"Can't parse message: {msg}")
+                    logger.warning(f"Can't parse message: {message}")
                     continue
 
-                # first parse the incoming message to see if it is a Birth, Update, or Death message
+                # message parser
+                msg_type = None
+                data = None
                 incoming_object = None
-                for msg_type in ["Birth", "Update", "Death"]:
-                    if msg_type in msg:
-                        data = msg[msg_type]
-                        incoming_object = data["obj_id"]
-                        break
 
-                # if it's none of the above, continue
-                # this shouldn't actually every happen
-                if incoming_object is None:
+                # birth and update are treated the same
+                if "Birth" in msg:
+                    msg_type = "Birth"
+                    data = msg[msg_type]
+                    incoming_object = data["obj_id"]
+
+                elif "Update" in msg:
+                    msg_type = "Update"
+                    data = msg[msg_type]
+                    incoming_object = data["obj_id"]
+
+                # howerver if it's a death message AND it's the same object, then we stop tracking
+                # and continue with the main loop
+                elif "Death" in msg:
+                    msg_type = "Death"
+                    incoming_object = data["msg_type"]
+                    if self.current_tracked_object == incoming_object:
+                        self.stop_tracking()
+                        continue
+                else:
                     logger.warning(f"Invalid message: {msg}")
                     continue
 
-                # checf if no object is currently being tracked
+                # this is the main logic
                 if self.current_tracked_object is None:
-                    # if the object is within the predefined zone, start tracking it
                     if self.is_within_predefined_zone(data):
-                        logger.info(f"Tracking object {incoming_object}")
-                        tracking_start_time = time.time()
+                        self.start_tracking(incoming_object, data)
 
-                        # set the current tracked object to the incoming object
-                        self.current_tracked_object = incoming_object
-
-                        # and update lens if z is present
-                        if "z" in data:
-                            self.update_lens(data["z"])
-                else:
-                    # if there is already a tracked object
-                    # check if the incoming object is the same as the currently tracked object
-                    if incoming_object == self.current_tracked_object:
-                        # if the data contains a z value, update the lens
-                        if "z" in data and self.is_within_predefined_zone(data):
-                            self.update_lens(data["z"])
-                        # otherwise, the object has either (a) left the trigger zone or (b) died
-                        # so stop tracking
-                        else:
-                            logger.info(
-                                f"Object {self.current_tracked_object} left the tracking zone after {time.time() - tracking_start_time} seconds."
-                            )
-                            self.current_tracked_object = None
+                elif self.current_tracked_object == incoming_object:
+                    if msg_type == "Death" or not self.is_within_predefined_zone(data):
+                        self.stop_tracking()
+                    else:
+                        self.update_lens(data["z"])
 
         except SystemExit:
             logger.info("Exiting due to signal.")
-        except Exception as e:
-            logger.warning(f"Unexpected error: {e}")
         finally:
             self.close()
+
+    def start_tracking(self, incoming_object, data):
+        logger.info(f"Tracking object {incoming_object}")
+        self.current_tracked_object = incoming_object
+        self.tracking_start_time = time.time()
+        self.update_lens(data["z"])
+
+    def stop_tracking(self):
+        logger.info(
+            f"Object {self.current_tracked_object} left the tracking zone after {time.time() - self.tracking_start_time} seconds."
+        )
+        self.current_tracked_object = None
 
     def update_lens(self, z):
         current = self.interp_current(z)
