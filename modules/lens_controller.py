@@ -95,40 +95,55 @@ class LiquidLens:
 
                 try:
                     # Try to parse message as JSON
-                    data = json.loads(message)
-                    logger.debug(f"Received JSON data: {data}")
+                    msg = json.loads(message)
+                    logger.debug(f"Received JSON data: {msg}")
                 except json.JSONDecodeError:
                     # Handle message as a simple string
-                    logger.debug(f"Can't parse message: {message}")
+                    logger.warning(f"Can't parse message: {msg}")
                     continue
 
-                # check if data contains "obj_id" key
-                if "obj_id" not in data:
-                    logger.debug(f"Data does not contain 'obj_id' key: {data}")
+                # first parse the incoming message to see if it is a Birth, Update, or Death message
+                incoming_object = None
+                for msg_type in ["Birth", "Update", "Death"]:
+                    if msg_type in msg:
+                        data = msg[msg_type]
+                        incoming_object = data["obj_id"]
+                        break
+
+                # if it's none of the above, continue
+                # this shouldn't actually every happen
+                if incoming_object is None:
+                    logger.warning(f"Invalid message: {msg}")
                     continue
 
+                # checf if no object is currently being tracked
                 if self.current_tracked_object is None:
+                    # if the object is within the predefined zone, start tracking it
                     if self.is_within_predefined_zone(data):
-                        logger.info(f"Tracking object {data['obj_id']}")
+                        logger.info(f"Tracking object {incoming_object}")
                         tracking_start_time = time.time()
-                        self.current_tracked_object = data["obj_id"]
-                        self.update_lens(data["z"])
-                else:
-                    # the issue is here - since this script only receives 'Update'
-                    # messages, and misses all other types, it might reach this
-                    # point, but never enter it, thus never resetting the
-                    # 'current_object_tracked' variables
 
-                    # i need to add parsing for 'Birth' and 'Death' messages as well,
-                    # or maybe a time limit 
-                    if data["obj_id"] == self.current_tracked_object:
-                        if self.is_within_predefined_zone(data):
+                        # set the current tracked object to the incoming object
+                        self.current_tracked_object = incoming_object
+
+                        # and update lens if z is present
+                        if "z" in data:
                             self.update_lens(data["z"])
+                else:
+                    # if there is already a tracked object
+                    # check if the incoming object is the same as the currently tracked object
+                    if incoming_object == self.current_tracked_object:
+                        # if the data contains a z value, update the lens
+                        if "z" in data and self.is_within_predefined_zone(data):
+                            self.update_lens(data["z"])
+                        # otherwise, the object has either (a) left the trigger zone or (b) died
+                        # so stop tracking
                         else:
                             logger.info(
                                 f"Object {self.current_tracked_object} left the tracking zone after {time.time() - tracking_start_time} seconds."
                             )
                             self.current_tracked_object = None
+
         except SystemExit:
             logger.info("Exiting due to signal.")
         except Exception as e:

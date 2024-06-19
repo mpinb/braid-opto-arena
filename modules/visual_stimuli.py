@@ -29,6 +29,7 @@ def ignore_signal(signum, frame):
 
 # Set the handler for SIGINT to the ignore function
 signal.signal(signal.SIGINT, ignore_signal)
+signal.signal(signal.SIGTERM, ignore_signal)
 
 
 # Base stimulus class
@@ -254,6 +255,8 @@ def main(config_file, base_dir, standalone):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     raise SystemExit
+
+                # for displaying looming stimulus
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_k:
                         logger.info("Key pressed: K")
@@ -304,6 +307,9 @@ def main(config_file, base_dir, standalone):
 
         pygame.display.quit()
         pygame.quit()
+
+    pygame.display.quit()
+    pygame.quit()
 
 
 if __name__ == "__main__":

@@ -179,6 +179,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             except KeyError:
                 continue
 
+            pub.publish(json.dumps(msg_dict), "lens")
+
             # Check for first "birth" message
             if "Birth" in msg_dict:
                 curr_obj_id = msg_dict["Birth"]["obj_id"]
@@ -191,9 +193,6 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             elif "Update" in msg_dict:
                 # Get object id
                 curr_obj_id = msg_dict["Update"]["obj_id"]
-
-                # publish to the lens controller
-                pub.publish(json.dumps(msg_dict["Update"]), "lens")
 
                 # Calculate heading direction
                 if curr_obj_id not in headings:

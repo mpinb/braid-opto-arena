@@ -3,8 +3,10 @@ import warnings
 
 import cv2
 from natsort import natsorted
+from tqdm import tqdm
 from vidgear.gears import WriteGear
-from tqdm.contrib.concurrent import process_map
+from send2trash import send2trash
+import logging
 
 # Suppress all warnings
 warnings.filterwarnings("ignore")
@@ -43,17 +45,26 @@ def write_video(folder):
 
     # check if file exists
     if os.path.exists(output_filename):
-        return
+        # delete the file
+        os.remove(output_filename)
 
+    logging.getLogger("WriteGear").setLevel(logging.ERROR)
     video_writer = WriteGear(output=output_filename, logging=False, **output_params)
 
     # loop over the tiff files
-    for frame_file in frame_files:
+    for frame_file in tqdm(frame_files, leave=False):
         frame_path = os.path.join(folder, frame_file)
         image = cv2.imread(frame_path, cv2.IMREAD_UNCHANGED)
         video_writer.write(cv2.cvtColor(image, cv2.COLOR_GRAY2BGR))
 
     video_writer.close()
+
+    # check if the video was successfully written
+    if not os.path.exists(output_filename):
+        return
+    # if it was, delete the original tiff files
+    else:
+        send2trash([os.path.join(folder, frame_file) for frame_file in frame_files])
 
 
 def main(root_folder: str):
@@ -62,7 +73,8 @@ def main(root_folder: str):
     if len(folders) == 0:
         folders = [root_folder]
 
-    process_map(write_video, folders, max_workers=4)
+    for folder in tqdm(folders):
+        write_video(folder)
 
 
 if __name__ == "__main__":
