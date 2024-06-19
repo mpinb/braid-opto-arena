@@ -24,7 +24,7 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # Load data from params file
-margins = 0.01
+margins = 0.05
 PARAMS = toml.load("/home/buchsbaum/src/BraidTrigger/params.toml")
 XMIN = PARAMS["trigger_params"]["xmin"] - margins
 XMAX = PARAMS["trigger_params"]["xmax"] + margins
@@ -32,6 +32,8 @@ YMIN = PARAMS["trigger_params"]["ymin"] - margins
 YMAX = PARAMS["trigger_params"]["ymax"] + margins
 ZMIN = PARAMS["trigger_params"]["zmin"]
 ZMAX = PARAMS["trigger_params"]["zmax"]
+
+TIME_THRESHOLD = 0.5
 
 
 class LiquidLens:
@@ -89,6 +91,7 @@ class LiquidLens:
     def run(self):
         try:
             while True:
+                tcall = time.time()
                 topic, message = self.subscriber.receive()
                 if message is None:
                     continue
@@ -131,12 +134,14 @@ class LiquidLens:
                 # this is the main logic
                 if self.current_tracked_object is None:
                     if self.is_within_predefined_zone(data):
-                        self.start_tracking(incoming_object, data)
+                        self.tracking_start_time = tcall
+                        self.current_tracked_object = incoming_object
+                        # self.start_tracking(incoming_object, data)
 
                 elif self.current_tracked_object == incoming_object:
                     if msg_type == "Death" or not self.is_within_predefined_zone(data):
                         self.stop_tracking()
-                    else:
+                    elif tcall - self.tracking_start_time >= TIME_THRESHOLD:
                         self.update_lens(data["z"])
 
         except SystemExit:
