@@ -105,10 +105,6 @@ class LiquidLens:
                     continue
 
                 # message parser
-                msg_type = None
-                data = None
-                incoming_object = None
-
                 # birth and update are treated the same
                 if "Birth" in msg:
                     msg_type = "Birth"
@@ -124,7 +120,7 @@ class LiquidLens:
                 # and continue with the main loop
                 elif "Death" in msg:
                     msg_type = "Death"
-                    incoming_object = data["msg_type"]
+                    incoming_object = msg[msg_type]
                     if self.current_tracked_object == incoming_object:
                         self.stop_tracking()
                         continue
@@ -156,7 +152,7 @@ class LiquidLens:
 
     def stop_tracking(self):
         logger.info(
-            f"Object {self.current_tracked_object} left the tracking zone after {time.time() - self.tracking_start_time} seconds."
+            f"Object {self.current_tracked_object} left the tracking zone after {(time.time() - self.tracking_start_time):.2f} seconds."
         )
         self.current_tracked_object = None
 
