@@ -13,9 +13,17 @@ warnings.filterwarnings("ignore")
 
 output_params = {
     "-input_framerate": 25,
+    "-vf": "format=gray",
     "-vcodec": "h264_nvenc",
-    "-preset": "p6",
+    "-preset": "p7",
     "-tune": "hq",
+    "-rc": "vbr_hq",
+    "-qmin": 1,
+    "-qmax": 25,
+    "-b:v": "5M",
+    "-maxrate": "10M",
+    "-bufsize": "20M",
+    "-profile:v": "high",
     "-disable_force_termination": True,
 }
 

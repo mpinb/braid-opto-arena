@@ -30,8 +30,8 @@ XMIN = PARAMS["trigger_params"]["xmin"] - margins
 XMAX = PARAMS["trigger_params"]["xmax"] + margins
 YMIN = PARAMS["trigger_params"]["ymin"] - margins
 YMAX = PARAMS["trigger_params"]["ymax"] + margins
-ZMIN = PARAMS["trigger_params"]["zmin"]
-ZMAX = PARAMS["trigger_params"]["zmax"]
+ZMIN = PARAMS["trigger_params"]["zmin"] - margins
+ZMAX = PARAMS["trigger_params"]["zmax"] + margins
 
 TIME_THRESHOLD = 0.5
 
@@ -68,7 +68,10 @@ class LiquidLens:
         logger.debug("Loading calibration data from ~/calibration_array.csv")
         calibration = pd.read_csv("~/calibration_array.csv")
         self.interp_current = interp1d(
-            calibration["braid_position"], calibration["current"]
+            calibration["braid_position"],
+            calibration["current"],
+            type="linear",
+            fill_value="extrapolate",
         )
 
     def _setup_zmq(self):
@@ -82,7 +85,9 @@ class LiquidLens:
 
     def is_within_predefined_zone(self, data):
         # check if data contains all required keys
-        if not all(key in data for key in ["x", "y", "z"]):
+        if data is None:
+            return False
+        elif not all(key in data for key in ["x", "y", "z"]):
             return False
         else:
             x, y, z = data["x"], data["y"], data["z"]
@@ -102,9 +107,9 @@ class LiquidLens:
 
                 try:
                     msg = json.loads(message)
-                    logger.debug(f"Received JSON data: {msg}")
+                    # logger.debug(f"Received JSON data: {msg}")
                 except json.JSONDecodeError:
-                    logger.warning(f"Can't parse message: {message}")
+                    logger.debug(f"Can't parse message: {message}")
                     continue
 
                 # message parser
@@ -124,18 +129,18 @@ class LiquidLens:
                 elif "Death" in msg:
                     msg_type = "Death"
                     incoming_object = msg[msg_type]
-                    if self.current_tracked_object == incoming_object:
-                        self.stop_tracking()
-                        continue
+                    data = None
+
                 else:
-                    logger.warning(f"Invalid message: {msg}")
+                    logger.debug(f"Invalid message: {msg}")
                     continue
 
                 # this is the main logic
                 if self.current_tracked_object is None:
                     if self.is_within_predefined_zone(data):
-                        self.tracking_start_time = tcall
-                        self.current_tracked_object = incoming_object
+                        self.start_tracking(incoming_object, tcall)
+                        # self.tracking_start_time = tcall
+                        # self.current_tracked_object = incoming_object
                         # self.start_tracking(incoming_object, data)
 
                 elif self.current_tracked_object == incoming_object:
@@ -149,16 +154,16 @@ class LiquidLens:
         finally:
             self.close()
 
-    def start_tracking(self, incoming_object, data):
+    def start_tracking(self, incoming_object, tcall):
         logger.info(f"Tracking object {incoming_object}")
         self.current_tracked_object = incoming_object
-        self.tracking_start_time = time.time()
-        self.update_lens(data["z"])
+        self.tracking_start_time = tcall
 
     def stop_tracking(self):
         logger.info(
             f"Object {self.current_tracked_object} left the tracking zone after {(time.time() - self.tracking_start_time):.2f} seconds."
         )
+        self.device.current(0)
         self.current_tracked_object = None
 
     def update_lens(self, z):
