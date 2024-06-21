@@ -1,6 +1,9 @@
 import argparse
+import csv
 import json
+import os
 import time
+
 import numpy as np
 import pandas as pd
 import requests
@@ -8,8 +11,6 @@ import toml
 from opto import Opto
 from scipy.interpolate import interp1d
 from utils.log_config import setup_logging
-import csv
-import os
 
 # Setup logging
 logger = setup_logging(logger_name="LensController", level="DEBUG", color="cyan")
@@ -21,22 +22,33 @@ class LiquidLens:
         device_address: str,
         braidz_url: str,
         params_file: str,
+        save_folder: str = "",
         margins: int = 0.05,
     ):
+        # Initialize the liquid lens controller
         self.device_address = device_address
+
+        # Initialize the Braidz proxy
         self.braidz_url = braidz_url
+        self.session = None
+        self.r = None
+        self.events_url = None
+
+        # Initialize the parameters
         self.params_file = params_file
+
+        # Initialize the tracking parameters
         self.tracking_start_time = time.time()
         self.tcall = time.time()
         self.margins = margins
         self.current_tracked_object = None
 
-        self.session = None
-        self.r = None
-        self.events_url = None
-
+        # Initialize the liquid lens controller
+        self.save_folder = save_folder
         self.csv_file = None
         self.csv_writer = None
+
+        # Initialize the setup
         self.setup()
 
     def setup(self):
@@ -100,10 +112,10 @@ class LiquidLens:
 
     def _setup_csv_writer(
         self,
-        file_path: str = "lens_controller.csv",
         header=["msg_time", "update_time", "current", "z"],
     ):
         # Check if the file exists
+        file_path = os.path.join(self.save_folder, "lens_controller.csv")
         file_exists = os.path.isfile(file_path)
         self.csv_file = open(file_path, "a+", newline="")
 
@@ -232,11 +244,15 @@ if __name__ == "__main__":
         type=str,
         default="/home/buchsbaum/src/BraidTrigger/params.toml",
     )
-
-    parser.add_argument("--debug", action="store_true", default=False)
+    parser.add_argument("--save_folder", type=str, default="")
     args = parser.parse_args()
 
-    lens = LiquidLens(args.device_address, args.braidz_url, args.params_file)
+    lens = LiquidLens(
+        device_address=args.device_address,
+        braidz_url=args.braidz_url,
+        params_file=args.params_file,
+        save_folder=args.save_folder,
+    )
 
     logger.info("Starting liquid lens controller.")
     lens.run()

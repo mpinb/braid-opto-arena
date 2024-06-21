@@ -128,7 +128,16 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         )
         pub.wait_for_subscriber()
 
-        subprocess.Popen(["python", "./modules/lens_controller.py"], env=env)
+        # start liquid lens process
+        subprocess.Popen(
+            [
+                "python",
+                "./modules/lens_controller.py",
+                "--save_folder",
+                f"{braid_folder}",
+            ],
+            env=env,
+        )
         pub.wait_for_subscriber()
 
         logger.info("Highspeed camera connected.")
