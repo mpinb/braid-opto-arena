@@ -16,12 +16,10 @@ from modules.utils.files import (
     get_video_output_folder,
 )
 from modules.utils.flydra_proxy import Flydra2Proxy
-from modules.utils.hardware import (
-    backlighting_power_supply,
-    create_arduino_device,
-)
+from modules.utils.hardware import create_arduino_device
 from modules.utils.log_config import setup_logging
 from modules.utils.opto import check_position, trigger_opto
+from modules.utils.rspowersupply import PowerSupply
 
 # Get the root directory of the project
 root_dir = os.path.abspath(os.path.dirname(__file__))
@@ -81,7 +79,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     if not args.debug:
-        backlighting_power_supply(voltage=31)
+        ps = PowerSupply(port="/dev/powersupply")
+        ps.set_voltage(31)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
@@ -279,7 +278,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # shut down the light
     logger.info("Shutting down backlighting power supply.")
-    backlighting_power_supply(voltage=0)
+    ps.set_voltage(0)
+    ps.dev.close()
 
     # close zmq sockets
     logger.info("Closing publisher sockets.")
