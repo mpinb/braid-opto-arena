@@ -2,6 +2,7 @@
 // Example 5 - Receive with start- and end-markers combined with parsing
 
 #define LED_PIN 12
+#define OPTO_PIN 10
 const byte numChars = 32;
 char receivedChars[numChars];
 char tempChars[numChars];  // temporary array for use when parsing
@@ -19,8 +20,8 @@ boolean newData = false;
 //============
 
 void setup() {
-  pinMode(9, OUTPUT);
-  analogWrite(9, 0);
+  pinMode(OPTO_PIN, OUTPUT);
+  analogWrite(OPTO_PIN, 0);
 
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
@@ -43,9 +44,9 @@ void loop() {
 
     if (frequency == 0) {
       Serial.println("ONOFF");
-      analogWrite(9, intensity);
+      analogWrite(OPTO_PIN, intensity);
       delay(duration);
-      analogWrite(9, 0);
+      analogWrite(OPTO_PIN, 0);
 
     } else {
       long interval = (1000 / frequency) / 2;
@@ -55,9 +56,9 @@ void loop() {
 
       while (millis() - start_time <= duration) {
         delay(interval);
-        analogWrite(9, intensity);
+        analogWrite(OPTO_PIN, intensity);
         delay(interval);
-        analogWrite(9, 0);
+        analogWrite(OPTO_PIN, 0);
       }
 
       Serial.println(millis() - start_time);
@@ -65,7 +66,7 @@ void loop() {
   }
 
   digitalWrite(LED_PIN, LOW);
-  analogWrite(9, 0);
+  analogWrite(OPTO_PIN, 0);
 }
 
 //============

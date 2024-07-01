@@ -3,9 +3,7 @@ import json
 import os
 import subprocess
 import time
-from collections import deque
 
-import numpy as np
 import tomllib
 
 from modules.messages import Publisher
@@ -20,6 +18,7 @@ from modules.utils.hardware import create_arduino_device
 from modules.utils.log_config import setup_logging
 from modules.utils.opto import check_position, trigger_opto
 from modules.utils.rspowersupply import PowerSupply
+from modules.utils.trajectory import RealTimeHeadingCalculator
 
 # Get the root directory of the project
 root_dir = os.path.abspath(os.path.dirname(__file__))
@@ -30,32 +29,6 @@ env["PYTHONPATH"] = root_dir
 
 # Setup logger
 logger = setup_logging(logger_name="Main", level="INFO")
-
-
-class RealTimeHeadingCalculator:
-    def __init__(self, window_size=10):
-        self.window_size = window_size
-        self.xvel_buffer = deque(maxlen=window_size)
-        self.yvel_buffer = deque(maxlen=window_size)
-        self.zvel_buffer = deque(maxlen=window_size)
-
-    def add_data_point(self, xvel, yvel, zvel):
-        self.xvel_buffer.append(xvel)
-        self.yvel_buffer.append(yvel)
-        self.zvel_buffer.append(zvel)
-
-    def calculate_smoothed_velocities(self):
-        smoothed_xvel = np.mean(self.xvel_buffer)
-        smoothed_yvel = np.mean(self.yvel_buffer)
-        smoothed_zvel = np.mean(self.zvel_buffer)
-        return smoothed_xvel, smoothed_yvel, smoothed_zvel
-
-    def calculate_heading(self):
-        smoothed_xvel, smoothed_yvel, smoothed_zvel = (
-            self.calculate_smoothed_velocities()
-        )
-        heading = np.arctan2(smoothed_yvel, smoothed_xvel)
-        return heading
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -79,8 +52,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
     # Set power supply voltage (for backlighting)
     if not args.debug:
-        ps = PowerSupply(port="/dev/powersupply")
-        ps.set_voltage(31)
+        ps = PowerSupply(port="/dev/powersupply").set_voltage(31)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):

@@ -15,11 +15,13 @@ import csv
 import json
 from queue import Queue
 from threading import Thread
-
+import numpy as np
 import requests
 from ThorlabsPM100 import USBTMC, ThorlabsPM100
 
 DATA_PREFIX = "data: "
+SENSOR_RADIUS = 9.0  # in mm
+SENSOR_AREA = np.pi * (SENSOR_RADIUS**2)
 
 
 # create a threaded csv writer that creates a csv file, accepts a dict over a queue and writes to a csv file
@@ -64,25 +66,25 @@ class Flydra2Proxy:
         inst = USBTMC(device=addr)
         self.power_meter = ThorlabsPM100(inst=inst)
 
-    def run(self, udp_host, udp_port):
-        addr = (udp_host, udp_port)
-        print("sending flydra data to UDP %s" % (addr,))
+    def run(self):
         events_url = self.flydra2_url + "events"
         r = self.session.get(
             events_url,
             stream=True,
             headers={"Accept": "text/event-stream"},
         )
+        print("Looping over incoming data")
         try:
             for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
                 data = parse_chunk(chunk)
-                # print('chunk value: %r'%data)
-                version = data.get("v", 1)  # default because missing in first release
-                assert version == 2  # check the data version
 
                 try:
                     update_dict = data["msg"]["Update"]
-                    update_dict["power"] = self.power_meter.read
+
+                    # read and convert to mW/mm^2
+                    update_dict["power"] = (self.power_meter.read * 1000) / SENSOR_AREA
+
+                    # put data in queue
                     self.queue.put(update_dict)
                 except KeyError:
                     continue
@@ -106,7 +108,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--flydra2-url", default="http://127.0.0.1:8397/", help="URL of flydra2 server"
+        "--flydra2-url", default="http://10.40.80.6:8397/", help="URL of flydra2 server"
     )
 
     parser.add_argument(
@@ -120,7 +122,7 @@ def main():
     )
     args = parser.parse_args()
     flydra2 = Flydra2Proxy(args.flydra2_url)
-    flydra2.run(udp_host=args.udp_host, udp_port=args.udp_port)
+    flydra2.run()
 
 
 if __name__ == "__main__":
