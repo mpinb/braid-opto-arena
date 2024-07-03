@@ -6,18 +6,18 @@ camera_trigger = '/dev/camera_trigger'
 
 # opto trigger parameters
 [trigger_params]
-type = "radius"           # Type of trigger
+type = "zone"             # Type of trigger
 min_trajectory_time = 1.0 # Minimum trajectory time in seconds
-min_trigger_interval = 5  # Minimum time between activations in seconds
+min_trigger_interval = 10 # Minimum time between activations in seconds
 min_radius = 0.05         # Minimum radius for activation in meters
 zmin = 0.15               # Minimum z for activation in meters
 zmax = 0.25               # Maximum z for activation in meters
-xmin = -0.05              # Minimum x for activation in meters
-xmax = 0.075              # Maximum x for activation in meters
-ymin = -0.04              # Minimum y for activation in meters
-ymax = 0.08               # Maximum y for activation in meters
-center_x = 0         # Arena center x in meters
-center_y = 0          # Arena center y in meters
+xmin = -0.049             # Minimum x for activation in meters
+xmax = 0.0757             # Maximum x for activation in meters
+ymin = -0.04123           # Minimum y for activation in meters
+ymax = 0.082              # Maximum y for activation in meters
+center_x = 0              # Arena center x in meters
+center_y = 0              # Arena center y in meters
 
 # opto light parameters
 [opto_params]

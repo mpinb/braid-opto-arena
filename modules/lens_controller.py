@@ -13,7 +13,9 @@ from scipy.interpolate import interp1d
 from utils.log_config import setup_logging
 
 # Setup logging
-logger = setup_logging(logger_name="LensController", level="DEBUG", color="cyan")
+logger = setup_logging(logger_name="LensController", level="INFO", color="cyan")
+LENS_RESPONSE_TIME = 20  # ms
+LENS_RESPONSE_TIME /= 1e3  # seconds
 
 
 class LiquidLens:
@@ -136,7 +138,7 @@ class LiquidLens:
             return
 
         # If the file exists and has a header, just set the writer
-        self.csv_writer = csv.writer(self.file)
+        self.csv_writer = csv.writer(self.csv_file)
 
     def _write_row(self, row):
         if self.csv_writer:
@@ -209,13 +211,14 @@ class LiquidLens:
         self.update_lens(data["z"])
 
     def update_lens(self, z):
-        current = self.interp_current(z)
-        self.device.current(current)
+        if time.time() - self.tcall > LENS_RESPONSE_TIME:
+            current = self.interp_current(z)
+            self.device.current(current)
 
-        logger.debug(
-            f"Current: {current:.0f} for z: {z:.3f} ({(time.time() - self.tcall):.6f} seconds)"
-        )
-        self._write_row([time.time(), self.tcall, current, z])
+            logger.debug(
+                f"Current: {current:.0f} for z: {z:.3f} ({(time.time() - self.tcall):.6f} seconds)"
+            )
+            self._write_row([time.time(), self.tcall, current, z])
 
     def stop_tracking(self):
         self.device.current(0)
@@ -225,9 +228,10 @@ class LiquidLens:
         )
 
     def close(self):
-        """Close the subscriber and the liquid lens controller."""
+        """Close the liquid lens controller."""
         logger.info("Closing device.")
         self.device.close(soft_close=True)
+        self.csv_file.close()
 
 
 if __name__ == "__main__":
@@ -235,7 +239,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device_address",
         type=str,
-        default="/dev/ttyACM0",
+        default="/dev/optotune_ld",
         help="The address of the liquid lens controller",
     )
     parser.add_argument("--braidz_url", type=str, default="http://10.40.80.6:8397/")

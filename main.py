@@ -3,7 +3,7 @@ import json
 import os
 import subprocess
 import time
-
+import signal
 import tomllib
 
 from modules.messages import Publisher
@@ -17,7 +17,6 @@ from modules.utils.flydra_proxy import Flydra2Proxy
 from modules.utils.hardware import create_arduino_device
 from modules.utils.log_config import setup_logging
 from modules.utils.opto import check_position, trigger_opto
-from modules.utils.rspowersupply import PowerSupply
 from modules.utils.trajectory import RealTimeHeadingCalculator
 
 # Get the root directory of the project
@@ -29,6 +28,53 @@ env["PYTHONPATH"] = root_dir
 
 # Setup logger
 logger = setup_logging(logger_name="Main", level="INFO")
+
+
+def kill_processes(child_processes, pub):
+    timeout = 10
+    start_time = time.time()
+
+    try:
+        for key, child in child_processes.items():
+            while True:
+                # Check if the child process has terminated
+                pub.publish("", "kill")
+                ret_code = child.poll()
+                if ret_code is not None:
+                    logger.info(f"Child process {key} has terminated.")
+                    # Process has terminated
+                    break
+
+                # Check if timeout has been exceeded
+                if time.time() - start_time >= timeout:
+                    logger.info(f"Timeout exceeded for child process {key}.")
+                    # Timeout exceeded, kill the process
+                    child.kill()
+                    child.wait()  # Ensure the process has terminated
+                    break
+
+                # Sleep briefly to avoid busy waiting
+                time.sleep(0.1)
+
+    except KeyboardInterrupt:
+        # Handle Ctrl-C in the parent script
+        for child in child_processes:
+            logger.info("Sending SIGINT to child process.")
+            child.send_signal(signal.SIGINT)
+            child.wait()
+
+    finally:
+        # Ensure all child processes are terminated if the parent exits
+        for child in child_processes:
+            if child.poll() is None:  # If the process is still running
+                child.terminate()
+                try:
+                    # Wait for the process to terminate, with a timeout
+                    child.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    # If the process does not terminate in time, kill it
+                    child.kill()
+                    child.wait()
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -51,8 +97,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     copy_files_to_folder(braid_folder, params_file)
 
     # Set power supply voltage (for backlighting)
-    if not args.debug:
-        ps = PowerSupply(port="/dev/powersupply").set_voltage(31)
+    # if not args.debug:
+    #     ps = PowerSupply(port="/dev/powersupply").set_voltage(31)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
@@ -66,6 +112,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # create data publisher
     pub = Publisher(pub_port=5556, handshake_port=5557)
 
+    child_processes = {}
     if args.plot:
         import zmq
 
@@ -79,7 +126,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         logger.info("Opening highspeed camera.")
         params["video_save_folder"] = get_video_output_folder(braid_folder)
         video_save_folder = params["video_save_folder"]
-        subprocess.Popen(
+        child_processes["ximea_camera"] = subprocess.Popen(
             [
                 "libs/ximea_camera/target/release/ximea_camera",
                 "--save-folder",
@@ -98,10 +145,11 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 "126",
             ]
         )
+
         pub.wait_for_subscriber()
 
         # start liquid lens process
-        subprocess.Popen(
+        child_processes["liquid_lens"] = subprocess.Popen(
             [
                 "python",
                 "./modules/lens_controller.py",
@@ -110,7 +158,6 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             ],
             env=env,
         )
-        pub.wait_for_subscriber()
 
         logger.info("Highspeed camera connected.")
 
@@ -119,7 +166,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         [value.get("active", False) for key, value in params["stim_params"].items()]
     ):
         logger.info("Starting visual stimuli process.")
-        subprocess.Popen(
+        child_processes["visual_stimuli"] = subprocess.Popen(
             [
                 "python",
                 "./modules/visual_stimuli.py",
@@ -129,6 +176,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             ],
             env=env,
         )
+
         pub.wait_for_subscriber()
         logger.info("Visual stimuli process connected.")
 
@@ -148,20 +196,20 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     start_time = time.time()
     try:
         for data in braid_proxy.data_stream():
-            # break loop if the time is up (in hours)
             if (time.time() - start_time) >= params["max_runtime"] * 3600:
                 break
 
-            tcall = time.time()  # Get current time
+            tcall = time.time()
 
             try:
                 msg_dict = data["msg"]
             except KeyError:
                 continue
 
+            # Debug log for message before publishing
+            logger.debug(f"Publishing message to 'lens': {msg_dict}")
             pub.publish(json.dumps(msg_dict), "lens")
 
-            # Check for first "birth" message
             if "Birth" in msg_dict:
                 curr_obj_id = msg_dict["Birth"]["obj_id"]
                 obj_ids.append(curr_obj_id)
@@ -169,12 +217,9 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 headings[curr_obj_id] = RealTimeHeadingCalculator()
                 continue
 
-            # Check for "update" message
             elif "Update" in msg_dict:
-                # Get object id
                 curr_obj_id = msg_dict["Update"]["obj_id"]
 
-                # Calculate heading direction
                 if curr_obj_id not in headings:
                     headings[curr_obj_id] = RealTimeHeadingCalculator()
                 headings[curr_obj_id].add_data_point(
@@ -188,7 +233,6 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                     obj_birth_times[curr_obj_id] = tcall
                     continue
 
-            # Check for "death" message
             elif "Death" in msg_dict:
                 curr_obj_id = msg_dict["Death"]
                 if curr_obj_id in obj_ids:
@@ -198,71 +242,69 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             else:
                 continue
 
-            # if the trajectory is too short, skip
             if (tcall - obj_birth_times[curr_obj_id]) < trigger_params[
                 "min_trajectory_time"
             ]:
-                # logger.warning(f"Trajectory too short for object {curr_obj_id}")
                 continue
 
-            # if the trigger interval is too short, skip
             if tcall - last_trigger_time < trigger_params["min_trigger_interval"]:
-                # logger.warning(f"Trigger interval too short for object {curr_obj_id}")
                 continue
 
-            # Get position
             pos = msg_dict["Update"]
 
-            # Calculate heading direction
             if args.plot:
+                logger.debug(f"Publishing message to 'plot': {pos}")
                 pub_plot.send_string(json.dumps(pos))
 
             if check_position(pos, trigger_params):
-                # Update last trigger time
                 ntrig += 1
                 last_trigger_time = tcall
 
-                # Add trigger time to dict
                 pos["trigger_time"] = last_trigger_time
                 pos["ntrig"] = ntrig
                 pos["main_timestamp"] = tcall
                 pos["heading_direction"] = headings[curr_obj_id].calculate_heading()
 
-                # Opto Trigger
                 if params["opto_params"].get("active", False):
                     logger.info("Triggering opto.")
                     pos = trigger_opto(opto_trigger_board, trigger_params, pos)
 
+                logger.debug(f"Publishing message to 'trigger': {pos}")
                 pub.publish(json.dumps(pos), "trigger")
 
-                # Write data to csv
                 csv_writer.write(pos)
 
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received, shutting down.")
 
-    # send kill message to all processes
     logger.info("Sending kill message to all processes.")
-    pub.publish("trigger", "kill")
-    pub.publish("lens", "kill")
+    pub.publish("", "kill")
 
-    # and plotting if needed
     if args.plot:
         logger.info("Sending kill message to plotting process.")
         pub_plot.send_string("kill")
         pub_plot.close()
         context.destroy()
 
-    # close the csv_writer
     logger.info("Closing csv_writer.")
     csv_writer.close()
 
-    # shut down the light
     logger.info("Shutting down backlighting power supply.")
-    ps.set_voltage(0)
-    ps.dev.close()
+    # ps.set_voltage(0)
+    # ps.dev.close()
+    # kill_processes(child_processes, pub)
 
-    # close zmq sockets
+    for key, child in child_processes.items():
+        logger.info(f"Waiting for child process {key} to terminate")
+        try:
+            for _ in range(10):
+                child.wait(timeout=1)
+                if child.poll() is not None:
+                    break
+        except subprocess.TimeoutExpired:
+            logger.info(f"Timeout expired for child process {key}. Killing process.")
+            child.kill()
+
     logger.info("Closing publisher sockets.")
     pub.close()
 
@@ -275,7 +317,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Start main function
-    print("Starting main function.")
+    logger.info("Starting main function.")
     main(
         params_file="./params.toml",
         root_folder="/home/buchsbaum/mnt/DATA/Experiments/",

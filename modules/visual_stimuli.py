@@ -10,6 +10,7 @@ import toml
 from messages import Subscriber
 from utils.csv_writer import CsvWriter
 import signal
+import zmq
 
 # from scipy.interpolate import interp1d
 from utils.log_config import setup_logging
@@ -207,7 +208,7 @@ def connect_to_zmq(pub_port: int = 5556, handshake_port: int = 5557):
     subscriber.handshake()
     logger.debug("Handshake successful")
     subscriber.subscribe("trigger")
-    logger.debug("Subscribed to all messages")
+    logger.debug("Subscribed to `trigger` messages")
     return subscriber
 
 
@@ -249,15 +250,12 @@ def main(config_file, base_dir, standalone):
     # Main loop
     clock = pygame.time.Clock()
     logger.info("Starting main loop")
+
     try:
         while True:
             time_elapsed = clock.get_time()
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    raise SystemExit
-
-                # for displaying looming stimulus
-                elif event.type == pygame.KEYDOWN:
+                if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_k:
                         logger.info("Key pressed: K")
                         for stim in stimuli:
@@ -265,28 +263,36 @@ def main(config_file, base_dir, standalone):
                                 stim.start_expansion()
 
             if not standalone:
-                _, message = subscriber.receive()
-                logger.debug(f"Got message from subscriber: {message}")
+                try:
+                    _, message = subscriber.receive(zmq.DONTWAIT)
+                    logger.info(f"Got message from subscriber: {message}")
 
-                if message == "kill":
-                    logger.info("Received kill message. Exiting...")
-                    break
+                    if message == "kill":
+                        logger.info("Received kill message. Exiting...")
+                        raise SystemExit
 
-                elif message is not None:
-                    trigger_info = json.loads(message)
-                    heading_direction = trigger_info["heading_direction"]
-                    logger.info("Triggering stimulus")
-                    logger.debug(f"Got heading direction: {heading_direction}")
+                    elif message is not None:
+                        trigger_info = json.loads(message)
+                        heading_direction = trigger_info["heading_direction"]
+                        logger.info("Triggering stimulus")
+                        logger.debug(f"Got heading direction: {heading_direction}")
 
-                    # Handle trigger for looming stimulus
-                    for stim in stimuli:
-                        if isinstance(stim, LoomingStimulus):
-                            stim.start_expansion(heading_direction)
-                            updated_info = stim.get_trigger_info()
-                            trigger_info.update(updated_info)
+                        # Handle trigger for looming stimulus
+                        for stim in stimuli:
+                            if isinstance(stim, LoomingStimulus):
+                                stim.start_expansion(heading_direction)
+                                updated_info = stim.get_trigger_info()
+                                trigger_info.update(updated_info)
 
-                            # Log the event
-                            csv_writer.write(trigger_info)
+                                # Log the event
+                                csv_writer.write(trigger_info)
+                except zmq.Again:
+                    # No message received, continue the loop
+                    pass
+                except zmq.ZMQError as e:
+                    logger.error(f"ZMQ Error: {e}")
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON Decode Error: {e}")
 
             # Update screen
             screen.fill((255, 255, 255))
@@ -297,19 +303,17 @@ def main(config_file, base_dir, standalone):
             clock.tick(60)
 
     except SystemExit:
-        pass
+        logger.info("Exiting...")
 
     finally:
         # Clean up
         if not standalone:
-            csv_writer.close()
+            if csv_writer:
+                csv_writer.close()
             subscriber.close()
 
         pygame.display.quit()
         pygame.quit()
-
-    pygame.display.quit()
-    pygame.quit()
 
 
 if __name__ == "__main__":
