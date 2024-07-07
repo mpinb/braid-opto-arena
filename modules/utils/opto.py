@@ -7,36 +7,36 @@ from modules.utils.log_config import setup_logging
 logger = setup_logging(logger_name="Opto", level="INFO")
 
 
-def _get_opto_trigger_params(trigger_params: dict):
+def _get_opto_trigger_params(opto_params: dict):
     """
     Get the opto trigger parameters based on the given trigger_params dictionary.
 
     Args:
-        trigger_params (dict): A dictionary containing the trigger parameters.
+        opto_params (dict): A dictionary containing the trigger parameters.
 
     Returns:
         tuple: A tuple containing the opto trigger parameters. If the random number is less than
         the sham percentage, it returns (0, 0, 0). Otherwise, it returns the stim_duration,
         stim_intensity, and stim_frequency from the trigger_params dictionary.
     """
-    if random.random() < trigger_params["sham_perc"]:
+    if random.random() < opto_params["sham_perc"]:
         logger.debug("Sham opto.")
         return 0, 0, 0
     else:
         return (
-            trigger_params["stim_duration"],
-            trigger_params["stim_intensity"],
-            trigger_params["stim_frequency"],
+            opto_params["duration"],
+            opto_params["intensity"],
+            opto_params["frequency"],
         )
 
 
-def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict, pos: dict):
+def trigger_opto(opto_trigger_board: serial.Serial, opto_params: dict, pos: dict):
     """
     Triggers the opto stimulus on the opto trigger board.
 
     Args:
         opto_trigger_board (serial.Serial): The serial connection to the opto trigger board.
-        trigger_params (dict): A dictionary containing the trigger parameters.
+        opto_params (dict): A dictionary containing the trigger parameters.
         pos (dict): A dictionary to store the position information.
 
     Returns:
@@ -45,7 +45,7 @@ def trigger_opto(opto_trigger_board: serial.Serial, trigger_params: dict, pos: d
     """
 
     stim_duration, stim_intensity, stim_frequency = _get_opto_trigger_params(
-        trigger_params
+        opto_params
     )
 
     opto_trigger_board.write(
@@ -67,7 +67,7 @@ def check_position(pos, trigger_params):
 
     Args:
         pos (dict): A dictionary containing the x, y, and z coordinates of the position.
-        trigger_params (dict): A dictionary containing the trigger parameters.
+        opto_params (dict): A dictionary containing the trigger parameters.
 
     Returns:
         bool: True if the position satisfies the trigger conditions, False otherwise.

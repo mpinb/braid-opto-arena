@@ -9,11 +9,10 @@ import pandas as pd
 import requests
 import toml
 from opto import Opto
-from scipy.interpolate import interp1d
 from utils.log_config import setup_logging
 
 # Setup logging
-logger = setup_logging(logger_name="LensController", level="INFO", color="cyan")
+logger = setup_logging(logger_name="LensController", level="DEBUG", color="cyan")
 LENS_RESPONSE_TIME = 20  # ms
 LENS_RESPONSE_TIME /= 1e3  # seconds
 
@@ -77,18 +76,25 @@ class LiquidLens:
         logger.debug(f"Connecting to liquid lens controller at {self.device_address}")
         self.device = Opto(port=self.device_address)
         self.device.connect()
-        self.device.current(0)
+        self.device.mode("focal")
+
+    def _set_focalpower(self, focal_power):
+        try:
+            self.device.focalpower(focal_power)
+        except Exception:
+            pass
 
     def _setup_calibration(self):
+        from sklearn.linear_model import LinearRegression
+
         """Setup the calibration for the liquid lens controller."""
-        logger.debug("Loading calibration data from ~/calibration_array.csv")
-        calibration = pd.read_csv("~/calibration_array.csv")
-        self.interp_current = interp1d(
-            calibration["braid_position"],
-            calibration["current"],
-            kind="linear",
-            fill_value="extrapolate",
-        )
+        # logger.debug("Loading calibration data from ~/calibration_array.csv")
+        calibration = pd.read_csv("dpt_distance_calibration.csv")
+        X = calibration["distance"].values.reshape(-1, 1)
+        y = calibration["dpt"].values
+
+        self.model = LinearRegression()
+        self.model.fit(X, y)
 
     def _setup_braidz_proxy(self):
         self.session = requests.Session()
@@ -158,6 +164,7 @@ class LiquidLens:
 
     def run(self):
         runtime = []
+        self.last_update = time.time()
         try:
             for chunk in self.r.iter_content(chunk_size=None, decode_unicode=True):
                 incoming_full = self._parse_chunk(chunk)
@@ -205,20 +212,16 @@ class LiquidLens:
             self.close()
 
     def start_tracking(self, incoming_object, data):
-        logger.info(f"Started tracking object {incoming_object}")
+        logger.debug(f"Started tracking object {incoming_object}")
         self.tracking_start_time = time.time()
         self.current_tracked_object = incoming_object
         self.update_lens(data["z"])
 
     def update_lens(self, z):
-        if time.time() - self.tcall > LENS_RESPONSE_TIME:
-            current = self.interp_current(z)
-            self.device.current(current)
-
-            logger.debug(
-                f"Current: {current:.0f} for z: {z:.3f} ({(time.time() - self.tcall):.6f} seconds)"
-            )
-            self._write_row([time.time(), self.tcall, current, z])
+        dpt = self.model.predict([[z]])
+        self._set_focalpower(dpt)
+        self._write_row([time.time(), self.tcall, dpt, z])
+        self.last_update = time.time()
 
     def stop_tracking(self):
         self.device.current(0)

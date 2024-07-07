@@ -1,8 +1,9 @@
-max_runtime = 12 # Maximum runtime in hours
+max_runtime = 24 # Maximum runtime in hours
 
 [arduino_devices]
-opto_trigger = '/dev/opto_trigger'
-camera_trigger = '/dev/camera_trigger'
+opto_trigger = '/dev/optotrigger'
+power_supply = '/dev/powersupply'
+liquid_lens = '/dev/optotune_ld'
 
 # opto trigger parameters
 [trigger_params]
@@ -23,7 +24,7 @@ center_y = 0              # Arena center y in meters
 [opto_params]
 active = false
 duration = 300  # Duration in milliseconds
-intensity = 255 # Intensity in 0-255 range
+intensity = 128 # Intensity in 0-255 range
 frequency = 0   # Frequency in Hz
 sham_perc = 0.1 # Percentage of sham trials
 
@@ -54,7 +55,7 @@ color = "black" # Color
 
 # looming stimulus setup
 [stim_params.looming]
-active = true
+active = false
 stim_type = "exponential" # Stimulus type
 position = "closed-loop"  # Position
 max_radius = 64           # Maximum radius

@@ -7,13 +7,10 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pygame
 import toml
-from messages import Subscriber
-from utils.csv_writer import CsvWriter
-import signal
 import zmq
-
-# from scipy.interpolate import interp1d
+from utils.csv_writer import CsvWriter
 from utils.log_config import setup_logging
+from messages import Subscriber
 
 logger = setup_logging(logger_name="VisualStimuli", level="INFO", color="yellow")
 
@@ -21,16 +18,6 @@ logger = setup_logging(logger_name="VisualStimuli", level="INFO", color="yellow"
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
 os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
-
-
-# Function to ignore SIGINT (Ctrl+C)
-def ignore_signal(signum, frame):
-    pass
-
-
-# Set the handler for SIGINT to the ignore function
-signal.signal(signal.SIGINT, ignore_signal)
-signal.signal(signal.SIGTERM, ignore_signal)
 
 
 # Base stimulus class
@@ -87,23 +74,13 @@ class LoomingStimulus(Stimulus):
     def generate_natural_looming(
         self, max_radius, duration, l_v=10, distance_from_screen=25, hz=60
     ):
-        # get looming duration in frames from ms
         n_frames = int(duration / (1000 / hz))
-
-        # generate the angular looming size
         r = np.flip([2 * np.arctan(l_v / i) for i in range(1, n_frames)])
-
-        # calculate the looming size on screen
         looming_size_on_screen = np.tan(r / 2) * distance_from_screen
-
-        # normalize from 0 to 1
         looming_size_on_screen = (
             looming_size_on_screen - np.min(looming_size_on_screen)
         ) / (np.max(looming_size_on_screen) - np.min(looming_size_on_screen))
-
-        # scale to max_radius
         looming_size_on_screen = looming_size_on_screen * max_radius
-
         return looming_size_on_screen
 
     def generate_exponential_looming(self, max_radius, duration, hz=60):
@@ -135,39 +112,30 @@ class LoomingStimulus(Stimulus):
                 self.max_radius, self.duration
             )
         self.start_time = time.time()
-
-        # control stimulus by framerate
         self.curr_frame = 0
         self.n_frames = int(self.duration / (1000 / 60))
-
         self.expanding = True
 
     def update(self, screen, time_elapsed):
         if self.expanding:
-            # elapsed = (time.time() - self.start_time) * 1000  # convert to milliseconds
             if self.curr_frame < self.n_frames - 1:
                 if self.type == "linear":
                     self.radius = (self.curr_frame / self.n_frames) * self.max_radius
                 else:
                     self.radius = self.radii_array[self.curr_frame]
 
-                # Draw the circle normally
                 position = wrap_around_position(self.position, SCREEN_WIDTH)
                 pygame.draw.circle(
                     screen, self.color, (position, SCREEN_HEIGHT // 2), int(self.radius)
                 )
-
-                # Check for wrap-around and draw additional circles if necessary
-                if position - self.radius < 0:  # Circle extends past the left edge
+                if position - self.radius < 0:
                     pygame.draw.circle(
                         screen,
                         self.color,
                         (position + SCREEN_WIDTH, SCREEN_HEIGHT // 2),
                         int(self.radius),
                     )
-                if (
-                    position + self.radius > SCREEN_WIDTH
-                ):  # Circle extends past the right edge
+                if position + self.radius > SCREEN_WIDTH:
                     pygame.draw.circle(
                         screen,
                         self.color,
@@ -199,7 +167,6 @@ class GratingStimulus(Stimulus):
         self.color = pygame.Color(config["color"])
 
     def update(self, screen, time_elapsed):
-        # Implementation for grating stimulus
         pass
 
 
@@ -228,26 +195,20 @@ def create_stimuli(config):
     return stimuli
 
 
-# Main function
 def main(config_file, base_dir, standalone):
-    # Initialize pygame
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.NOFRAME)
     pygame.display.set_caption("Stimulus Display")
 
-    # Load configuration
     with open(config_file, "r") as f:
         config = toml.load(f)
 
-    # Create stimuli
     stimuli = create_stimuli(config)
 
-    # CSV logging setup
     if not standalone:
         csv_writer = CsvWriter(os.path.join(base_dir, "stim.csv"))
         subscriber = connect_to_zmq()
 
-    # Main loop
     clock = pygame.time.Clock()
     logger.info("Starting main loop")
 
@@ -255,46 +216,40 @@ def main(config_file, base_dir, standalone):
         while True:
             time_elapsed = clock.get_time()
             for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_k:
-                        logger.info("Key pressed: K")
-                        for stim in stimuli:
-                            if isinstance(stim, LoomingStimulus):
-                                stim.start_expansion()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_k:
+                    logger.info("Key pressed: K")
+                    for stim in stimuli:
+                        if isinstance(stim, LoomingStimulus):
+                            stim.start_expansion()
 
             if not standalone:
                 try:
-                    _, message = subscriber.receive(zmq.DONTWAIT)
-                    logger.info(f"Got message from subscriber: {message}")
+                    topic, message = subscriber.receive()
+                    logger.debug(f"Got message from subscriber: {message}")
 
                     if message == "kill":
                         logger.info("Received kill message. Exiting...")
                         raise SystemExit
 
-                    elif message is not None:
+                    elif message:
                         trigger_info = json.loads(message)
-                        heading_direction = trigger_info["heading_direction"]
+                        heading_direction = trigger_info.get("heading_direction")
                         logger.info("Triggering stimulus")
                         logger.debug(f"Got heading direction: {heading_direction}")
 
-                        # Handle trigger for looming stimulus
                         for stim in stimuli:
                             if isinstance(stim, LoomingStimulus):
                                 stim.start_expansion(heading_direction)
                                 updated_info = stim.get_trigger_info()
                                 trigger_info.update(updated_info)
-
-                                # Log the event
                                 csv_writer.write(trigger_info)
                 except zmq.Again:
-                    # No message received, continue the loop
                     pass
                 except zmq.ZMQError as e:
                     logger.error(f"ZMQ Error: {e}")
                 except json.JSONDecodeError as e:
                     logger.error(f"JSON Decode Error: {e}")
 
-            # Update screen
             screen.fill((255, 255, 255))
             for stim in stimuli:
                 stim.update(screen, time_elapsed)
@@ -304,15 +259,14 @@ def main(config_file, base_dir, standalone):
 
     except SystemExit:
         logger.info("Exiting...")
-
     finally:
-        # Clean up
         if not standalone:
-            if csv_writer:
-                csv_writer.close()
+            csv_writer.close()
             subscriber.close()
 
+        logger.debug("pygame.display.quit()")
         pygame.display.quit()
+        logger.debug("pygame.quit()")
         pygame.quit()
 
 

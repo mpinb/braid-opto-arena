@@ -3,7 +3,6 @@ import json
 import os
 import subprocess
 import time
-import signal
 import tomllib
 
 from modules.messages import Publisher
@@ -14,7 +13,7 @@ from modules.utils.files import (
     get_video_output_folder,
 )
 from modules.utils.flydra_proxy import Flydra2Proxy
-from modules.utils.hardware import create_arduino_device
+from modules.utils.hardware import create_arduino_device, PowerSupply
 from modules.utils.log_config import setup_logging
 from modules.utils.opto import check_position, trigger_opto
 from modules.utils.trajectory import RealTimeHeadingCalculator
@@ -28,53 +27,6 @@ env["PYTHONPATH"] = root_dir
 
 # Setup logger
 logger = setup_logging(logger_name="Main", level="INFO")
-
-
-def kill_processes(child_processes, pub):
-    timeout = 10
-    start_time = time.time()
-
-    try:
-        for key, child in child_processes.items():
-            while True:
-                # Check if the child process has terminated
-                pub.publish("", "kill")
-                ret_code = child.poll()
-                if ret_code is not None:
-                    logger.info(f"Child process {key} has terminated.")
-                    # Process has terminated
-                    break
-
-                # Check if timeout has been exceeded
-                if time.time() - start_time >= timeout:
-                    logger.info(f"Timeout exceeded for child process {key}.")
-                    # Timeout exceeded, kill the process
-                    child.kill()
-                    child.wait()  # Ensure the process has terminated
-                    break
-
-                # Sleep briefly to avoid busy waiting
-                time.sleep(0.1)
-
-    except KeyboardInterrupt:
-        # Handle Ctrl-C in the parent script
-        for child in child_processes:
-            logger.info("Sending SIGINT to child process.")
-            child.send_signal(signal.SIGINT)
-            child.wait()
-
-    finally:
-        # Ensure all child processes are terminated if the parent exits
-        for child in child_processes:
-            if child.poll() is None:  # If the process is still running
-                child.terminate()
-                try:
-                    # Wait for the process to terminate, with a timeout
-                    child.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    # If the process does not terminate in time, kill it
-                    child.kill()
-                    child.wait()
 
 
 def main(params_file: str, root_folder: str, args: argparse.Namespace):
@@ -97,14 +49,13 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     copy_files_to_folder(braid_folder, params_file)
 
     # Set power supply voltage (for backlighting)
-    # if not args.debug:
-    #     ps = PowerSupply(port="/dev/powersupply").set_voltage(31)
+    if not args.debug:
+        ps = PowerSupply(port="/dev/powersupply")
+        ps.set_voltage(31)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):
-        opto_trigger_board = create_arduino_device(
-            port=params["arduino_devices"]["opto_trigger"]
-        )
+        opto_trigger_board = create_arduino_device(port="/dev/ttyACM1")
 
     # Connect to flydra2 proxy
     braid_proxy = Flydra2Proxy()
@@ -181,6 +132,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         logger.info("Visual stimuli process connected.")
 
     trigger_params = params["trigger_params"]
+    opto_params = params["opto_params"]
 
     csv_writer = CsvWriter(os.path.join(braid_folder, "opto.csv"))
 
@@ -267,43 +219,25 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
 
                 if params["opto_params"].get("active", False):
                     logger.info("Triggering opto.")
-                    pos = trigger_opto(opto_trigger_board, trigger_params, pos)
+                    pos = trigger_opto(opto_trigger_board, opto_params, pos)
 
                 logger.debug(f"Publishing message to 'trigger': {pos}")
                 pub.publish(json.dumps(pos), "trigger")
-
                 csv_writer.write(pos)
 
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received, shutting down.")
 
     logger.info("Sending kill message to all processes.")
-    pub.publish("", "kill")
-
-    if args.plot:
-        logger.info("Sending kill message to plotting process.")
-        pub_plot.send_string("kill")
-        pub_plot.close()
-        context.destroy()
+    pub.publish("trigger", "kill")
+    pub.publish("lens", "kill")
 
     logger.info("Closing csv_writer.")
     csv_writer.close()
 
     logger.info("Shutting down backlighting power supply.")
-    # ps.set_voltage(0)
-    # ps.dev.close()
-    # kill_processes(child_processes, pub)
-
-    for key, child in child_processes.items():
-        logger.info(f"Waiting for child process {key} to terminate")
-        try:
-            for _ in range(10):
-                child.wait(timeout=1)
-                if child.poll() is not None:
-                    break
-        except subprocess.TimeoutExpired:
-            logger.info(f"Timeout expired for child process {key}. Killing process.")
-            child.kill()
+    ps.set_voltage(0)
+    ps.dev.close()
 
     logger.info("Closing publisher sockets.")
     pub.close()
