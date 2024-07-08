@@ -1,0 +1,6 @@
+[workspace]
+members = [
+"libs/lens_controller",
+"libs/lens_driver",
+"libs/ximea_camera",
+]
