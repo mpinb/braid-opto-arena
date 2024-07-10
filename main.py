@@ -51,7 +51,7 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
     # Set power supply voltage (for backlighting)
     if not args.debug:
         ps = PowerSupply(port="/dev/powersupply")
-        ps.set_voltage(31)
+        ps.set_voltage(29)
 
     # Connect to arduino
     if params["opto_params"].get("active", False):

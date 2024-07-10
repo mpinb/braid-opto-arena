@@ -1,19 +1,54 @@
-import cv2
-
-# Set the matplotlib backend to TkAgg
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-from opto import Opto
+import os
+import sys
+import time
 from scipy.optimize import curve_fit
 from ximea import xiapi
 
-import faulthandler
+import json
+import requests
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+from modules.utils.liquid_lens import LiquidLens
 
-faulthandler.enable()
+# Get the parent directory of the repository
+repository_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(repository_root)
 
 
-matplotlib.use("TkAgg")
+DATA_PREFIX = "data: "
+
+
+def flydra_proxy(flydra2_url, queue):
+    session = requests.session()
+    r = session.get(flydra2_url)
+    assert r.status_code == requests.codes.ok
+
+    print("Connected to Flydra2. Listening for events...")
+    events_url = flydra2_url + "events"
+    r = session.get(
+        events_url,
+        stream=True,
+        headers={"Accept": "text/event-stream"},
+    )
+
+    for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
+        data = parse_chunk(chunk)
+        try:
+            update_dict = data["msg"]["Update"]
+            queue.put(update_dict)
+        except KeyError:
+            continue
+
+
+def parse_chunk(chunk):
+    lines = chunk.strip().split("\n")
+    assert len(lines) == 2
+    assert lines[0] == "event: braid"
+    assert lines[1].startswith(DATA_PREFIX)
+    buf = lines[1][len(DATA_PREFIX) :]
+    data = json.loads(buf)
+    return data
 
 
 def take_image(cam, lens, diopter):
@@ -73,15 +108,16 @@ def lorentzian(x, x0, gamma, a, y0):
 def open_camera():
     cam = xiapi.Camera()
     cam.open_device()
-    cam.enable_aeag()
-    cam.set_exp_priority(1.0)
-    cam.set_ae_max_limit(2000)
-    cam.set_aeag_level(75)
+    cam.set_exposure(2000)
+    # cam.enable_aeag()
+    # cam.set_exp_priority(1.0)
+    # cam.set_ae_max_limit(2000)
+    # cam.set_aeag_level(75)
     return cam
 
 
 def open_controller(dev="/dev/optotune_ld"):
-    o = Opto(dev)
+    o = LiquidLens(port=dev)
     o.connect()
     o.mode("focal")
     return o
@@ -98,16 +134,21 @@ def display_image(image, dpt):
     return False
 
 
-def autofocus():
+def autofocus(z_pos):
     # open camera and controller
+    print("Opening camera and controller...")
     cam = open_camera()
+    print("Camera opened")
     lens = open_controller()
+    print("Controller opened")
 
     # default diopter settings
-    min_dpt = -3
-    max_dpt = 2
+    min_dpt = -4.5
+    max_dpt = 4.5
     step_size_initial = 0.4
     step_size_fine = 0.02
+
+    print(f"Initial z position: {z_pos:.3f}")
 
     diopter_settings = np.arange(min_dpt, max_dpt, step_size_initial)
     contrast_values = []
@@ -115,6 +156,7 @@ def autofocus():
 
     # take images at different diopter settings
     for dpt in diopter_settings:
+        time.sleep(0.02)
         image = take_image(cam, lens, dpt)
 
         image, contrast = calculate_contrast(image)
@@ -125,18 +167,20 @@ def autofocus():
     max_contrast_idx = np.argmax(contrast_values)
     best_dpt = diopter_settings[max_contrast_idx]
 
+    print(f"Best initial focus at {best_dpt:.3f} dpt")
     if max_contrast_idx == 0 or max_contrast_idx == len(diopter_settings) - 1:
         print(f"Warning: Best focus at edge of initial range at {best_dpt} dpt")
         return best_dpt
 
     fine_dpt_range = np.arange(
-        best_dpt - step_size_initial * 1.5,
-        best_dpt + step_size_initial * 1.5,
+        best_dpt - (step_size_initial * 2),
+        best_dpt + (step_size_initial * 2),
         step_size_fine,
     )
     fine_contrast_values = []
 
     for dpt in fine_dpt_range:
+        time.sleep(0.02)
         image = take_image(cam, lens, dpt)
 
         image, contrast = calculate_contrast(image)
@@ -155,10 +199,17 @@ def autofocus():
             np.max(fine_contrast_values),
             np.min(fine_contrast_values),
         ],
-        maxfev=10000,
+        maxfev=1000,
     )
 
     best_focus_dpt = popt[0]
+
+    # save fine contrast values to file for debugging
+    with open(
+        f"/home/buchsbaum/lens_calibration/fine_contrast_values_zpos_{z_pos}.csv", "w"
+    ) as f:
+        for i in range(len(fine_dpt_range)):
+            f.write(f"{fine_dpt_range[i]},{fine_contrast_values[i]}\n")
 
     # Plotting the results
     plt.figure()
@@ -170,12 +221,19 @@ def autofocus():
     plt.ylabel("Contrast value")
     plt.title(f"The best focus is at {best_focus_dpt:.3f} dpt")
     plt.legend()
-    plt.savefig("autofocus_plot_0.156.png")
+    plt.savefig(f"/home/buchsbaum/lens_calibration/autofocus_plot_{z_pos:.3f}.png")
     plt.close("all")
     cam.stop_acquisition()
+
+    # write line with best_focus_dpt and distance to file
+    with open(
+        "/home/buchsbaum/lens_calibration/liquid_lens_calibration.csv", "a+"
+    ) as f:
+        f.write(f"{best_focus_dpt:.3f},{z_pos:.3f}\n")
+
     return best_focus_dpt
 
 
 if __name__ == "__main__":
-    best_focus = autofocus()
+    best_focus = autofocus(0.22)
     print(f"The best focus is at {best_focus:.3f} dpt")
