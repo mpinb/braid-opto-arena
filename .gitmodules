@@ -7,3 +7,6 @@
 [submodule "libs/lens_controller"]
 	path = libs/lens_controller
 	url = https://github.com/elhananby/lens_controller
+[submodule "libs/braid_event_stream"]
+	path = libs/braid_event_stream
+	url = https://github.com/elhananby/braid_event_stream
