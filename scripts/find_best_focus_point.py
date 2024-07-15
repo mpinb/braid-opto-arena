@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-from scipy.optimize import curve_fit
 from ximea import xiapi
 
 import json
@@ -9,12 +8,17 @@ import requests
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from modules.utils.liquid_lens import LiquidLens
 
 # Get the parent directory of the repository
 repository_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(repository_root)
+from modules.utils.liquid_lens import LiquidLens  # noqa: E402
 
+OFFSET_X = 1504
+WIDTH = 1088
+
+OFFSET_Y = 790
+HEIGHT = 600
 
 DATA_PREFIX = "data: "
 
@@ -56,7 +60,7 @@ def take_image(cam, lens, diopter):
     # taking an image with the camera at a specific diopter setting
 
     try:
-        lens.focalpower(diopter)
+        lens.set_diopter(diopter)
     except Exception:
         pass
 
@@ -65,8 +69,15 @@ def take_image(cam, lens, diopter):
     return data
 
 
+def _take_image(cam):
+    img = xiapi.Image()
+
+    cam.get_image(img)
+
+
 def calculate_contrast(
-    image, offset_x=1696, offset_y=600, width=960, height=960, method="contrast"
+    image,
+    method="laplacian",
 ):
     """
     Calculate the RMS contrast of the image.
@@ -82,23 +93,23 @@ def calculate_contrast(
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # extract the region of interest
-    image = image[offset_y : offset_y + height, offset_x : offset_x + width]
+    image_roi = image[OFFSET_Y : OFFSET_Y + HEIGHT, OFFSET_X : OFFSET_X + WIDTH]
 
     if method == "contrast":
         # Calculate the mean intensity
-        mean_intensity = np.mean(image)
+        mean_intensity = np.mean(image_roi)
 
         # Calculate the RMS contrast
-        contrast = np.sqrt(np.mean((image - mean_intensity) ** 2))
+        contrast = np.sqrt(np.mean((image_roi - mean_intensity) ** 2))
 
     elif method == "laplacian":
         # Calculate the Laplacian of the image
-        laplacian = cv2.Laplacian(image, cv2.CV_64F)
+        laplacian = cv2.Laplacian(image_roi, cv2.CV_64F)
 
         # calculate the variance of the laplacian
         contrast = laplacian.var()
 
-    return image, contrast
+    return image_roi, contrast
 
 
 def lorentzian(x, x0, gamma, a, y0):
@@ -109,17 +120,15 @@ def open_camera():
     cam = xiapi.Camera()
     cam.open_device()
     cam.set_exposure(2000)
-    # cam.enable_aeag()
-    # cam.set_exp_priority(1.0)
-    # cam.set_ae_max_limit(2000)
-    # cam.set_aeag_level(75)
+    cam.set_imgdataformat("XI_MONO8")
+    cam.set_acq_timing_mode("XI_ACQ_TIMING_MODE_FREE_RUN")
+
     return cam
 
 
 def open_controller(dev="/dev/optotune_ld"):
     o = LiquidLens(port=dev)
-    o.connect()
-    o.mode("focal")
+    o.to_focal_power_mode()
     return o
 
 
@@ -134,6 +143,17 @@ def display_image(image, dpt):
     return False
 
 
+def plot_contrast_values(dpt_range, contrast_values, mode):
+    # Plotting the results
+    plt.figure()
+    plt.plot(dpt_range, contrast_values, "o", label="Data points")
+    plt.xlabel("Optical power [dpt]")
+    plt.ylabel("Contrast value")
+    plt.legend()
+    plt.savefig(f"/home/buchsbaum/lens_calibration/autofocus_plot_{mode}.png")
+    plt.close("all")
+
+
 def autofocus(z_pos):
     # open camera and controller
     print("Opening camera and controller...")
@@ -145,27 +165,32 @@ def autofocus(z_pos):
     # default diopter settings
     min_dpt = -4.5
     max_dpt = 4.5
-    step_size_initial = 0.4
+    step_size_initial = 0.2
     step_size_fine = 0.02
 
     print(f"Initial z position: {z_pos:.3f}")
 
     diopter_settings = np.arange(min_dpt, max_dpt, step_size_initial)
-    contrast_values = []
+    contrast_values = np.zeros(len(diopter_settings))
     cam.start_acquisition()
 
-    # take images at different diopter settings
-    for dpt in diopter_settings:
-        time.sleep(0.02)
-        image = take_image(cam, lens, dpt)
+    for i in range(10):
+        time.sleep(0.01)
+        _take_image(cam)
 
+    # take images at different diopter settings
+    for i, dpt in enumerate(diopter_settings):
+        time.sleep(0.1)
+        image = take_image(cam, lens, dpt)
         image, contrast = calculate_contrast(image)
         display_image(image, dpt)
-        contrast_values.append(contrast)
+        contrast_values[i] = contrast
 
     contrast_values = np.array(contrast_values)
     max_contrast_idx = np.argmax(contrast_values)
     best_dpt = diopter_settings[max_contrast_idx]
+
+    plot_contrast_values(diopter_settings, contrast_values, mode="initial")
 
     print(f"Best initial focus at {best_dpt:.3f} dpt")
     if max_contrast_idx == 0 or max_contrast_idx == len(diopter_settings) - 1:
@@ -180,7 +205,7 @@ def autofocus(z_pos):
     fine_contrast_values = []
 
     for dpt in fine_dpt_range:
-        time.sleep(0.02)
+        time.sleep(0.1)
         image = take_image(cam, lens, dpt)
 
         image, contrast = calculate_contrast(image)
@@ -189,49 +214,22 @@ def autofocus(z_pos):
     cv2.destroyAllWindows()
 
     fine_contrast_values = np.array(fine_contrast_values)
-    popt, _ = curve_fit(
-        lorentzian,
-        fine_dpt_range,
-        fine_contrast_values,
-        p0=[
-            best_dpt,
-            step_size_fine,
-            np.max(fine_contrast_values),
-            np.min(fine_contrast_values),
-        ],
-        maxfev=1000,
-    )
+    plot_contrast_values(fine_dpt_range, fine_contrast_values, mode="fine")
+    # # save fine contrast values to file for debugging
+    # with open(
+    #     f"/home/buchsbaum/lens_calibration/fine_contrast_values_zpos_{z_pos}.csv", "w"
+    # ) as f:
+    #     for i in range(len(fine_dpt_range)):
+    #         f.write(f"{fine_dpt_range[i]},{fine_contrast_values[i]}\n")
 
-    best_focus_dpt = popt[0]
-
-    # save fine contrast values to file for debugging
-    with open(
-        f"/home/buchsbaum/lens_calibration/fine_contrast_values_zpos_{z_pos}.csv", "w"
-    ) as f:
-        for i in range(len(fine_dpt_range)):
-            f.write(f"{fine_dpt_range[i]},{fine_contrast_values[i]}\n")
-
-    # Plotting the results
-    plt.figure()
-    plt.plot(fine_dpt_range, fine_contrast_values, "o", label="Data points")
-    plt.plot(
-        fine_dpt_range, lorentzian(fine_dpt_range, *popt), "-", label="Lorentzian fit"
-    )
-    plt.xlabel("Optical power [dpt]")
-    plt.ylabel("Contrast value")
-    plt.title(f"The best focus is at {best_focus_dpt:.3f} dpt")
-    plt.legend()
-    plt.savefig(f"/home/buchsbaum/lens_calibration/autofocus_plot_{z_pos:.3f}.png")
-    plt.close("all")
     cam.stop_acquisition()
 
-    # write line with best_focus_dpt and distance to file
-    with open(
-        "/home/buchsbaum/lens_calibration/liquid_lens_calibration.csv", "a+"
-    ) as f:
-        f.write(f"{best_focus_dpt:.3f},{z_pos:.3f}\n")
-
-    return best_focus_dpt
+    # # write line with best_focus_dpt and distance to file
+    # with open(
+    #     "/home/buchsbaum/lens_calibration/liquid_lens_calibration.csv", "a+"
+    # ) as f:
+    #     f.write(f"{best_focus_dpt:.3f},{z_pos:.3f}\n")
+    # return best_focus_dpt
 
 
 if __name__ == "__main__":

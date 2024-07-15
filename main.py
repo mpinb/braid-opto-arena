@@ -103,9 +103,13 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
         child_processes["liquid_lens"] = subprocess.Popen(
             [
                 "libs/lens_controller/target/release/lens_controller",
+                "--braid-url",
                 "http://10.40.80.6:8397/",
+                "--lens-driver-port",
                 "/dev/optotune_ld",
+                "--update-interval-ms",
                 "20",
+                "--save-folder",
                 f"{braid_folder}",
             ],
             env=env,
@@ -171,8 +175,8 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 continue
 
             # Debug log for message before publishing
-            logger.debug(f"Publishing message to 'lens': {msg_dict}")
-            pub.publish(json.dumps(msg_dict), "lens")
+            # logger.debug(f"Publishing message to 'lens': {msg_dict}")
+            # pub.publish(json.dumps(msg_dict), "lens")
 
             if "Birth" in msg_dict:
                 curr_obj_id = msg_dict["Birth"]["obj_id"]

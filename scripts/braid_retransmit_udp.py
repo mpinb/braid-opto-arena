@@ -12,8 +12,6 @@ from __future__ import print_function
 import argparse
 import requests
 import json
-import time
-import zmq
 
 DATA_PREFIX = "data: "
 
@@ -25,42 +23,23 @@ class Flydra2Proxy:
         r = self.session.get(self.flydra2_url)
         assert r.status_code == requests.codes.ok
 
-    def run(self, tcp_addr):
-        print("sending flydra data to tcp %s" % (tcp_addr,))
-        context = zmq.Context()
-        socket = context.socket(zmq.PUB)
-        socket.bind("tcp://127.0.0.1:5555")
-
-        # wait for socket to initialize properly
-        time.sleep(5)
-
-        # send the folder to write the videos to
-        socket.send("/tmp/".encode("utf-8"))
-
+    def run(self):
         events_url = self.flydra2_url + "events"
         r = self.session.get(
             events_url,
             stream=True,
             headers={"Accept": "text/event-stream"},
         )
-
-        start_time = time.time()
-
         for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
             data = parse_chunk(chunk)
-            # print('chunk value: %r'%data)
-            version = data.get("v", 1)  # default because missing in first release
-            assert version == 3  # check the data version
 
             try:
                 update_dict = data["msg"]["Update"]
-                update_dict["timestamp"] = time.time()
-
             except KeyError:
                 continue
 
-            if time.time() - start_time > 10:
-                socket.send(json.dumps(update_dict).encode("utf-8"))
+            msg = "%s, %s, %s" % (update_dict["x"], update_dict["y"], update_dict["z"])
+            msg = msg.encode("ascii")
 
 
 def parse_chunk(chunk):
@@ -77,18 +56,12 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--flydra2-url", default="http://10.40.80.6:8397/", help="URL of flydra2 server"
-    )
-    parser.add_argument(
-        "--tcp-addr",
-        type=str,
-        default="127.0.0.1:5555",
-        help="TCP address to send pose information",
+        "--flydra2-url", default="http://10.0.1:1234/", help="URL of flydra2 server"
     )
 
     args = parser.parse_args()
     flydra2 = Flydra2Proxy(args.flydra2_url)
-    flydra2.run(tcp_addr=args.tcp_addr)
+    flydra2.run()
 
 
 if __name__ == "__main__":
