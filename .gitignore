@@ -173,3 +173,6 @@ Cargo.lock
 scripts/focus_calibration/0_15cm.jpg
 scripts/focus_calibration/10_15cm.jpg
 scripts/focus_calibration/100_15cm.jpg
+libs/braid_event_stream
+libs/lens_controller
+libs/lens_driver
