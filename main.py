@@ -84,16 +84,14 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
                 f"{video_save_folder}",
                 "--fps",
                 "500",
-                "--exposure",
-                "1400",
                 "--height",
                 "2016",
                 "--width",
                 "2016",
                 "--offset-x",
-                "1216",
+                "1056",
                 "--offset-y",
-                "126",
+                "170",
             ]
         )
 
@@ -115,18 +113,6 @@ def main(params_file: str, root_folder: str, args: argparse.Namespace):
             env=env,
         )
         logger.info("Highspeed camera connected.")
-
-        # child_processes["liquid_lens"] = subprocess.Popen(
-        #     [
-        #         "python",
-        #         "./modules/lens_controller.py",
-        #         "--save_folder",
-        #         f"{braid_folder}",
-        #     ],
-        #     env=env,
-        # )
-
-        # logger.info("Highspeed camera connected.")
 
     # check if any visual stimuli is active and start the visual stimuli process
     if any(
