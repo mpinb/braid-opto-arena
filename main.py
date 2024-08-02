@@ -1,23 +1,22 @@
 import argparse
+import json
 import os
-import asyncio
-import time
-import tomllib
 import subprocess
 import threading
+import time
 
-from src.core.messages import Publisher, Subscriber
-from src.utils.csv_writer import CsvWriter
+import tomllib
+
+from src.core.braid_proxy import BraidProxy
+from src.core.messages import Subscriber
+from src.devices.rspowersupply import PowerSupply
+from src.processing.data_processor import DataProcessor
 from src.utils.file_operations import (
     check_braid_running,
     copy_files_to_folder,
     get_video_output_folder,
 )
-from src.core.braid_proxy import BraidProxy
-from src.devices.rspowersupply import PowerSupply
 from src.utils.log_config import setup_logging
-from src.devices.opto import OptoTrigger
-from src.processing.data_processor import DataProcessor
 
 # Get the root directory of the project
 root_dir = os.path.abspath(os.path.dirname(__file__))
@@ -104,7 +103,7 @@ def start_braid_proxy():
     return braid_proxy, braid_sub
 
 
-async def main(params_file: str, root_folder: str, args: argparse.Namespace):
+def main(params_file: str, root_folder: str, args: argparse.Namespace):
     """Main BraidTrigger function. Starts up all processes and triggers.
     Loop over data incoming from the flydra2 proxy and tests if a trigger should be sent.
 
@@ -130,22 +129,8 @@ async def main(params_file: str, root_folder: str, args: argparse.Namespace):
         else None
     )
 
-    # Connect to opto trigger
-    opto_trigger = None
-    if params["opto_params"].get("active", False):
-        opto_trigger = OptoTrigger(
-            port=params["arduino_devices"]["opto_trigger"],
-            baudrate=9600,
-            params=params["opto_params"],
-        )
-        opto_trigger.connect()
-
     # Start braid proxy
     braid_proxy, braid_sub = start_braid_proxy()
-
-    # create data publisher
-    general_publisher = Publisher(port=5555)  # noqa: F841
-
     # start processes
     child_processes = {}
 
@@ -159,87 +144,44 @@ async def main(params_file: str, root_folder: str, args: argparse.Namespace):
     ):
         child_processes = start_stimuli(params_file, child_processes)
 
-    # Initialize CSV writer
-    csv_writer = CsvWriter(os.path.join(BRAID_FOLDER, "opto.csv"))
-
     # Initialize DataProcessor
-    data_processor = DataProcessor(params, csv_writer, opto_trigger)  # noqa: F841
+    data_processor = DataProcessor(params)  # noqa: F841
 
     # Start main loop
     logger.info("Starting main loop.")
     start_time = time.time()
+    try:
+        while True:
+            if (time.time() - start_time) >= params["max_runtime"] * 3600:
+                break
 
-    while True:
-        if (time.time() - start_time) >= params["max_runtime"] * 3600:
-            break
+            _, msg = braid_sub.recv()
+            data = json.loads(msg)
+            data_processor.process_data(data)
 
-        _, msg = braid_sub.recv()
+    except Exception as e:
+        logger.error(e)
+    except KeyboardInterrupt:
+        logger.info("Shutting down...")
+    finally:
+        if ps:
+            logger.info("Shutting down backlight")
+            ps.set_output(0)
+            ps.dev.close()
 
-    # try:
-    #     async with braid_proxy as proxy:
-    #         await proxy.connect()
+        logger.info("Shutting data processor.")
+        data_processor.close()
 
-    #         if args.use_zmq:
-    #             # Setup ZMQ subscriber
-    #             zmq_context = zmq.asyncio.Context()
-    #             sub_socket = zmq_context.socket(zmq.SUB)
-    #             sub_socket.connect("tcp://localhost:8397")  # Adjust if needed
-    #             sub_socket.setsockopt_string(zmq.SUBSCRIBE, "braid")
-
-    #             while True:
-    #                 if (time.time() - start_time) >= params["max_runtime"] * 3600:
-    #                     break
-
-    #                 try:
-    #                     topic, msg = await sub_socket.recv_string(flags=zmq.NOBLOCK)
-    #                     data = json.loads(msg)
-    #                     await data_processor.process_data(data)
-    #                 except zmq.Again:
-    #                     await asyncio.sleep(0.001)  # Prevent tight loop
-    #         else:
-    #             async for data in proxy.data_stream():
-    #                 if (time.time() - start_time) >= params["max_runtime"] * 3600:
-    #                     break
-
-    #                 await data_processor.process_data(data)
-
-    # except asyncio.CancelledError:
-    #     logger.info("Asyncio task cancelled, shutting down.")
-    # except Exception as e:
-    #     logger.error(f"An error occurred: {e}")
-    # finally:
-    #     # Cleanup
-    #     logger.info("Sending kill message to all processes.")
-    #     await pub.publish("trigger", "kill")
-    #     await pub.publish("lens", "kill")
-
-    #     logger.info("Closing csv_writer.")
-    #     csv_writer.close()
-
-    #     if not args.debug:
-    #         logger.info("Shutting down backlighting power supply.")
-    #         ps.set_voltage(0)
-    #         ps.dev.close()
-
-    #     logger.info("Closing publisher sockets.")
-    #     pub.close()
-
-    #     # Close opto trigger
-    #     if opto_trigger:
-    #         logger.info("Closing OptoTrigger connection.")
-    #         opto_trigger.close()
-
-    #     # Terminate child processes
-    #     for name, process in child_processes.items():
-    #         logger.info(f"Terminating {name} process.")
-    #         process.terminate()
-    #         try:
-    #             process.wait(
-    #                 timeout=5
-    #             )  # Wait up to 5 seconds for the process to terminate
-    #         except subprocess.TimeoutExpired:
-    #             logger.warning(f"{name} process did not terminate in time, forcing...")
-    #             process.kill()
+        for name, process in child_processes.items():
+            logger.info(f"Terminating {name} process.")
+            process.terminate()
+            try:
+                process.wait(
+                    timeout=5
+                )  # Wait up to 5 seconds for the process to terminate
+            except subprocess.TimeoutExpired:
+                logger.warning(f"{name} process did not terminate in time, forcing...")
+                process.kill()
 
 
 if __name__ == "__main__":
@@ -256,10 +198,8 @@ if __name__ == "__main__":
 
     # Start main function
     logger.info("Starting main function.")
-    asyncio.run(
-        main(
-            params_file="./params.toml",
-            root_folder="/home/buchsbaum/mnt/DATA/Experiments/",
-            args=args,
-        )
+    main(
+        params_file="./params.toml",
+        root_folder="/home/buchsbaum/mnt/DATA/Experiments/",
+        args=args,
     )

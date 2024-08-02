@@ -1,14 +1,13 @@
 import json
+import os
 import time
-from typing import Dict, Any, List
-
+from typing import Any, Dict, List
 
 from src.core.messages import Publisher
-from src.utils.csv_writer import CsvWriter
-from src.devices.opto import OptoTrigger
-from src.utils.log_config import setup_logging
+from devices.opto_trigger import OptoTrigger
 from src.processing.trajectory import RealTimeHeadingCalculator, check_position
-
+from src.utils.csv_writer import CsvWriter
+from src.utils.log_config import setup_logging
 
 logger = setup_logging(logger_name="Main", level="INFO")
 
@@ -17,19 +16,14 @@ class DataProcessor:
     def __init__(
         self,
         params: Dict[str, Any],
-        pub: Publisher,
-        csv_writer: CsvWriter,
-        opto_trigger: OptoTrigger = None,
+        braid_folder: str,
     ):
         """
         Initializes a DataProcessor object.
 
         Args:
             params (Dict[str, Any]): A dictionary of parameters for the DataProcessor.
-            pub (Publisher): The publisher object used to publish data.
-            csv_writer (CsvWriter): The CSV writer object used to write data to a CSV file.
-            opto_trigger (OptoTrigger, optional): The OptoTrigger object used to trigger the opto stimulus. Defaults to None.
-            pub_plot (Any, optional): The plot publisher object. Defaults to None.
+            braid_folder: str: The path of the braid folder.
 
         Attributes:
             params (Dict[str, Any]): A dictionary of parameters for the DataProcessor.
@@ -44,19 +38,39 @@ class DataProcessor:
             trigger_params (Dict[str, Any]): A dictionary of trigger parameters.
             opto_params (Dict[str, Any]): A dictionary of opto parameters.
         """
-        self.params = params
-        self.pub = pub
-        self.csv_writer = csv_writer
-        self.opto_trigger = opto_trigger
 
+        # parameters
+        self.params = params
+        self.trigger_params = params["trigger_params"]
+        self.opto_params = params["opto_params"]
+
+        # csv writer
+        self.csv_writer = CsvWriter(os.path.join(braid_folder, "opto.csv"))
+        self.csv_writer.open()
+
+        # opto trigger
+        self.opto_trigger = (
+            self.setup_opto_device() if self.trigger_params["active"] else None
+        )
+
+        # tracking
         self.obj_ids: List[int] = []
         self.obj_birth_times: Dict[int, float] = {}
         self.headings: Dict[int, RealTimeHeadingCalculator] = {}
         self.last_trigger_time: float = time.time()
         self.ntrig: int = 0
 
-        self.trigger_params = params["trigger_params"]
-        self.opto_params = params["opto_params"]
+        # publisher
+        self.pub = Publisher(port=5555)
+
+    def setup_opto_device(self):
+        opto_trigger = OptoTrigger(
+            port=self.params["arduino_devices"]["opto_trigger"],
+            baudrate=9600,
+            params=self.opto_params,
+        )
+        opto_trigger.connect()
+        return opto_trigger
 
     def process_data(self, data: Dict[str, Any]) -> None:
         tcall = time.time()
@@ -134,3 +148,16 @@ class DataProcessor:
         except Exception as e:
             logger.error(f"Failed to trigger opto: {e}")
         return pos
+
+    def close(self):
+        if self.pub:
+            logger.info("Sending kill message to all processes.")
+            self.pub.publish("", "kill")
+            logger.info("Closing publisher socket.")
+            self.pub.close()
+        if self.csv_writer:
+            logger.info("Closing CSV writer.")
+            self.csv_writer.close()
+        if self.opto_trigger:
+            logger.info("Closing OptoTrigger connection.")
+            self.opto_trigger.close()
