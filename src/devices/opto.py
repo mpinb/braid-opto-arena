@@ -10,6 +10,23 @@ logger = setup_logging(logger_name="Opto", level="INFO")
 
 class OptoTrigger:
     def __init__(self, port: str, baudrate: int, params: Dict[str, Any]):
+        """
+        Initializes an instance of the OptoTrigger class.
+
+        Args:
+            port (str): The serial port to connect to.
+            baudrate (int): The baud rate to use for communication.
+            params (Dict[str, Any]): A dictionary of parameters for the trigger.
+
+        Attributes:
+            port (str): The serial port to connect to.
+            baudrate (int): The baud rate to use for communication.
+            params (Dict[str, Any]): A dictionary of parameters for the trigger.
+            device (Optional[serial.Serial]): The serial device connection.
+
+        Returns:
+            None
+        """
         self.port = port
         self.baudrate = baudrate
         self.params = params

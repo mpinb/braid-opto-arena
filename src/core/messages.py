@@ -1,89 +1,106 @@
 import zmq
-import zmq.asyncio
-import asyncio
 from src.utils.log_config import setup_logging
 
 logger = setup_logging(logger_name="Messages", level="INFO", color="cyan")
 
 
 class Publisher:
-    def __init__(self, pub_port, handshake_port):
-        self.context = zmq.asyncio.Context()
-        # Publisher socket
-        self.pub_socket = self.context.socket(zmq.PUB)
-        self.pub_socket.bind(f"tcp://*:{pub_port}")
-        # Handshake socket
-        self.rep_socket = self.context.socket(zmq.REP)
-        self.rep_socket.bind(f"tcp://*:{handshake_port}")
+    """
+    A class for publishing messages over ZeroMQ publish-subscribe pattern.
 
-    async def wait_for_subscriber(self):
-        # Wait for a handshake message from subscriber
-        try:
-            message = await self.rep_socket.recv_string()
-            if message == "Hello":
-                await self.rep_socket.send_string("Welcome")
-                logger.info("Handshake completed with a subscriber.")
-        except zmq.Again as e:
-            logger.warning(f"{e} No handshake request received yet.")
+    Attributes:
+        port (int): The port to bind the ZeroMQ publisher socket to.
+        topic (str): The topic to publish messages under.
+    """
 
-    async def publish(self, msg, topic=""):
-        await self.pub_socket.send_string(f"{topic} {msg}")
-        logger.debug(f"Published message on topic '{topic}': {msg}")
+    def __init__(self, port=5555, topic=""):
+        """
+        Initialize a Publisher object.
+
+        Args:
+            port (int): The port to bind the ZeroMQ publisher socket to.
+            topic (str): The topic to publish messages under.
+        """
+        self.port = port
+        self.topic = topic
+
+    def connect(self):
+        """
+        Connect the Publisher object to the ZeroMQ publisher socket.
+        """
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.PUB)
+        self.socket.bind(f"tcp://*:{self.port}")
+
+    def publish(self, msg):
+        """
+        Publish a message with the specified topic.
+
+        Args:
+            msg (str): The message to publish.
+        """
+        self.socket.send_string(f"{self.topic} {msg}")
+        logger.debug(f"Published message on topic '{self.topic}': {msg}")
 
     def close(self):
-        self.pub_socket.close()
-        self.rep_socket.close()
+        """
+        Close the ZeroMQ publisher socket and terminate the context.
+        """
+        self.socket.close()
         self.context.term()
-        logger.info("Closed publisher sockets and terminated context.")
+        logger.info("Closed publisher socket and terminated context.")
 
 
 class Subscriber:
-    def __init__(
-        self,
-        pub_port,
-        handshake_port,
-        server_ip="localhost",
-        retry_attempts=5,
-        retry_timeout=5,
-    ):
-        self.context = zmq.asyncio.Context()
-        self.retry_attempts = retry_attempts
-        self.retry_timeout = retry_timeout
-        # Subscriber socket
-        self.sub_socket = self.context.socket(zmq.SUB)
-        self.sub_socket.connect(f"tcp://{server_ip}:{pub_port}")
-        # Handshake socket
-        self.req_socket = self.context.socket(zmq.REQ)
-        self.req_socket.connect(f"tcp://{server_ip}:{handshake_port}")
+    """
+    A class representing a ZeroMQ subscriber.
 
-    async def handshake(self):
-        for _ in range(self.retry_attempts):
-            try:
-                # Send handshake message
-                await self.req_socket.send_string("Hello")
-                reply = await self.req_socket.recv_string()
-                if reply == "Welcome":
-                    logger.info("Handshake successful.")
-                    return True
-                else:
-                    logger.warning("Handshake failed. Unexpected reply.")
-            except zmq.ZMQError as e:
-                logger.error(f"Handshake error: {e}")
-            await asyncio.sleep(self.retry_timeout)  # wait before retrying
-        logger.error("Handshake failed after maximum retry attempts.")
-        return False
+    This class provides methods for connecting to a ZeroMQ subscriber socket,
+    receiving messages, and closing the socket.
 
-    def subscribe(self, topic=""):
-        self.sub_socket.setsockopt_string(zmq.SUBSCRIBE, topic)
-        logger.info(f"Subscribed to topic '{topic}'.")
+    Attributes:
+        port (int): The port to bind the ZeroMQ subscriber socket to.
+        topic (str): The topic to subscribe to.
+    """
 
-    async def receive(self, block=False):
+    def __init__(self, port=5555, topic=""):
+        """
+        Initialize a Subscriber object.
+
+        Args:
+            port (int): The port to bind the ZeroMQ subscriber socket to.
+            topic (str): The topic to subscribe to.
+        """
+        self.port = port
+        self.topic = topic
+
+    def connect(self):
+        """
+        Connect the Subscriber object to the ZeroMQ subscriber socket.
+        """
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.SUB)
+        self.socket.setsockopt_string(zmq.SUBSCRIBE, self.topic)
+        self.socket.connect(f"tcp://*:{self.port}")
+
+    def receive(self, block=False):
+        """
+        Receive a message from the subscriber socket.
+
+        Args:
+            block (bool): Whether to block until a message is received.
+
+        Returns:
+            tuple: A tuple containing the topic and the actual message.
+                   If no message is received and block is False, returns (None, None).
+                   If there is an error parsing the message, returns (None, None).
+        """
         try:
             # Receive the message, with or without blocking based on the 'block' parameter
             if block:
-                message = await self.sub_socket.recv_string()
+                message = self.socket.recv_string()
             else:
-                message = await self.sub_socket.recv_string(flags=zmq.NOBLOCK)
+                message = self.socket.recv_string(flags=zmq.NOBLOCK)
             # Split the message into topic and actual message
             topic, actual_message = message.split(" ", 1)
             logger.debug(f"Received message: {message}")
@@ -99,36 +116,9 @@ class Subscriber:
             return None, None
 
     def close(self):
-        self.sub_socket.close()
-        self.req_socket.close()
+        """
+        Close the ZeroMQ subscriber socket and terminate the context.
+        """
+        self.socket.close()
         self.context.term()
-        logger.info("Closed subscriber sockets and terminated context.")
-
-
-# Example usage
-async def publisher_example():
-    pub = Publisher(5555, 5556)
-    await pub.wait_for_subscriber()
-    for i in range(5):
-        await pub.publish(f"Message {i}", "topic")
-        await asyncio.sleep(1)
-    pub.close()
-
-
-async def subscriber_example():
-    sub = Subscriber(5555, 5556)
-    if await sub.handshake():
-        sub.subscribe("topic")
-        for _ in range(5):
-            topic, message = await sub.receive(block=True)
-            if topic:
-                print(f"Received: {topic} {message}")
-    sub.close()
-
-
-async def main():
-    await asyncio.gather(publisher_example(), subscriber_example())
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        logger.info("Closed subscriber socket and terminated context.")

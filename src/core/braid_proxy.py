@@ -1,120 +1,109 @@
-import asyncio
-import aiohttp
+import requests
 import json
-import zmq
-import zmq.asyncio
-from typing import Dict, Optional, AsyncGenerator
+from typing import Dict, Any, Optional
+from src.utils.log_config import setup_logging
+from src.core.messages import Publisher
+
+logger = setup_logging(logger_name="BraidProxy", level="INFO")
 
 
 class BraidProxy:
     """
-    A proxy class for interacting with a Braid server and optionally publishing data via ZeroMQ.
-
-    This class provides methods to connect to a Braid server, stream data from it,
-    and optionally publish this data using ZeroMQ for other processes to consume.
-
-    Attributes:
-        Braid_url (str): The URL of the Braid server.
-        use_zmq (bool): Whether to use ZeroMQ for publishing data.
-        zmq_context (zmq.asyncio.Context): The ZeroMQ context (only if use_zmq is True).
-        zmq_socket (zmq.asyncio.Socket): The ZeroMQ publisher socket (only if use_zmq is True).
-        topic (str): The topic to use for ZeroMQ messages.
-        session (aiohttp.ClientSession): The aiohttp session for making HTTP requests.
+    Proxy class for Braid server.
     """
 
     def __init__(
         self,
-        Braid_url: str = "http://10.40.80.6:8397/",
-        use_zmq: bool = False,
-        topic: str = "braid",
+        braid_url: str = "http://10.40.80.6:8397/",
+        port: int = 12345,
     ):
         """
-        Initialize the BraidProxy.
+        Initialize BraidProxy.
 
         Args:
-            Braid_url (str): The URL of the Braid server.
-            use_zmq (bool): Whether to use ZeroMQ for publishing data.
-            topic (str): The topic to use for ZeroMQ messages.
+            braid_url (str): URL of Braid server.
+            use_zmq (bool): Use ZeroMQ for data streaming.
+            topic (str): Topic for ZeroMQ socket.
         """
-        self.Braid_url = Braid_url
-        self.use_zmq = use_zmq
-        self.zmq_context = zmq.asyncio.Context() if use_zmq else None
-        self.zmq_socket = None
-        self.topic = topic
+        # requests
+        self.braid_url = braid_url
         self.session = None
+        self.r = None
 
-    async def __aenter__(self):
+        # zmq
+        self.socket = None
+        self.port = port
+
+    def connect(self):
         """
-        Async context manager entry point. Sets up the aiohttp session and ZeroMQ socket.
+        Connects to the Braid server and initializes the session and socket for communication.
+
+        This method establishes a connection to the Braid server by sending a GET request to the specified `braid_url`. It uses the `requests` library to create a session and send the request. The response from the server is then checked to ensure that the status code is `requests.codes.ok`.
+
+        After the successful connection to the Braid server, the method initializes a `Publisher` object with the specified `port` and `topic`. The `Publisher` object is responsible for publishing messages to a ZeroMQ socket. Finally, the method calls the `connect()` method on the `Publisher` object to establish the connection to the ZeroMQ socket.
+
+        This method does not take any parameters.
+
+        This method does not return any value.
+        """
+        # requests
+        self.session = requests.Session()
+        r = self.session.get(self.braid_url)
+        assert r.status_code == requests.codes.ok
+
+        # zmq
+        self.socket = Publisher(port=self.port, topic="braid_proxy")
+        self.socket.connect()
+
+    def run(self):
+        """
+        Run the main loop of the BraidProxy.
+
+        This method connects to the Braid server and starts streaming events from it. It continuously iterates over the
+        event stream, parsing each chunk of data and publishing it to the socket.
 
         Returns:
-            BraidProxy: The initialized BraidProxy instance.
-        """
-        self.session = aiohttp.ClientSession()
-        if self.use_zmq:
-            self.zmq_socket = self.zmq_context.socket(zmq.PUB)
-            self.zmq_socket.bind("tcp://*:8397")  # Adjust port as needed
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        """
-        Async context manager exit point. Cleans up resources.
-
-        Args:
-            exc_type: The type of the exception that caused the context to be exited.
-            exc: The exception that caused the context to be exited.
-            tb: The traceback for the exception.
-        """
-        await self.session.close()
-        if self.zmq_socket:
-            self.zmq_socket.close()
-
-    async def connect(self):
-        """
-        Establish a connection to the Braid server.
+            None. The method does not return anything.
 
         Raises:
-            aiohttp.ClientError: If connection to the Braid server fails.
+            requests.RequestException: If there is an error connecting to the Braid server or retrieving the event
+                stream. The error message is logged.
+
         """
+        events_url = self.braid_url + "events"
         try:
-            async with self.session.get(self.Braid_url) as response:
-                response.raise_for_status()
-        except aiohttp.ClientError as e:
-            print(f"Failed to connect to Braid server: {e}")
-            raise
+            r = self.session.get(
+                events_url, stream=True, headers={"Accept": "text/event-stream"}
+            )
+            r.raise_for_status()
+        except requests.RequestException as e:
+            logger.error(f"Failed to get events stream from braid server: {e}")
+            return
 
-    async def data_stream(self) -> AsyncGenerator[Dict, None]:
+        for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
+            data = self.parse_chunk(chunk)
+            self.socket.publish(data)
+
+        self.close()
+
+    def close(self):
         """
-        Stream data from the Braid server.
+        Close the connection to the Braid server.
 
-        If ZeroMQ is enabled, publishes the data to the ZeroMQ socket.
-        Otherwise, yields the data.
+        This method closes the socket and session used to communicate with the Braid server. It also logs a message
+        indicating that the connection has been closed.
 
-        Yields:
-            Dict: The parsed data from the Braid server.
+        Parameters:
+            None
 
-        Raises:
-            aiohttp.ClientError: If streaming from the Braid server fails.
+        Returns:
+            None
         """
-        events_url = f"{self.Braid_url}events"
-        try:
-            async with self.session.get(
-                events_url, headers={"Accept": "text/event-stream"}
-            ) as response:
-                response.raise_for_status()
-                async for chunk in response.content:
-                    data = self.parse_chunk(chunk.decode())
-                    if data:
-                        if self.use_zmq:
-                            await self.zmq_socket.send_string(
-                                f"{self.topic} {json.dumps(data)}"
-                            )
-                        else:
-                            yield data
-        except aiohttp.ClientError as e:
-            print(f"Failed to get events stream from Braid server: {e}")
+        self.socket.close()
+        self.session.close()
+        logger.info("Closed connection to Braid server.")
 
-    def parse_chunk(self, chunk: str) -> Optional[Dict]:
+    def parse_chunk(self, chunk: str) -> Optional[Dict[str, Any]]:
         """
         Parse a chunk of data received from the Braid server.
 
@@ -139,26 +128,3 @@ class BraidProxy:
         except json.JSONDecodeError as e:
             print(f"Failed to decode JSON data: {e}")
             return None
-
-    async def run(self):
-        """
-        Run the main loop of the BraidProxy.
-
-        This method connects to the Braid server and continuously streams data,
-        publishing it via ZeroMQ if enabled.
-        """
-        await self.connect()
-        async for _ in self.data_stream():
-            pass  # Data is sent via ZMQ, no need to do anything here
-
-
-async def main():
-    """
-    Main function to demonstrate the usage of BraidProxy.
-    """
-    async with BraidProxy(use_zmq=True, topic="braid_data") as proxy:
-        await proxy.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

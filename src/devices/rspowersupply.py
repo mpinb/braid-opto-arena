@@ -24,14 +24,6 @@ _CONNECTION_SETTINGS = {
 }
 
 
-def test_connection(port=PORT):
-    """Simple funtion to test connection to the PSU"""
-    with serial.Serial(port=port, **_CONNECTION_SETTINGS, timeout=1) as dev:
-        dev.flush()
-        dev.write("*IDN?".encode())
-        print(dev.readline().decode())
-
-
 class PowerSupply:
     """Control for RS PRO 3000/6000 Series programmable power supply"""
 
@@ -45,6 +37,19 @@ class PowerSupply:
         timeout=1,
         verbose=True,
     ):
+        """
+        Initializes a PowerSupply object.
+
+        Args:
+            port (str): The port to connect to the power supply. Defaults to PORT.
+            connection_settings (dict): The settings for the connection. Defaults to _CONNECTION_SETTINGS.
+            open_on_init (bool): Whether to open the connection on initialization. Defaults to True.
+            timeout (float): The timeout for the connection. Defaults to 1.
+            verbose (bool): Whether to print verbose messages. Defaults to True.
+
+        Returns:
+            None
+        """
         self.port = port
         self.connection_settings = connection_settings
         self.timeout = timeout
@@ -127,19 +132,3 @@ class PowerSupply:
 
     def set_voltage(self, voltage):
         self.write(f"VSET1:{voltage}")
-
-
-def test():
-    with PowerSupply() as psu:
-        print(f"Voltage {psu.get_actual_voltage():.2f}")
-        print(f"Current {psu.get_actual_current():.2f}")
-        print("Set voltage to 2")
-        psu.set_voltage(2)
-        print(f"Voltage {psu.get_actual_voltage():.2f}")
-        print(f"Current {psu.get_actual_current():.2f}")
-        print("Set voltage to 1")
-        psu.set_voltage(1)
-
-
-if __name__ == "__main__":
-    test()

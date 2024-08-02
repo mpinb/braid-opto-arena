@@ -170,10 +170,9 @@ class GratingStimulus(Stimulus):
         pass
 
 
-def connect_to_zmq(pub_port: int = 5556, handshake_port: int = 5557):
-    subscriber = Subscriber(pub_port, handshake_port)
-    subscriber.handshake()
-    logger.debug("Handshake successful")
+def connect_to_zmq(port: int = 5556):
+    subscriber = Subscriber()
+
     subscriber.subscribe("trigger")
     logger.debug("Subscribed to `trigger` messages")
     return subscriber
