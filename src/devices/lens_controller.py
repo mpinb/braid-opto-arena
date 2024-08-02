@@ -12,7 +12,7 @@ import toml
 from sklearn.linear_model import LinearRegression
 
 from utils.log_config import setup_logging
-from utils.liquid_lens import LiquidLens
+from devices.liquid_lens import LiquidLens
 
 # Setup logging
 logger = setup_logging(logger_name="LensController", level="INFO", color="cyan")

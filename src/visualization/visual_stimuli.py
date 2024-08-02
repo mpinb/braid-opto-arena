@@ -10,7 +10,7 @@ import toml
 import zmq
 from utils.csv_writer import CsvWriter
 from utils.log_config import setup_logging
-from messages import Subscriber
+from core.messages import Subscriber
 
 logger = setup_logging(logger_name="VisualStimuli", level="INFO", color="yellow")
 
