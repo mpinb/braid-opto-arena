@@ -113,7 +113,7 @@ class TriggerHandler:
             self.opto_trigger.trigger()
 
         # send trigger to publisher
-        self.trigger_publisher.send(msg_dict)
+        self.trigger_publisher.send("trigger", msg_dict)
 
         # save the trigger time
         self.trigger_time = time.time()

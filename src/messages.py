@@ -16,12 +16,12 @@ class Publisher:
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
 
-    def send(self, message):
+    def send(self, topic, message):
         if self.socket is None:
             raise RuntimeError(
-                "Publisher is not initialized. Use with statement or call __enter__ method."
+                "Publisher is not initialized. Use `with` statement or call __enter__ method."
             )
-        self.socket.send_string(message)
+        self.socket.send_string(f"{topic} {message}")
 
     def close(self):
         if self.socket is not None:
@@ -33,28 +33,35 @@ class Publisher:
 
 
 class Subscriber:
-    def __init__(self, port, topic=""):
+    def __init__(self, address, port, topics):
+        self.address = address
         self.port = port
-        self.topic = topic
+        self.topics = topics if isinstance(topics, list) else [topics]
         self.context = None
         self.socket = None
 
     def __enter__(self):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
-        self.socket.setsockopt_string(zmq.SUBSCRIBE, self.topic)
-        self.socket.connect(f"tcp://127.0.0.1:{self.port}")
+        self.socket.connect(f"tcp://{self.address}:{self.port}")
+        for topic in self.topics:
+            self.socket.setsockopt_string(zmq.SUBSCRIBE, topic)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
 
-    def receive(self):
+    def receive(self, timeout=None):
         if self.socket is None:
             raise RuntimeError(
                 "Subscriber is not initialized. Use with statement or call __enter__ method."
             )
-        return self.socket.recv_string().split(' ', 1)
+        if timeout is not None:
+            if self.socket.poll(timeout * 1000) == 0:
+                return None
+        message = self.socket.recv_string()
+        topic, content = message.split(" ", 1)
+        return topic, content
 
     def close(self):
         if self.socket is not None:
