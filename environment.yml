@@ -1,4 +1,4 @@
-name: braid-trigger-env
+name: braid-opto-arena
 
 channels:
   - conda-forge

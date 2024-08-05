@@ -1,89 +1,66 @@
-import random
-from typing import Tuple, Dict, Any, Optional
 import serial
+import logging
+import random
 
-from src.utils.log_config import setup_logging
-from src.utils.serial_utils import create_serial_connection, send_message
-
-logger = setup_logging(logger_name="Opto", level="INFO")
+logging.basicConfig(level=logging.INFO)
 
 
 class OptoTrigger:
-    def __init__(self, port: str, baudrate: int, params: Dict[str, Any]):
-        """
-        Initializes an instance of the OptoTrigger class.
+    def __init__(self, config: dict, connect_on_init=True):
+        self.config = config
 
-        Args:
-            port (str): The serial port to connect to.
-            baudrate (int): The baud rate to use for communication.
-            params (Dict[str, Any]): A dictionary of parameters for the trigger.
-
-        Attributes:
-            port (str): The serial port to connect to.
-            baudrate (int): The baud rate to use for communication.
-            params (Dict[str, Any]): A dictionary of parameters for the trigger.
-            device (Optional[serial.Serial]): The serial device connection.
-
-        Returns:
-            None
-        """
-        self.port = port
-        self.baudrate = baudrate
-        self.params = params
-        self.device: Optional[serial.Serial] = None
-
-    def connect(self) -> None:
-        """Establish connection to the device."""
-        try:
-            self.device = create_serial_connection(self.port, self.baudrate)
-            logger.info(f"Connected to OptoTrigger device on port {self.port}")
-        except ConnectionError as e:
-            logger.error(f"Failed to connect to OptoTrigger device: {e}")
-            raise
-
-    def close(self) -> None:
-        """Close the connection to the device."""
-        if self.device:
-            self.device.close()
-            logger.info("Closed connection to OptoTrigger device")
+        self.port = self.config["hardware"]["ardiuno"]["port"]
+        self.baudrate = self.config["hardware"]["ardiuno"]["baudrate"]
         self.device = None
 
-    def get_trigger_parameters(self) -> Tuple[float, float, float]:
-        """Get the opto trigger parameters based on the given params."""
-        if random.random() < self.params.get("sham_perc", 0):
-            logger.debug("Sham opto triggered.")
-            return 0, 0, 0
+        self.duration = self.config["optogenetic_light"]["duration"]
+        self.intensity = self.config["optogenetic_light"]["intensity"]
+        self.frequency = self.config["optogenetic_light"]["frequency"]
 
-        return (
-            self.params.get("duration", 0),
-            self.params.get("intensity", 0),
-            self.params.get("frequency", 0),
+        logging.info(f"Connecting to arduino at {self.port}")
+        logging.debug(
+            f"Stim parameters: duration {self.duration} intensity {self.intensity} frequency {self.frequency}"
         )
-
-    def trigger(self) -> Tuple[float, float, float]:
-        """Trigger the opto stimulus and return the parameters used."""
-        if not self.device:
-            raise RuntimeError("Device not connected. Call connect() first.")
-
-        stim_duration, stim_intensity, stim_frequency = self.get_trigger_parameters()
-        message = f"<{stim_duration},{stim_intensity},{stim_frequency}>"
-
-        try:
-            send_message(self.device, message)
-            logger.info(
-                f"Triggered opto with duration: {stim_duration}, intensity: {stim_intensity}, frequency: {stim_frequency}"
-            )
-        except ConnectionError as e:
-            logger.error(f"Failed to trigger opto: {e}")
-            raise
-
-        return stim_duration, stim_intensity, stim_frequency
+        if connect_on_init:
+            self.connect()
 
     def __enter__(self):
-        """Context manager entry."""
-        self.connect()
+        if not self.device:
+            self.connect()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
+    def __exit__(self, exc_type, exc_value, traceback):
         self.close()
+
+    def connect(self):
+        try:
+            self.device = serial.Serial(self.port, self.baudrate)
+        except Exception as e:
+            logging.error(f"Could not connect to arduino: {e}")
+
+    def trigger(self):
+        if self._sham():
+            logging.debug("Sham trial")
+        else:
+            if self.device:
+                self.device.write(
+                    f"<{self.duration} {self.intensity} {self.frequency}>".encode(
+                        "utf-8"
+                    )
+                )
+            else:
+                logging.error("Cannot trigger: device is not connected")
+
+    def _sham(self):
+        return (
+            random.randint(0, 100)
+            < self.config["optogenetic_light"]["sham_trial_percentage"]
+        )
+
+    def close(self):
+        if self.device:
+            self.device.close()
+            self.device = None
+            logging.info("Arduino disconnected")
+        else:
+            logging.debug("Arduino was not connected")

@@ -1,205 +1,124 @@
 import argparse
-import json
-import os
-import subprocess
-import threading
+import logging
 import time
+import os
+import re
+import yaml
+import contextlib
 
-import tomllib
-
-from src.core.braid_proxy import BraidProxy
-from src.core.messages import Subscriber
-from src.devices.rspowersupply import PowerSupply
-from src.processing.data_processor import DataProcessor
-from src.utils.file_operations import (
-    check_braid_running,
-    copy_files_to_folder,
-    get_video_output_folder,
+from src.braid_proxy import connect_to_braid_proxy, parse_chunk
+from src.devices.opto_trigger import OptoTrigger
+from src.devices.power_supply import PowerSupply
+from src.csv_writer import CsvWriter
+from src.messages import Publisher
+from src.trigger_handler import TriggerHandler
+from src.process_manager import (
+    start_liquid_lens_process,
+    start_visual_stimuli_process,
+    start_ximea_camera_process,
 )
-from src.utils.log_config import setup_logging
 
-# Get the root directory of the project
-root_dir = os.path.abspath(os.path.dirname(__file__))
-BRAID_FOLDER = None
-
-# Set the PYTHONPATH environment variable
-env = os.environ.copy()
-env["PYTHONPATH"] = root_dir
-
-VOLTAGE = 23.5
-
-# Setup logger
-logger = setup_logging(logger_name="Main", level="INFO")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-def start_camera(params, child_processes):
-    logger.info("Opening highspeed camera.")
-    params["video_save_folder"] = get_video_output_folder(BRAID_FOLDER)
-    video_save_folder = params["video_save_folder"]
-    child_processes["ximea_camera"] = subprocess.Popen(
-        [
-            "libs/ximea_camera/target/release/ximea_camera",
-            "--save-folder",
-            f"{video_save_folder}",
-            "--fps",
-            "500",
-            "--height",
-            "2016",
-            "--width",
-            "2016",
-            "--offset-x",
-            "1056",
-            "--offset-y",
-            "170",
-        ]
-    )
+def wait_for_braid_folder(base_folder):
+    pattern = r"\d+_\d+\.braid"
 
-    # start liquid lens process
-    child_processes["liquid_lens"] = subprocess.Popen(
-        [
-            "libs/lens_controller/target/release/lens_controller",
-            "--braid-url",
-            "http://10.40.80.6:8397/",
-            "--lens-driver-port",
-            "/dev/optotune_ld",
-            "--update-interval-ms",
-            "20",
-            "--save-folder",
-            f"{BRAID_FOLDER}",
-        ],
-        env=env,
-    )
-    logger.info("Highspeed camera connected.")
-    return params, child_processes
+    logger.info(f"Monitoring {base_folder} for new .braid folders...")
+
+    while True:
+        for item in os.listdir(base_folder):
+            full_path = os.path.join(base_folder, item)
+            if os.path.isdir(full_path) and re.match(pattern, item):
+                logger.info(f"Found matching folder: {full_path}")
+                return full_path
+
+        time.sleep(1)  # Wait for 1 second before checking again
 
 
-def start_stimuli(params_file, child_processes):
-    logger.info("Starting visual stimuli process.")
-    child_processes["visual_stimuli"] = subprocess.Popen(
-        [
-            "python",
-            "./modules/visual_stimuli.py",
-            f"{params_file}",
-            "--base_dir",
-            f"{BRAID_FOLDER}",
-        ],
-        env=env,
-    )
+def main(args):
+    # Load config
+    with open(args.config, "r") as f:
+        config = yaml.safe_load(f)
 
-    logger.info("Visual stimuli process connected.")
-    return child_processes
+    # Wait for .braid folder to be created
+    braid_folder = wait_for_braid_folder(base_folder=config["experiment"]["base_path"])
 
+    # Connect to braid
+    braid_proxy = connect_to_braid_proxy(braid_url=config["braid"]["url"])
 
-def start_braid_proxy():
-    # Connect to flydra2 proxy
-    braid_proxy = threading.Thread(taget=BraidProxy, daemon=True)
-    braid_proxy.connect()
-    braid_proxy.run()
+    # Start processes
+    sub_processes = {}
+    if config["visual_stimuli"]["enabled"]:
+        sub_processes["visual_stimuli"] = start_visual_stimuli_process(
+            args.config, braid_folder
+        )
+    if config["ximea_camera"]["enabled"]:
+        sub_processes["ximea_camera"] = start_ximea_camera_process(
+            config["experiment"]["video_base_path"], braid_folder
+        )
 
-    # braid sub channel
-    braid_sub = Subscriber(port=12345, topic="braid_proxy")
-    braid_sub.connect()
+        sub_processes["liquid_lens"] = start_liquid_lens_process(
+            config["braid"]["url"],
+            config["hardware"]["lensdriver"]["port"],
+            braid_folder,
+        )
 
-    return braid_proxy, braid_sub
+    # Set up resources
+    with contextlib.ExitStack() as stack:
+        # Set up PowerSupply
+        power_supply = stack.enter_context(PowerSupply(config["hardware"]["backlight"]))
+        power_supply.set_voltage(config["hardware"]["backlight"]["voltage"])
 
+        # Set up CsvWriter
+        csv_writer = stack.enter_context(
+            CsvWriter(filename=os.path.join(braid_folder, "opto.csv"))
+        )
 
-def main(params_file: str, root_folder: str, args: argparse.Namespace):
-    """Main BraidTrigger function. Starts up all processes and triggers.
-    Loop over data incoming from the flydra2 proxy and tests if a trigger should be sent.
+        # Set up OptoTrigger if enabled
+        if config["optogenetic_light"]["enabled"]:
+            opto_trigger = stack.enter_context(OptoTrigger(config))
+        else:
+            opto_trigger = None
 
-    Args:
-        params_file (str): a path to the params.toml file
-        root_folder (str): the root folder where the experiment folder will be created
-    """
-    # Load params
-    with open(params_file, "rb") as f:
-        params = tomllib.load(f)
+        # Set up Publisher
+        trigger_publisher = stack.enter_context(Publisher(config["zmq"]["port"]))
 
-    # Check if braidz is running (see if folder was created)
-    params["folder"] = check_braid_running(root_folder, args.debug)
-    BRAID_FOLDER = params["folder"]
+        # Set up TriggerHandler
+        trigger_handler = stack.enter_context(
+            TriggerHandler(
+                config["trigger"], opto_trigger, csv_writer, trigger_publisher
+            )
+        )
 
-    # Copy the params file to the experiment folder
-    copy_files_to_folder(BRAID_FOLDER, params_file)
+        logger.info("All resources initialized. Starting main loop.")
 
-    # Set power supply voltage (for backlighting)
-    ps = (  # noqa: F841
-        PowerSupply(port="/dev/powersupply").set_output(VOLTAGE)
-        if not args.debug
-        else None
-    )
-
-    # Start braid proxy
-    braid_proxy, braid_sub = start_braid_proxy()
-    # start processes
-    child_processes = {}
-
-    # Connect to cameras
-    if params["highspeed"].get("active", False):
-        params, child_processes = start_camera(params, child_processes)
-
-    # check if any visual stimuli is active and start the visual stimuli process
-    if any(
-        [value.get("active", False) for key, value in params["stim_params"].items()]
-    ):
-        child_processes = start_stimuli(params_file, child_processes)
-
-    # Initialize DataProcessor
-    data_processor = DataProcessor(params)  # noqa: F841
-
-    # Start main loop
-    logger.info("Starting main loop.")
-    start_time = time.time()
-    try:
-        while True:
-            if (time.time() - start_time) >= params["max_runtime"] * 3600:
-                break
-
-            _, msg = braid_sub.recv()
-            data = json.loads(msg)
-            data_processor.process_data(data)
-
-    except Exception as e:
-        logger.error(e)
-    except KeyboardInterrupt:
-        logger.info("Shutting down...")
-    finally:
-        if ps:
-            logger.info("Shutting down backlight")
-            ps.set_output(0)
-            ps.dev.close()
-
-        logger.info("Shutting data processor.")
-        data_processor.close()
-
-        for name, process in child_processes.items():
-            logger.info(f"Terminating {name} process.")
-            process.terminate()
+        # Main loop
+        for chunk in braid_proxy.iter_content(chunk_size=None, decode_unicode=True):
+            data = parse_chunk(chunk)
             try:
-                process.wait(
-                    timeout=5
-                )  # Wait up to 5 seconds for the process to terminate
-            except subprocess.TimeoutExpired:
-                logger.warning(f"{name} process did not terminate in time, forcing...")
-                process.kill()
+                msg_dict = data["msg"]
+            except KeyError:
+                continue
+
+            if "Birth" in msg_dict:
+                trigger_handler.handle_birth(msg_dict["obj_id"])
+            elif "Update" in msg_dict:
+                trigger_handler.handle_update(msg_dict)
+            elif "Death" in msg_dict:
+                trigger_handler.handle_death(msg_dict["obj_id"])
+            else:
+                logger.debug(f"Got unknown message: {msg_dict}")
+
+    logger.info("Main loop completed. All resources have been closed.")
 
 
 if __name__ == "__main__":
-    # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--debug", action="store_true", default=False)
     parser.add_argument(
-        "--use-zmq",
-        action="store_true",
-        default=True,
-        help="Use ZMQ for data streaming instead of direct yield",
+        "--config", default="config.yaml", help="Path to the configuration file"
     )
     args = parser.parse_args()
 
-    # Start main function
-    logger.info("Starting main function.")
-    main(
-        params_file="./params.toml",
-        root_folder="/home/buchsbaum/mnt/DATA/Experiments/",
-        args=args,
-    )
+    main(args)
