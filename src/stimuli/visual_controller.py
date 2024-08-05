@@ -42,6 +42,45 @@ def create_stimuli(config: dict):
 
     return stimuli
 
+def process_zmq_messages(subscriber, stimuli, csv_writer):
+    try:
+        topic, message = subscriber.receive()
+        logger.debug(f"Got message from subscriber: {message}")
+
+        if message == "kill":
+            logger.info("Received kill message. Exiting...")
+            raise KeyboardInterrupt
+
+        if message:
+            trigger_info = json.loads(message)
+            heading_direction = trigger_info.get("heading_direction")
+            logger.info("Triggering stimulus")
+            logger.debug(f"Got heading direction: {heading_direction}")
+
+            for stim in stimuli:
+                if isinstance(stim, LoomingStimulus):
+                    stim.start_expansion(heading_direction)
+                    updated_info = stim.get_trigger_info()
+                    trigger_info.update(updated_info)
+                    csv_writer.write(trigger_info)
+
+    except zmq.Again:
+        pass
+    except zmq.ZMQError as e:
+        logger.error(f"ZMQ Error: {e}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON Decode Error: {e}")
+
+def cleanup(standalone, csv_writer, subscriber):
+    if not standalone:
+        csv_writer.close()
+        subscriber.close()
+
+    logger.debug("pygame.display.quit()")
+    pygame.display.quit()
+    logger.debug("pygame.quit()")
+    pygame.quit()
+
 
 def main(config_file: str, braid_folder: str, standalone: bool):
     # Initialize Pygame
@@ -52,72 +91,42 @@ def main(config_file: str, braid_folder: str, standalone: bool):
     # Load config
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
-        config = config["visual_stimuli"]
 
     # Create stimuli
-    stimuli = create_stimuli(config)
+    stimuli = create_stimuli(config["visual_stimuli"])
 
     if not standalone:
         csv_writer = CsvWriter(os.path.join(braid_folder, "stim.csv"))
-        subscriber = Subscriber(config["zmq"]["port"], "trigger")
+        subscriber = Subscriber(
+            address="127.0.0.1", port=config["zmq"]["port"], topics="trigger"
+        )
 
     clock = pygame.time.Clock()
     logger.info("Starting main loop")
 
-    while True:
-        time_elapsed = clock.get_time()
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_k:
-                logger.info("Key pressed: K")
-                for stim in stimuli:
-                    if isinstance(stim, LoomingStimulus):
-                        stim.start_expansion()
-
-        if not standalone:
-            try:
-                topic, message = subscriber.receive()
-                logger.debug(f"Got message from subscriber: {message}")
-
-                if message == "kill":
-                    logger.info("Received kill message. Exiting...")
-                    break
-
-                elif message:
-                    trigger_info = json.loads(message)
-                    heading_direction = trigger_info.get("heading_direction")
-                    logger.info("Triggering stimulus")
-                    logger.debug(f"Got heading direction: {heading_direction}")
-
+    try:
+        while True:
+            time_elapsed = clock.get_time()
+            for event in pygame.event.get():
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_k:
+                    logger.info("Key pressed: K")
                     for stim in stimuli:
                         if isinstance(stim, LoomingStimulus):
-                            stim.start_expansion(heading_direction)
-                            updated_info = stim.get_trigger_info()
-                            trigger_info.update(updated_info)
-                            csv_writer.write(trigger_info)
+                            stim.start_expansion()
 
-            except zmq.Again:
-                pass
-            except zmq.ZMQError as e:
-                logger.error(f"ZMQ Error: {e}")
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON Decode Error: {e}")
+            if not standalone:
+                process_zmq_messages(subscriber, stimuli, csv_writer)
 
-        screen.fill((255, 255, 255))
-        for stim in stimuli:
-            stim.update(screen, time_elapsed)
+            screen.fill((255, 255, 255))
+            for stim in stimuli:
+                stim.update(screen, time_elapsed)
 
-        pygame.display.flip()
-        clock.tick(60)
-
-    logger.info("Exiting...")
-    if not standalone:
-        csv_writer.close()
-        subscriber.close()
-
-    logger.debug("pygame.display.quit()")
-    pygame.display.quit()
-    logger.debug("pygame.quit()")
-    pygame.quit()
+            pygame.display.flip()
+            clock.tick(60)
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received. Exiting...")
+    finally:
+        cleanup(standalone, csv_writer, subscriber)
 
 
 if __name__ == "__main__":
@@ -138,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--standalone",
         action="store_true",
-        default=False,
+        default=True,
         help="Run the program in standalone mode without ZMQ",
     )
     args = parser.parse_args()

@@ -25,7 +25,53 @@ class Stimulus(ABC):
         pass
 
 
-# Static image stimulus
+def generate_qr_like_stimuli(
+    width: int = 640, height: int = 640, module_size: int = 10
+):
+    # Ensure dimensions are multiples of module_size
+    width = (width // module_size) * module_size
+    height = (height // module_size) * module_size
+
+    # Calculate number of modules in each dimension
+    modules_x = width // module_size
+    modules_y = height // module_size
+
+    # Initialize the stimulus array with zeros (white background)
+    stimulus = np.zeros((height, width), dtype=np.int8)
+
+    # Generate random modules
+    for y in range(modules_y):
+        for x in range(modules_x):
+            if np.random.random() < 0.5:  # 50% chance of a black module
+                stimulus[
+                    y * module_size : (y + 1) * module_size,
+                    x * module_size : (x + 1) * module_size,
+                ] = 1
+
+    # Add QR code-like finder patterns in corners
+    finder_size = 7 * (
+        module_size // 10
+    )  # Adjust finder pattern size based on module size
+
+    def add_finder_pattern(top, left):
+        stimulus[top : top + finder_size, left : left + finder_size] = 1
+        stimulus[
+            top + module_size : top + finder_size - module_size,
+            left + module_size : left + finder_size - module_size,
+        ] = 0
+        stimulus[
+            top + 2 * module_size : top + finder_size - 2 * module_size,
+            left + 2 * module_size : left + finder_size - 2 * module_size,
+        ] = 1
+
+    # Add finder patterns in three corners
+    add_finder_pattern(0, 0)  # Top-left
+    add_finder_pattern(0, width - finder_size)  # Top-right
+    add_finder_pattern(height - finder_size, 0)  # Bottom-left
+
+    return stimulus
+
+
 class StaticImageStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
@@ -35,14 +81,10 @@ class StaticImageStimulus(Stimulus):
         if "image" in config:
             return self._load_image(config["image"])
         else:
-            return self._generate_random_stimuli(config)
+            return self._generate_qr_like_stimuli(config)
 
     def _load_image(self, image_path):
-        try:
-            image = pygame.image.load(image_path).convert()
-        except pygame.error as e:
-            print(f"Unable to load image: {e}")
-            # Return a default surface or raise an exception
+        image = pygame.image.load(image_path).convert()
         return pygame.transform.scale(
             image,
             (
@@ -51,33 +93,15 @@ class StaticImageStimulus(Stimulus):
             ),
         )
 
-    def _generate_random_stimuli(self, config):
+    def _generate_qr_like_stimuli(self, config):
         width = config.get("width", SCREEN_WIDTH)
         height = config.get("height", SCREEN_HEIGHT)
-        min_size = config.get("min_size", 10)
-        stimulus = self.generate_random_stimuli(width, height, min_size)
+        module_size = config.get("module_size", 10)
+        stimulus = generate_qr_like_stimuli(width, height, module_size)
         return pygame.surfarray.make_surface(stimulus * 255)
 
     def update(self, screen, time_elapsed):
         screen.blit(self.surface, (0, 0))
-
-    @staticmethod
-    def generate_random_stimuli(
-        width: int = 640, height: int = 128, min_size: int = 10
-    ):
-        stimulus = np.zeros((height, width), dtype=np.int8)
-        max_squares_x = width // min_size
-        max_squares_y = height // min_size
-        num_squares = np.random.randint(1, max_squares_x * max_squares_y + 1)
-
-        for _ in range(num_squares):
-            x = np.random.randint(0, width - min_size + 1)
-            y = np.random.randint(0, height - min_size + 1)
-            size_x = np.random.randint(min_size, min(width - x + 1, min_size * 2))
-            size_y = np.random.randint(min_size, min(height - y + 1, min_size * 2))
-            stimulus[y : y + size_y, x : x + size_x] = 1
-
-        return stimulus
 
 
 # Helper function for wrap-around
@@ -96,14 +120,14 @@ def interp_angle(angle):
 class LoomingStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
-        self.max_radius = self._get_value(config["stimuli"], 0, 100)
+        self.max_radius = self._get_value(config["end_radius"], 0, 100)
         self.duration = self._get_value(config["duration"], 150, 500)
-        self.color = pygame.Color(config["color"])
-        self.position_type = config["position"]
+        self.color = pygame.Color("black")
+        self.position_type = config["position_type"]
         self.position = None
         self.start_time = None
         self.expanding = False
-        self.type = config["stim_type"]
+        self.type = config.get("expansion_type", "exponential")
 
     def _get_value(self, value, min_val, max_val):
         if value == "random":
