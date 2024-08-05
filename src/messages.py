@@ -54,7 +54,7 @@ class Subscriber:
             raise RuntimeError(
                 "Subscriber is not initialized. Use with statement or call __enter__ method."
             )
-        return self.socket.recv_string()
+        return self.socket.recv_string().split(' ', 1)
 
     def close(self):
         if self.socket is not None:

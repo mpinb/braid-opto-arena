@@ -29,11 +29,55 @@ class Stimulus(ABC):
 class StaticImageStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
-        self.image = pygame.image.load(config["image"]).convert()
-        self.image = pygame.transform.scale(self.image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.surface = self._create_surface(config)
+
+    def _create_surface(self, config):
+        if "image" in config:
+            return self._load_image(config["image"])
+        else:
+            return self._generate_random_stimuli(config)
+
+    def _load_image(self, image_path):
+        try:
+            image = pygame.image.load(image_path).convert()
+        except pygame.error as e:
+            print(f"Unable to load image: {e}")
+            # Return a default surface or raise an exception
+        return pygame.transform.scale(
+            image,
+            (
+                self.config.get("width", SCREEN_WIDTH),
+                self.config.get("height", SCREEN_HEIGHT),
+            ),
+        )
+
+    def _generate_random_stimuli(self, config):
+        width = config.get("width", SCREEN_WIDTH)
+        height = config.get("height", SCREEN_HEIGHT)
+        min_size = config.get("min_size", 10)
+        stimulus = self.generate_random_stimuli(width, height, min_size)
+        return pygame.surfarray.make_surface(stimulus * 255)
 
     def update(self, screen, time_elapsed):
-        screen.blit(self.image, (0, 0))
+        screen.blit(self.surface, (0, 0))
+
+    @staticmethod
+    def generate_random_stimuli(
+        width: int = 640, height: int = 128, min_size: int = 10
+    ):
+        stimulus = np.zeros((height, width), dtype=np.int8)
+        max_squares_x = width // min_size
+        max_squares_y = height // min_size
+        num_squares = np.random.randint(1, max_squares_x * max_squares_y + 1)
+
+        for _ in range(num_squares):
+            x = np.random.randint(0, width - min_size + 1)
+            y = np.random.randint(0, height - min_size + 1)
+            size_x = np.random.randint(min_size, min(width - x + 1, min_size * 2))
+            size_y = np.random.randint(min_size, min(height - y + 1, min_size * 2))
+            stimulus[y : y + size_y, x : x + size_x] = 1
+
+        return stimulus
 
 
 # Helper function for wrap-around
@@ -52,7 +96,7 @@ def interp_angle(angle):
 class LoomingStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
-        self.max_radius = self._get_value(config["max_radius"], 0, 100)
+        self.max_radius = self._get_value(config["stimuli"], 0, 100)
         self.duration = self._get_value(config["duration"], 150, 500)
         self.color = pygame.Color(config["color"])
         self.position_type = config["position"]

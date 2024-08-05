@@ -55,9 +55,10 @@ visual_stimuli:
   refresh_rate: 60  # Hz
   stimuli:
     - type: static
-      resolution: [20, 20]
+      enabled: true
 
     - type: looming
+      enabled: true
       start_radius: 5 # pixels
       end_radius: 64 # pixels
       duration: 300 # milliseconds
@@ -65,6 +66,7 @@ visual_stimuli:
       fixed_position: [400, 300]
 
     - type: grating
+      enabled: false
       bar_width: 20  # pixels
       frequency: 2  # Hz
       direction: right  # can be 'left' or 'right'
@@ -77,5 +79,3 @@ zmq:
 logging:
   trigger_data_file: "trigger_data.csv"
   log_level: INFO
-
-# Add any additional configuration sections here
