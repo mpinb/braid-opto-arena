@@ -1,6 +1,6 @@
 # Braid tracking system configuration
 braid:
-  url: "http://127.0.0.1:8397/"
+  url: "http://10.40.80.6:8397/"
   
 # Experiment setup
 experiment:
@@ -22,7 +22,7 @@ trigger:
 
 # Optogenetic light parameters
 optogenetic_light:
-  enabled: false
+  enabled: true
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
@@ -51,7 +51,7 @@ high_speed_camera:
 
 # Visual stimuli configuration
 visual_stimuli:
-  enbaled: true
+  enabled: true
   refresh_rate: 60  # Hz
   stimuli:
     - type: static

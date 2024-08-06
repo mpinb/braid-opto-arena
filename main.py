@@ -43,7 +43,9 @@ def main(args):
         config = yaml.safe_load(f)
 
     # Wait for .braid folder to be created
-    braid_folder = wait_for_braid_folder(base_folder=config["experiment"]["base_path"])
+    braid_folder = wait_for_braid_folder(
+        base_folder=config["experiment"]["exp_base_path"]
+    )
 
     # Connect to braid
     braid_proxy = connect_to_braid_proxy(braid_url=config["braid"]["url"])
@@ -54,7 +56,7 @@ def main(args):
         sub_processes["visual_stimuli"] = start_visual_stimuli_process(
             args.config, braid_folder
         )
-    if config["ximea_camera"]["enabled"]:
+    if config["high_speed_camera"]["enabled"]:
         sub_processes["ximea_camera"] = start_ximea_camera_process(
             config["experiment"]["video_base_path"], braid_folder
         )
@@ -68,7 +70,9 @@ def main(args):
     # Set up resources
     with contextlib.ExitStack() as stack:
         # Set up PowerSupply
-        power_supply = stack.enter_context(PowerSupply(config["hardware"]["backlight"]))
+        power_supply = stack.enter_context(
+            PowerSupply(config["hardware"]["backlight"]["port"])
+        )
         power_supply.set_voltage(config["hardware"]["backlight"]["voltage"])
 
         # Set up CsvWriter

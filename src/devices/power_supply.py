@@ -63,6 +63,7 @@ class PowerSupply:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._is_open:
+            self.set_voltage(0)
             self.dev.close()
 
     def write(self, command):

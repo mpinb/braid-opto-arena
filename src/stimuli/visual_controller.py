@@ -42,6 +42,7 @@ def create_stimuli(config: dict):
 
     return stimuli
 
+
 def process_zmq_messages(subscriber, stimuli, csv_writer):
     try:
         topic, message = subscriber.receive()
@@ -70,6 +71,7 @@ def process_zmq_messages(subscriber, stimuli, csv_writer):
         logger.error(f"ZMQ Error: {e}")
     except json.JSONDecodeError as e:
         logger.error(f"JSON Decode Error: {e}")
+
 
 def cleanup(standalone, csv_writer, subscriber):
     if not standalone:
@@ -126,7 +128,8 @@ def main(config_file: str, braid_folder: str, standalone: bool):
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received. Exiting...")
     finally:
-        cleanup(standalone, csv_writer, subscriber)
+        if not standalone:
+            cleanup(standalone, csv_writer, subscriber)
 
 
 if __name__ == "__main__":
@@ -135,7 +138,7 @@ if __name__ == "__main__":
         "--config_file",
         default="config.yaml",
         type=str,
-        help="Path to the configuration file (.toml)",
+        help="Path to the configuration file (.yaml)",
     )
     parser.add_argument(
         "--braid_folder",

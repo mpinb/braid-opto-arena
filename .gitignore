@@ -187,3 +187,5 @@ libs/lens_driver
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+documentation/book

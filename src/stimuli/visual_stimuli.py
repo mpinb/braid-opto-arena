@@ -24,81 +24,34 @@ class Stimulus(ABC):
     def update(self, screen, time_elapsed):
         pass
 
-
-def generate_qr_like_stimuli(
-    width: int = 640, height: int = 640, module_size: int = 10
-):
-    # Ensure dimensions are multiples of module_size
-    width = (width // module_size) * module_size
-    height = (height // module_size) * module_size
-
-    # Calculate number of modules in each dimension
-    modules_x = width // module_size
-    modules_y = height // module_size
-
-    # Initialize the stimulus array with zeros (white background)
-    stimulus = np.zeros((height, width), dtype=np.int8)
-
-    # Generate random modules
-    for y in range(modules_y):
-        for x in range(modules_x):
-            if np.random.random() < 0.5:  # 50% chance of a black module
-                stimulus[
-                    y * module_size : (y + 1) * module_size,
-                    x * module_size : (x + 1) * module_size,
-                ] = 1
-
-    # Add QR code-like finder patterns in corners
-    finder_size = 7 * (
-        module_size // 10
-    )  # Adjust finder pattern size based on module size
-
-    def add_finder_pattern(top, left):
-        stimulus[top : top + finder_size, left : left + finder_size] = 1
-        stimulus[
-            top + module_size : top + finder_size - module_size,
-            left + module_size : left + finder_size - module_size,
-        ] = 0
-        stimulus[
-            top + 2 * module_size : top + finder_size - 2 * module_size,
-            left + 2 * module_size : left + finder_size - 2 * module_size,
-        ] = 1
-
-    # Add finder patterns in three corners
-    add_finder_pattern(0, 0)  # Top-left
-    add_finder_pattern(0, width - finder_size)  # Top-right
-    add_finder_pattern(height - finder_size, 0)  # Bottom-left
-
-    return stimulus
-
-
 class StaticImageStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
-        self.surface = self._create_surface(config)
+        surface = self._create_surface(config)
+
+        # check if image has correct size
+        if np.shape(surface) != (128, 640):
+            self.surace = pygame.transform.scale(surface, (640, 128))
+        else:
+            self.surface = surface
 
     def _create_surface(self, config):
         if "image" in config:
             return self._load_image(config["image"])
         else:
-            return self._generate_qr_like_stimuli(config)
+            return self._generate_random_stimuli()
 
     def _load_image(self, image_path):
-        image = pygame.image.load(image_path).convert()
-        return pygame.transform.scale(
-            image,
-            (
-                self.config.get("width", SCREEN_WIDTH),
-                self.config.get("height", SCREEN_HEIGHT),
-            ),
-        )
+        return pygame.image.load(image_path).convert()
 
-    def _generate_qr_like_stimuli(self, config):
-        width = config.get("width", SCREEN_WIDTH)
-        height = config.get("height", SCREEN_HEIGHT)
-        module_size = config.get("module_size", 10)
-        stimulus = generate_qr_like_stimuli(width, height, module_size)
-        return pygame.surfarray.make_surface(stimulus * 255)
+    def _generate_random_stimuli(self, width = 640, height = 128, ratio=8):
+        if width % ratio != 0 or height % ratio != 0:
+            raise ValueError('width and height must be divisible by ratio')
+        
+        stimulus = np.random.choice([0, 1], size=(width/ratio, height/ratio))
+
+        return stimulus
+
 
     def update(self, screen, time_elapsed):
         screen.blit(self.surface, (0, 0))

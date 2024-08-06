@@ -9,8 +9,8 @@ class OptoTrigger:
     def __init__(self, config: dict, connect_on_init=True):
         self.config = config
 
-        self.port = self.config["hardware"]["ardiuno"]["port"]
-        self.baudrate = self.config["hardware"]["ardiuno"]["baudrate"]
+        self.port = self.config["hardware"]["arduino"]["port"]
+        self.baudrate = self.config["hardware"]["arduino"]["baudrate"]
         self.device = None
 
         self.duration = self.config["optogenetic_light"]["duration"]
