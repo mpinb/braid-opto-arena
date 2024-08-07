@@ -1,24 +1,32 @@
 import argparse
 import json
 import os
-import pygame
-import yaml
-import zmq
-import logging
-import sys
+
+# Disable debugger warning about frozen modules
+os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
+
+# Hide Pygame support prompt (which includes the AVX2 warning)
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
+
+import logging  # noqa: E402
+import sys  # noqa: E402
+
+import pygame  # noqa: E402
+import yaml  # noqa: E402
+import zmq  # noqa: E402
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from csv_writer import CsvWriter
-from messages import Subscriber
-from stimuli.visual_stimuli import (
-    StaticImageStimulus,
-    LoomingStimulus,
+from csv_writer import CsvWriter  # noqa: E402
+from messages import Subscriber  # noqa: E402
+from stimuli.visual_stimuli import (  # noqa: E402
     GratingStimulus,
+    LoomingStimulus,
+    StaticImageStimulus,
 )
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name="VisualController")
 
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
@@ -45,28 +53,31 @@ def create_stimuli(config: dict):
 
 def process_zmq_messages(subscriber, stimuli, csv_writer):
     try:
-        topic, message = subscriber.receive()
-        logger.debug(f"Got message from subscriber: {message}")
+        # Use non-blocking receive
+        result = subscriber.receive(blocking=False)
+        if result is None:
+            # No message available, just return
+            return
+
+        topic, message = result
+        logger.info(f"Got message from subscriber: {message}")
 
         if message == "kill":
             logger.info("Received kill message. Exiting...")
             raise KeyboardInterrupt
 
-        if message:
-            trigger_info = json.loads(message)
-            heading_direction = trigger_info.get("heading_direction")
-            logger.info("Triggering stimulus")
-            logger.debug(f"Got heading direction: {heading_direction}")
+        trigger_info = json.loads(message)
+        heading_direction = trigger_info.get("heading")
+        logger.info("Triggering stimulus")
+        logger.debug(f"Got heading direction: {heading_direction}")
 
-            for stim in stimuli:
-                if isinstance(stim, LoomingStimulus):
-                    stim.start_expansion(heading_direction)
-                    updated_info = stim.get_trigger_info()
-                    trigger_info.update(updated_info)
-                    csv_writer.write(trigger_info)
+        for stim in stimuli:
+            if isinstance(stim, LoomingStimulus):
+                stim.start_expansion(heading_direction)
+                updated_info = stim.get_trigger_info()
+                trigger_info.update(updated_info)
+                csv_writer.write_row(trigger_info)
 
-    except zmq.Again:
-        pass
     except zmq.ZMQError as e:
         logger.error(f"ZMQ Error: {e}")
     except json.JSONDecodeError as e:
@@ -97,11 +108,15 @@ def main(config_file: str, braid_folder: str, standalone: bool):
     # Create stimuli
     stimuli = create_stimuli(config["visual_stimuli"])
 
+    csv_writer = None
+    subscriber = None
+
     if not standalone:
         csv_writer = CsvWriter(os.path.join(braid_folder, "stim.csv"))
         subscriber = Subscriber(
             address="127.0.0.1", port=config["zmq"]["port"], topics="trigger"
         )
+        subscriber.initialize()
 
     clock = pygame.time.Clock()
     logger.info("Starting main loop")
@@ -109,12 +124,6 @@ def main(config_file: str, braid_folder: str, standalone: bool):
     try:
         while True:
             time_elapsed = clock.get_time()
-            for event in pygame.event.get():
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_k:
-                    logger.info("Key pressed: K")
-                    for stim in stimuli:
-                        if isinstance(stim, LoomingStimulus):
-                            stim.start_expansion()
 
             if not standalone:
                 process_zmq_messages(subscriber, stimuli, csv_writer)
@@ -150,7 +159,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--standalone",
         action="store_true",
-        default=True,
+        default=False,
         help="Run the program in standalone mode without ZMQ",
     )
     args = parser.parse_args()

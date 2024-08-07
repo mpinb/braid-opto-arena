@@ -24,34 +24,35 @@ class Stimulus(ABC):
     def update(self, screen, time_elapsed):
         pass
 
+
 class StaticImageStimulus(Stimulus):
     def __init__(self, config):
         super().__init__(config)
-        surface = self._create_surface(config)
-
-        # check if image has correct size
-        if np.shape(surface) != (128, 640):
-            self.surace = pygame.transform.scale(surface, (640, 128))
-        else:
-            self.surface = surface
+        self.surface = self._create_surface(config)
 
     def _create_surface(self, config):
-        if "image" in config:
-            return self._load_image(config["image"])
-        else:
+        if config["image"] == "random":
             return self._generate_random_stimuli()
+        else:
+            return self._load_image(config["image"])
 
     def _load_image(self, image_path):
         return pygame.image.load(image_path).convert()
 
-    def _generate_random_stimuli(self, width = 640, height = 128, ratio=8):
+    def _generate_random_stimuli(
+        self, width: int = 640, height: int = 128, ratio: int = 8
+    ):
         if width % ratio != 0 or height % ratio != 0:
-            raise ValueError('width and height must be divisible by ratio')
-        
-        stimulus = np.random.choice([0, 1], size=(width/ratio, height/ratio))
+            raise ValueError("width and height must be divisible by ratio")
 
-        return stimulus
+        stimulus = (
+            np.random.choice([0, 1], size=(int(width / ratio), int(height / ratio)))
+            * 255
+        )
 
+        surface = pygame.surfarray.make_surface(stimulus)
+
+        return pygame.transform.scale(surface, (width, height))
 
     def update(self, screen, time_elapsed):
         screen.blit(self.surface, (0, 0))
@@ -105,10 +106,12 @@ class LoomingStimulus(Stimulus):
         return radii_array
 
     def start_expansion(self, heading_direction=None):
-        self.max_radius = self._get_value(self.config["max_radius"], 32, 64)
+        self.max_radius = self._get_value(self.config["end_radius"], 32, 64)
         self.duration = self._get_value(self.config["duration"], 150, 500)
+
         if self.position_type == "random":
             self.position = self._get_value("random", 0, SCREEN_WIDTH)
+
         elif self.position_type == "closed-loop":
             if heading_direction is not None:
                 self.position = interp_angle(heading_direction)
@@ -119,14 +122,17 @@ class LoomingStimulus(Stimulus):
                 self.position = self._get_value("random", 0, SCREEN_WIDTH)
         else:
             self.position = self.position_type
+
         if self.type == "exponential":
             self.radii_array = self.generate_exponential_looming(
                 self.max_radius, self.duration
             )
+
         elif self.type == "natural":
             self.radii_array = self.generate_natural_looming(
                 self.max_radius, self.duration
             )
+
         self.start_time = time.time()
         self.curr_frame = 0
         self.n_frames = int(self.duration / (1000 / 60))

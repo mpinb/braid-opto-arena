@@ -5,7 +5,7 @@ import subprocess
 import shlex
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name="Process manager")
 
 
 def start_process(command: list):

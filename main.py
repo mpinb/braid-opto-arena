@@ -19,7 +19,7 @@ from src.process_manager import (
 )
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name="Main")
 
 
 def wait_for_braid_folder(base_folder):
@@ -99,21 +99,27 @@ def main(args):
         logger.info("All resources initialized. Starting main loop.")
 
         # Main loop
-        for chunk in braid_proxy.iter_content(chunk_size=None, decode_unicode=True):
-            data = parse_chunk(chunk)
-            try:
-                msg_dict = data["msg"]
-            except KeyError:
-                continue
+        try:
+            for chunk in braid_proxy.iter_content(chunk_size=None, decode_unicode=True):
+                data = parse_chunk(chunk)
+                try:
+                    msg_dict = data["msg"]
+                except KeyError:
+                    continue
 
-            if "Birth" in msg_dict:
-                trigger_handler.handle_birth(msg_dict["obj_id"])
-            elif "Update" in msg_dict:
-                trigger_handler.handle_update(msg_dict)
-            elif "Death" in msg_dict:
-                trigger_handler.handle_death(msg_dict["obj_id"])
-            else:
-                logger.debug(f"Got unknown message: {msg_dict}")
+                if "Birth" in msg_dict:
+                    trigger_handler.handle_birth(msg_dict["Birth"]["obj_id"])
+                elif "Update" in msg_dict:
+                    trigger_handler.handle_update(msg_dict["Update"])
+                elif "Death" in msg_dict:
+                    trigger_handler.handle_death(msg_dict["Death"])
+                else:
+                    logger.debug(f"Got unknown message: {msg_dict}")
+
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received. Shutting down gracefully...")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
 
     logger.info("Main loop completed. All resources have been closed.")
 
@@ -122,6 +128,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config", default="config.yaml", help="Path to the configuration file"
+    )
+    parser.add_argument(
+        "--debug", default=False, help="Run without active Braid tracking"
     )
     args = parser.parse_args()
 

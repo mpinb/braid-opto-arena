@@ -42,4 +42,4 @@ class CsvWriter:
                 self.file_exists = True
 
         self.writer.writerow(row_dict)
-        self.writer.flush()
+        self.file.flush()

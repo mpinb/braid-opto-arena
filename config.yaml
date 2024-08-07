@@ -35,7 +35,7 @@ hardware:
     baudrate: 9600
   backlight:
     port: "/dev/powersupply"
-    voltage: 23.5
+    voltage: 0
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
@@ -55,6 +55,7 @@ visual_stimuli:
   refresh_rate: 60  # Hz
   stimuli:
     - type: static
+      image: random
       enabled: true
 
     - type: looming

@@ -1,6 +1,8 @@
 import time
 import logging
 import numpy as np
+import json
+
 from src.fly_heading_tracker import FlyHeadingTracker
 from src.devices.opto_trigger import OptoTrigger
 from src.csv_writer import CsvWriter
@@ -20,18 +22,18 @@ class TriggerHandler:
         self.csv_writer = csv_writer
         self.trigger_publisher = trigger_publisher
 
-        self.trigger_time = time.time()
+        self.trigger_time = 0.0
         self.obj_birth_times = {}
         self.obj_heading = {}
 
     def __enter__(self):
         return self
 
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_value, traceback):
         self.close()
 
     def close(self):
-        # Perform any cleanup here if needed
+        self.trigger_publisher.send("trigger", "kill")
         logging.info("TriggerHandler is shutting down")
 
     def handle_birth(self, obj_id):
@@ -82,7 +84,10 @@ class TriggerHandler:
 
         # check if object is within zone (either radius or box)
         if self.config["zone_type"] == "radius":
-            rad = np.sqrt(msg_dict["x"] ** 2 + msg_dict["y"] ** 2)
+            rad = np.sqrt(
+                (msg_dict["x"] - self.config["radius"]["center"][0]) ** 2
+                + (msg_dict["y"] - self.config["radius"]["center"][1]) ** 2
+            )
             return rad <= self.config["radius"]["distance"]
         elif self.config["zone_type"] == "box":
             x_condition = (
@@ -108,19 +113,19 @@ class TriggerHandler:
     def _trigger_action(self, msg_dict):
         obj_id = msg_dict["obj_id"]
 
+        # save the trigger time
+        self.trigger_time = time.time()
+
         # trigger opto if activated
         if self.opto_trigger is not None:
             self.opto_trigger.trigger()
 
-        # send trigger to publisher
-        self.trigger_publisher.send("trigger", msg_dict)
-
-        # save the trigger time
-        self.trigger_time = time.time()
-
         # add the heading to the data
         if obj_id in self.obj_heading:
             msg_dict["heading"] = self.obj_heading[obj_id].get_average_heading()
+
+        # send trigger to publisher
+        self.trigger_publisher.send("trigger", json.dumps(msg_dict))
 
         # save data to csv
         self.csv_writer.write_row(msg_dict)
