@@ -14,6 +14,7 @@ import time
 
 import numpy as np
 import serial
+from typing import TracebackType, Optional, Type
 
 PORT = "/dev/ttyACM1"
 _CONNECTION_SETTINGS = {
@@ -31,25 +32,12 @@ class PowerSupply:
 
     def __init__(
         self,
-        port=PORT,
-        connection_settings=_CONNECTION_SETTINGS,
-        open_on_init=True,
-        timeout=1,
-        verbose=True,
-    ):
-        """
-        Initializes a PowerSupply object.
-
-        Args:
-            port (str): The port to connect to the power supply. Defaults to PORT.
-            connection_settings (dict): The settings for the connection. Defaults to _CONNECTION_SETTINGS.
-            open_on_init (bool): Whether to open the connection on initialization. Defaults to True.
-            timeout (float): The timeout for the connection. Defaults to 1.
-            verbose (bool): Whether to print verbose messages. Defaults to True.
-
-        Returns:
-            None
-        """
+        port: str = PORT,
+        connection_settings: dict = _CONNECTION_SETTINGS,
+        open_on_init: bool = True,
+        timeout: float = 1.0,
+        verbose: bool = True,
+    ) -> None:
         self.port = port
         self.connection_settings = connection_settings
         self.timeout = timeout
@@ -57,79 +45,73 @@ class PowerSupply:
         if open_on_init:
             self.open_connection()
 
-    def __enter__(self, **kwargs):
-        # The kwargs will be passed on to __init__
+    def __enter__(self) -> "PowerSupply":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         if self._is_open:
-            self.set_voltage(0)
+            self.set_voltage(0.0)
             self.dev.close()
 
-    def write(self, command):
+    def _write(self, command: str) -> int:
         return self.dev.write(command.encode())
 
-    def query(self, command):
-        self.dev.write(command.encode())
+    def _query(self, command: str) -> str:
+        self._write(command)
         ret = self.dev.readline().decode("utf-8").strip()
-        # Query again if empty string received
-        if ret == "":
+        if not ret:
             time.sleep(0.2)
-            self.dev.write(command.encode())
+            self._write(command)
             ret = self.dev.readline().decode("utf-8").strip()
         return ret
 
-    def open_connection(self, timeout=None):
-        # Override class timeout if argument given
+    def open_connection(self, timeout: Optional[float] = None) -> None:
         if timeout is not None:
             self.timeout = timeout
-        # Failures to connect are usual, so trying a few times
-        tries = 3
-        while tries > 0:
+        for _ in range(3):
             try:
                 self.dev = serial.Serial(
-                    port=self.port, **self.connection_settings, timeout=self.timeout
+                    self.port, **self.connection_settings, timeout=self.timeout
                 )
-            except serial.SerialException:
-                if not tries == 1:
-                    print("Failed to connect, trying again..")
-                else:
-                    print("Failed again, will now stop.")
-                    raise RuntimeError(f"Could not connect to {self.port}")
-                tries -= 2
-            else:
-                self._is_open = True
                 break
+            except serial.SerialException:
+                pass
+        else:
+            raise RuntimeError(f"Could not connect to {self.port}")
+        self._is_open = True
         self.dev.flush()
         self.idn = self.get_idn()
         if self.verbose:
             print(f"Connected to {self.idn}")
 
-    def get_idn(self):
-        return self.query("*IDN?")
+    def get_idn(self) -> str:
+        return self._query("*IDN?")
 
-    def set_output(self, state):
-        """Works only for 6000-series!"""
-        if "RS-300" in self.idn:
+    def set_output(self, state: str) -> None:
+        if "RS-300" not in self.idn:
             raise NotImplementedError(
                 "The set_output() function only works with 6000 series"
             )
-        self.write(f"OUT{state}")
+        self._write(f"OUT{state}")
 
-    def get_actual_current(self):
-        current = float(self.query("IOUT1?"))
-        # Check if within limits of possible values
-        current = current if 0 <= current <= 5 else np.nan
-        return current
+    def get_actual_current(self) -> float:
+        current = float(self._query("IOUT1?"))
+        return current if 0 <= current <= 5 else np.nan
 
-    def set_current(self, current):
-        self.write(f"ISET1:{current}")
+    def set_current(self, current: float) -> None:
+        self._write(f"ISET1:{current}")
 
-    def get_actual_voltage(self):
-        voltage = float(self.query("VOUT1?"))
-        # Check if within limits of possible values
-        voltage = voltage if 0 <= voltage <= 30 else np.nan
-        return voltage
+    def get_actual_voltage(self) -> float:
+        voltage = float(self._query("VOUT1?"))
+        return voltage if 0 <= voltage <= 30 else np.nan
 
-    def set_voltage(self, voltage):
-        self.write(f"VSET1:{voltage}")
+    def set_voltage(self, voltage: float) -> None:
+        """
+        Sets the voltage of the power supply to the specified value.
+        """
+        self._write(f"VSET1:{voltage}")

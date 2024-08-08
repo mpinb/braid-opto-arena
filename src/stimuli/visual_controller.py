@@ -17,9 +17,9 @@ import zmq  # noqa: E402
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from csv_writer import CsvWriter  # noqa: E402
-from messages import Subscriber  # noqa: E402
-from stimuli.visual_stimuli import (  # noqa: E402
+from ..csv_writer import CsvWriter  # noqa: E402
+from ..messages import Subscriber  # noqa: E402
+from .visual_stimuli import (  # noqa: E402
     GratingStimulus,
     LoomingStimulus,
     StaticImageStimulus,
@@ -39,6 +39,24 @@ STIMULUS_TYPES = {
 
 
 def create_stimuli(config: dict):
+    """
+    Create a list of stimuli based on the given configuration.
+
+    Args:
+        config (dict): The configuration dictionary containing the stimuli information.
+
+    Returns:
+        list: A list of stimuli objects.
+
+    This function iterates over the "stimuli" key in the given configuration dictionary.
+    For each stimulus, it checks if it is enabled. If it is enabled, it retrieves the
+    corresponding stimulus class from the STIMULUS_TYPES dictionary based on the "type"
+    key of the stimulus. If a stimulus class is found, it creates an instance of the stimulus
+    class using the stimulus dictionary and adds it to the list of stimuli. If no stimulus
+    class is found, it prints a warning message indicating an unknown stimulus type.
+
+    The function returns the list of stimuli objects.
+    """
     stimuli = []
     for stim in config["stimuli"]:
         if stim["enabled"]:
@@ -52,6 +70,22 @@ def create_stimuli(config: dict):
 
 
 def process_zmq_messages(subscriber, stimuli, csv_writer):
+    """
+    Process ZMQ messages received by the subscriber.
+
+    Args:
+        subscriber (zmq.Socket): The ZMQ subscriber socket.
+        stimuli (list): A list of stimulus objects.
+        csv_writer (CSVWriter): The CSV writer object.
+
+    Returns:
+        None
+
+    Raises:
+        KeyboardInterrupt: If a kill message is received.
+        zmq.ZMQError: If there is a ZMQ error.
+        json.JSONDecodeError: If there is a JSON decode error.
+    """
     try:
         # Use non-blocking receive
         result = subscriber.receive(blocking=False)
@@ -60,7 +94,7 @@ def process_zmq_messages(subscriber, stimuli, csv_writer):
             return
 
         topic, message = result
-        logger.info(f"Got message from subscriber: {message}")
+        logger.debug(f"Got message from subscriber: {message}")
 
         if message == "kill":
             logger.info("Received kill message. Exiting...")
@@ -68,11 +102,11 @@ def process_zmq_messages(subscriber, stimuli, csv_writer):
 
         trigger_info = json.loads(message)
         heading_direction = trigger_info.get("heading")
-        logger.info("Triggering stimulus")
         logger.debug(f"Got heading direction: {heading_direction}")
 
         for stim in stimuli:
             if isinstance(stim, LoomingStimulus):
+                logger.info("Triggering looming stimulus")
                 stim.start_expansion(heading_direction)
                 updated_info = stim.get_trigger_info()
                 trigger_info.update(updated_info)
@@ -85,6 +119,17 @@ def process_zmq_messages(subscriber, stimuli, csv_writer):
 
 
 def cleanup(standalone, csv_writer, subscriber):
+    """
+    Cleans up resources based on the standalone flag.
+
+    Args:
+        standalone (bool): Flag indicating if the cleanup is standalone.
+        csv_writer (CSVWriter): The CSV writer object.
+        subscriber (zmq.Socket): The ZMQ subscriber socket.
+
+    Returns:
+        None
+    """
     if not standalone:
         csv_writer.close()
         subscriber.close()
@@ -96,6 +141,26 @@ def cleanup(standalone, csv_writer, subscriber):
 
 
 def main(config_file: str, braid_folder: str, standalone: bool):
+    """
+    Runs the main loop of the stimulus display program.
+
+    Args:
+        config_file (str): The path to the configuration file.
+        braid_folder (str): The base directory to save the stim.csv file.
+        standalone (bool): Whether to run the program in standalone mode without ZMQ.
+
+    Returns:
+        None
+
+    Raises:
+        KeyboardInterrupt: If the program is interrupted by the user.
+
+    This function initializes Pygame, loads the configuration file, creates the stimuli,
+    and enters the main loop. In the main loop, it updates the stimuli, fills the screen,
+    and flips the display. If not in standalone mode, it also processes ZMQ messages and
+    writes to the stim.csv file. The main loop runs at 60 frames per second. If the program
+    is interrupted by the user, it logs a message and exits gracefully.
+    """
     # Initialize Pygame
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.NOFRAME)

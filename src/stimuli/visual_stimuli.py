@@ -5,9 +5,10 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pygame
 import logging
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name="VisualStimuli")
 
 # Constants
 SCREEN_WIDTH = 640
@@ -60,12 +61,36 @@ class StaticImageStimulus(Stimulus):
 
 # Helper function for wrap-around
 def wrap_around_position(x, screen_width):
+    """
+    Returns the wrap-around position of a given value `x` within a given `screen_width`.
+
+    Args:
+        x (int): The value to wrap around.
+        screen_width (int): The width of the screen.
+
+    Returns:
+        int: The wrap-around position of `x` within `screen_width`.
+    """
     return x % screen_width
 
 
 def interp_angle(angle):
-    screen = [0, 128, 256, 384, 512]
-    heading = [1.518, 2.776, -2.198, -0.978, 0.213]
+    """
+    Interpolates the given angle using the calibration data from the CSV file.
+
+    Parameters:
+        angle (float): The angle to interpolate.
+
+    Returns:
+        float: The interpolated value.
+
+    Raises:
+        FileNotFoundError: If the CSV file is not found.
+
+    """
+    df = pd.read_csv("src/stimuli/calibration.csv")
+    screen = df["circle"].values
+    heading = df["angle"].values
 
     return np.interp(angle, heading, screen, period=2 * np.pi)
 
@@ -73,6 +98,19 @@ def interp_angle(angle):
 # Looming stimulus
 class LoomingStimulus(Stimulus):
     def __init__(self, config):
+        """
+        Initializes a LoomingStimulus object.
+
+        Args:
+            config (dict): A dictionary containing the configuration parameters for the stimulus.
+                - end_radius (int): The maximum radius of the looming stimulus. Defaults to 0.
+                - duration (int): The duration of the looming stimulus in milliseconds. Defaults to 150.
+                - position_type (str): The type of position for the looming stimulus. Possible values are "random", "closed-loop", or a specific position.
+                - expansion_type (str, optional): The type of expansion for the looming stimulus. Possible values are "exponential" or "natural". Defaults to "exponential".
+
+        Returns:
+            None
+        """
         super().__init__(config)
         self.max_radius = self._get_value(config["end_radius"], 0, 100)
         self.duration = self._get_value(config["duration"], 150, 500)
@@ -114,12 +152,13 @@ class LoomingStimulus(Stimulus):
 
         elif self.position_type == "closed-loop":
             if heading_direction is not None:
-                self.position = interp_angle(heading_direction)
+                self.position = int(interp_angle(heading_direction))
                 logger.debug(
-                    f" heading_direction: {heading_direction}, position: {self.position}"
+                    f"heading_direction: {heading_direction}, position: {self.position}"
                 )
             else:
                 self.position = self._get_value("random", 0, SCREEN_WIDTH)
+
         else:
             self.position = self.position_type
 

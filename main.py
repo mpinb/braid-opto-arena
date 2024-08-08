@@ -23,6 +23,19 @@ logger = logging.getLogger(name="Main")
 
 
 def wait_for_braid_folder(base_folder):
+    """
+    Waits for a new folder with a name matching the pattern '\d+_\d+\.braid' in the given base folder.
+
+    Args:
+        base_folder (str): The base folder to monitor for new folders.
+
+    Returns:
+        str: The full path of the first matching folder found.
+
+    Raises:
+        None
+
+    """
     pattern = r"\d+_\d+\.braid"
 
     logger.info(f"Monitoring {base_folder} for new .braid folders...")
@@ -38,6 +51,29 @@ def wait_for_braid_folder(base_folder):
 
 
 def main(args):
+    """
+    The main function that initializes resources, starts processes, and runs the main loop.
+
+    Args:
+        args (argparse.Namespace): The command-line arguments.
+
+    Returns:
+        None
+
+    Raises:
+        KeyboardInterrupt: If the user interrupts the program with a keyboard interrupt.
+        Exception: If an unexpected error occurs during the main loop.
+
+    Description:
+        This function loads the configuration from a YAML file, waits for a .braid folder to be created,
+        connects to the Braid proxy, starts the necessary processes, sets up resources such as the
+        PowerSupply, CsvWriter, OptoTrigger (if enabled), Publisher, and TriggerHandler. It then enters
+        a main loop that iterates over the Braid proxy's content, parses each chunk, and handles the
+        different types of messages received (Birth, Update, Death). If a KeyboardInterrupt is received,
+        the program gracefully shuts down. If an unexpected error occurs, it is logged and the program
+        continues.
+
+    """
     # Load config
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
