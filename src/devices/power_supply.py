@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# ./src/devices/power_supply.py
 """
 Simple class for controlling RS-3000 and 6000-series programmable power supplies
 
@@ -11,10 +11,10 @@ Andreas Svela 2020
 """
 
 import time
+from typing import Optional
 
 import numpy as np
 import serial
-from typing import TracebackType, Optional, Type
 
 PORT = "/dev/ttyACM1"
 _CONNECTION_SETTINGS = {
@@ -50,9 +50,9 @@ class PowerSupply:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[TracebackType],
+        exc_type,
+        exc_val,
+        exc_tb,
     ) -> None:
         if self._is_open:
             self.set_voltage(0.0)

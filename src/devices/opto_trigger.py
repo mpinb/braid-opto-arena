@@ -1,3 +1,4 @@
+# ./src/devices/opto_trigger.py
 import serial
 import logging
 import random

@@ -1,11 +1,11 @@
-name: braid-opto-arena
+name: braid-opto-arena-env
 
 channels:
   - conda-forge
   - defaults
 
 dependencies:
-  - python=3.11
+  - python
   - matplotlib
   - numpy
   - pandas
