@@ -1,11 +1,12 @@
-import time
-import logging
-import numpy as np
 import json
+import logging
+import time
 
-from .fly_heading_tracker import FlyHeadingTracker
-from .devices.opto_trigger import OptoTrigger
+import numpy as np
+
 from .csv_writer import CsvWriter
+from .devices.opto_trigger import OptoTrigger
+from .fly_heading_tracker import FlyHeadingTracker
 from .messages import Publisher
 
 logging.basicConfig(level=logging.DEBUG)
@@ -132,6 +133,7 @@ class TriggerHandler:
             self.obj_birth_times[obj_id] = (
                 time.time()
             )  # if the object was not already detected
+            self.obj_heading[obj_id] = FlyHeadingTracker()
 
     def _check_trigger_conditions(self, msg_dict):
         """
@@ -175,11 +177,20 @@ class TriggerHandler:
 
         # check if object is within zone (either radius or box)
         if self.config["zone_type"] == "radius":
+            # check both the radius and the z limit
             rad = np.sqrt(
                 (msg_dict["x"] - self.config["radius"]["center"][0]) ** 2
                 + (msg_dict["y"] - self.config["radius"]["center"][1]) ** 2
             )
-            return rad <= self.config["radius"]["distance"]
+
+            rad_condition = (rad <= self.config["radius"]["distance"])
+            z_condition = (
+                self.config["radius"]["z"][0]
+                <= msg_dict["z"]
+                <= self.config["radius"]["z"][1]
+            )
+            return rad_condition and z_condition
+
         elif self.config["zone_type"] == "box":
             x_condition = (
                 self.config["box"]["x"][0]

@@ -17,6 +17,7 @@ trigger:
   radius:
     center: [0, 0]  # x, y coordinates of arena center in mm
     distance: 0.05  # distance from center in m
+    z: [0.15, 0.25]
   min_trajectory_time: 1.0  # seconds
   min_trigger_interval: 10.0  # seconds
 
