@@ -36,14 +36,14 @@ hardware:
     baudrate: 9600
   backlight:
     port: "/dev/powersupply"
-    voltage: 23.5
+    voltage: 0
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
 
 # High-speed camera settings
 high_speed_camera:
-  enabled: false
+  enabled: true
   type: "ximea"
   pre_trigger_record_time: 0.5  # seconds
   post_trigger_record_time: 1.5  # seconds

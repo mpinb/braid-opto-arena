@@ -2,7 +2,7 @@
 import serial
 import logging
 import random
-from typing import Optional, Type, TracebackType
+from typing import Optional, Type
 
 logging.basicConfig(level=logging.INFO)
 
@@ -53,9 +53,9 @@ class OptoTrigger:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type,
+        exc_value,
+        traceback,
     ) -> None:
         """
         Exit the context manager.

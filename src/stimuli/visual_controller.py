@@ -18,9 +18,9 @@ import zmq  # noqa: E402
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ..csv_writer import CsvWriter  # noqa: E402
-from ..messages import Subscriber  # noqa: E402
-from .visual_stimuli import (  # noqa: E402
+from csv_writer import CsvWriter  # noqa: E402
+from messages import Subscriber  # noqa: E402
+from visual_stimuli import (  # noqa: E402
     GratingStimulus,
     LoomingStimulus,
     StaticImageStimulus,

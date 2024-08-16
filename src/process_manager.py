@@ -26,7 +26,7 @@ def start_process(command: list):
         >>> start_process(['ls', '-l'])
         <subprocess.Popen object at 0x7f955c005b10>
     """
-    logger.info(f"Starting process: {command}")
+    logger.info(f"Starting process: {os.path.basename(command[0])}")
     process = subprocess.Popen(command)
     return process
 
@@ -70,12 +70,14 @@ def start_ximea_camera_process(videos_base_folder: str, braid_folder: str):
         <subprocess.Popen object at 0x7f955c005b10>
     """
     # set and create videos folder
-    videos_folder = os.path.join(videos_base_folder, os.path.basename(braid_folder))
+    videos_folder = os.path.join(
+        videos_base_folder, os.path.basename(braid_folder)
+    ).split(".")[0]
     os.makedirs(videos_folder, exist_ok=True)
 
     # run command
     command = shlex.split(
-        f"../libs/ximea_camera/target/release/ximea_camera --save-folder {videos_folder}"
+        f"libs/ximea_camera/target/release/ximea_camera --save-folder {videos_folder}"
     )
     return start_process(command)
 
@@ -97,6 +99,6 @@ def start_liquid_lens_process(braid_url: str, lens_driver_port: str, braid_folde
         <subprocess.Popen object at 0x7f955c005b10>
     """
     command = shlex.split(
-        f"../libs/lens_controller/target/release/lens_controller --braid-url {braid_url} --lens-driver-port {lens_driver_port} --update-interval-ms 20 --save-folder {braid_folder}"
+        f"libs/lens_controller/target/release/lens_controller --braid-url {braid_url} --lens-driver-port {lens_driver_port} --update-interval-ms 20 --save-folder {braid_folder}"
     )
     return start_process(command)

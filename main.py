@@ -26,7 +26,7 @@ logger = logging.getLogger(name="Main")
 
 def wait_for_braid_folder(base_folder):
     """
-    Waits for a new folder with a name matching the pattern '\d+_\d+\.braid' in the given base folder.
+    Waits for a new folder with a name matching the pattern 'number_number.braid' in the given base folder.
 
     Args:
         base_folder (str): The base folder to monitor for new folders.
