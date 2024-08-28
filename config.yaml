@@ -9,10 +9,10 @@ experiment:
 
 # Trigger parameters
 trigger:
-  zone_type: "radius"  # can be "box" or "radius"
+  zone_type: "box"  # can be "box" or "radius"
   box:
-    x: [-0.05, 0.05]  # [min, max] in m
-    y: [-0.05, 0.05]
+    x: [-0.058, 0.033]  # [min, max] in m
+    y: [-0.024, 0.066]
     z: [0.15, 0.25]
   radius:
     center: [0, 0]  # x, y coordinates of arena center in mm
@@ -36,7 +36,7 @@ hardware:
     baudrate: 9600
   backlight:
     port: "/dev/powersupply"
-    voltage: 0
+    voltage: 24
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"

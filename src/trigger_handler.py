@@ -4,7 +4,6 @@ import logging
 import time
 
 import numpy as np
-
 from .csv_writer import CsvWriter
 from .devices.opto_trigger import OptoTrigger
 from .fly_heading_tracker import FlyHeadingTracker
@@ -18,8 +17,8 @@ class TriggerHandler:
     def __init__(
         self,
         config: dict,
-        opto_trigger: OptoTrigger,
-        csv_writer: CsvWriter,
+        opto_trigger: OptoTrigger | None,
+        csv_writer: CsvWriter | None,
         trigger_publisher: Publisher,
     ):
         """
@@ -248,6 +247,7 @@ class TriggerHandler:
         self.trigger_publisher.send("trigger", json.dumps(msg_dict))
 
         # save data to csv
-        self.csv_writer.write_row(msg_dict)
+        if self.csv_writer is not None:
+            self.csv_writer.write_row(msg_dict)
 
         logging.info(f"Triggered action for object {msg_dict['obj_id']}")

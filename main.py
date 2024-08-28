@@ -113,15 +113,14 @@ def main(args):
         )
         power_supply.set_voltage(config["hardware"]["backlight"]["voltage"])
 
-        # Set up CsvWriter
-        csv_writer = stack.enter_context(
-            CsvWriter(filename=os.path.join(braid_folder, "opto.csv"))
-        )
-
-        # Set up OptoTrigger if enabled
+        # Set up OptoTrigger and csv if enabled
         if config["optogenetic_light"]["enabled"]:
+            csv_writer = stack.enter_context(
+                CsvWriter(filename=os.path.join(braid_folder, "opto.csv"))
+            )
             opto_trigger = stack.enter_context(OptoTrigger(config))
         else:
+            csv_writer = None
             opto_trigger = None
 
         # Set up Publisher
