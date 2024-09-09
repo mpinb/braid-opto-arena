@@ -112,6 +112,7 @@ def process_zmq_messages(subscriber, stimuli, csv_writer):
                 updated_info = stim.get_trigger_info()
                 trigger_info.update(updated_info)
                 csv_writer.write_row(trigger_info)
+                logging.info(f"Updated info: {trigger_info}")
 
     except zmq.ZMQError as e:
         logger.error(f"ZMQ Error: {e}")
