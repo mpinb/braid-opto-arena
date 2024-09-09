@@ -148,26 +148,18 @@ def main(args):
 
         # Set the start time
         start_time = time.time()
-
+        # Main loop
         try:
-            while True:
+            for chunk in braid_proxy.iter_events(timeout=1.0):
+
                 # Check if time limit has been reached
                 if time_limit_seconds is not None and (time.time() - start_time) > time_limit_seconds:
                     logger.info(f"Time limit of {time_limit_hours} hours reached. Stopping recording.")
                     break
-
-                try:
-                    # Use a timeout to ensure we can check the time limit regularly
-                    chunk = next(braid_proxy.iter_events(timeout=1))
-                except StopIteration:
-                    # No data available, continue to next iteration
+                
+                if chunk is None:
                     continue
-                except (ChunkedEncodingError, ConnectionError) as e:
-                    logger.error(f"Connection error: {e}. Attempting to reconnect...")
-                    # Attempt to reconnect
-                    braid_proxy.connect()
-                    continue
-
+                
                 try:
                     data = braid_proxy.parse_chunk(chunk)
                     msg_dict = data["msg"]
@@ -183,8 +175,15 @@ def main(args):
                 else:
                     logger.debug(f"Got unknown message: {msg_dict}")
 
+                # Check for time limit again to ensure we don't process events past the time limit
+                if time_limit_seconds is not None and (time.time() - start_time) > time_limit_seconds:
+                    logger.info(f"Time limit of {time_limit_hours} hours reached after processing event. Stopping recording.")
+                    break
+
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received. Shutting down gracefully...")
+        except (ChunkedEncodingError, ConnectionError) as e:
+            logger.error(f"Connection error: {e}. Shutting down...")
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
         finally:

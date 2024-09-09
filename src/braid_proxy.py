@@ -1,8 +1,7 @@
-# ./src/braid_proxy.py
-
 import requests
 import json
-from typing import Optional
+from typing import Optional, Generator
+import select
 
 class BraidProxy:
     DATA_PREFIX = "data: "
@@ -29,14 +28,21 @@ class BraidProxy:
             headers={"Accept": "text/event-stream"},
         )
 
-    def iter_events(self, chunk_size: Optional[int] = None, decode_unicode: bool = True, timeout: float = 1):
+    def iter_events(self, chunk_size: Optional[int] = None, decode_unicode: bool = True, timeout: float = 1.0) -> Generator[str, None, None]:
         """
-        Iterates over events from the Braid proxy.
+        Generates events from the Braid proxy with a timeout.
         """
         if not self.stream:
             raise RuntimeError("Not connected to Braid proxy. Call connect() first.")
         
-        return self.stream.iter_content(chunk_size=chunk_size, decode_unicode=decode_unicode, timeout=timeout)
+        while True:
+            ready, _, _ = select.select([self.stream.raw], [], [], timeout)
+            if ready:
+                chunk = next(self.stream.iter_content(chunk_size=chunk_size, decode_unicode=decode_unicode))
+                yield chunk
+            else:
+                yield None  # Yield None if no data is received within the timeout period
+
 
     def parse_chunk(self, chunk: str):
         """
