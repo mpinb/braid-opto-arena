@@ -4,6 +4,7 @@ braid:
   
 # Experiment setup
 experiment:
+  time_limit: 24 # hours
   exp_base_path: "/home/buchsbaum/mnt/DATA/Experiments"
   video_base_path: "/home/buchsbaum/mnt/DATA/Videos"
 
@@ -81,3 +82,4 @@ zmq:
 logging:
   trigger_data_file: "trigger_data.csv"
   log_level: INFO
+

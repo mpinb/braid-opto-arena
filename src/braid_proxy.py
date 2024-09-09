@@ -58,3 +58,19 @@ def parse_chunk(chunk):
     buf = lines[1][len(DATA_PREFIX) :]
     data = json.loads(buf)
     return data
+
+def toggle_recording(start: bool, braid_url: str):
+    url = f"{braid_url}/callback"
+    payload = {
+        "DoRecordCsvTables": start
+    }
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.post(url, data=json.dumps(payload), headers=headers)
+    
+    if response.status_code == 200:
+        print(f"{'Started' if start else 'Stopped'} recording successfully")
+    else:
+        print(f"Failed to {'start' if start else 'stop'} recording. Status code: {response.status_code}")
