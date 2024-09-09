@@ -2,75 +2,76 @@
 
 import requests
 import json
+from typing import Optional
 
-DATA_PREFIX = "data: "
+class BraidProxy:
+    DATA_PREFIX = "data: "
 
+    def __init__(self, braid_url: str):
+        self.braid_url = braid_url
+        self.session = requests.session()
+        self.stream = None
 
-def connect_to_braid_proxy(braid_url: str):
-    """
-    Connects to a Braid proxy server and retrieves the events stream.
+    def connect(self):
+        """
+        Connects to the Braid proxy server and initializes the event stream.
+        """
+        # Initial connection and check
+        r = self.session.get(self.braid_url)
+        if r.status_code != requests.codes.ok:
+            raise ConnectionError(f"Failed to connect to Braid proxy. Status code: {r.status_code}")
 
-    Args:
-        braid_url (str): The URL of the Braid proxy server.
+        # Start Braid proxy event stream
+        events_url = f"{self.braid_url}/events"
+        self.stream = self.session.get(
+            events_url,
+            stream=True,
+            headers={"Accept": "text/event-stream"},
+        )
 
-    Returns:
-        requests.Response: The response object containing the events stream.
+    def iter_events(self, chunk_size: Optional[int] = None, decode_unicode: bool = True, timeout: float = 1):
+        """
+        Iterates over events from the Braid proxy.
+        """
+        if not self.stream:
+            raise RuntimeError("Not connected to Braid proxy. Call connect() first.")
+        
+        return self.stream.iter_content(chunk_size=chunk_size, decode_unicode=decode_unicode, timeout=timeout)
 
-    Raises:
-        AssertionError: If the status code of the initial request is not OK.
-    """
-    # connect and check
-    session = requests.session()
-    r = session.get(braid_url)
-    assert r.status_code == requests.codes.ok
+    def parse_chunk(self, chunk: str):
+        """
+        Parses a chunk of data and returns the parsed JSON object.
+        """
+        lines = chunk.strip().split("\n")
+        if len(lines) != 2 or lines[0] != "event: braid" or not lines[1].startswith(self.DATA_PREFIX):
+            raise ValueError("Invalid chunk format")
+        
+        buf = lines[1][len(self.DATA_PREFIX):]
+        return json.loads(buf)
 
-    # start braid proxy
-    events_url = braid_url + "events"
-    r = session.get(
-        events_url,
-        stream=True,
-        headers={"Accept": "text/event-stream"},
-    )
+    def toggle_recording(self, start: bool):
+        """
+        Starts or stops the recording.
+        """
+        url = f"{self.braid_url}/callback"
+        payload = {
+            "DoRecordCsvTables": start
+        }
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        response = self.session.post(url, json=payload, headers=headers)
+        
+        if response.status_code == 200:
+            print(f"{'Started' if start else 'Stopped'} recording successfully")
+        else:
+            print(f"Failed to {'start' if start else 'stop'} recording. Status code: {response.status_code}")
 
-    return r
-
-
-def parse_chunk(chunk):
-    """
-    Parses a chunk of data and returns the parsed JSON object.
-
-    Args:
-        chunk (str): The chunk of data to be parsed.
-
-    Returns:
-        dict: The parsed JSON object.
-
-    Raises:
-        AssertionError: If the number of lines in the chunk is not equal to 2.
-        AssertionError: If the first line of the chunk is not equal to "event: braid".
-        AssertionError: If the second line of the chunk does not start with the DATA_PREFIX.
-
-    """
-    lines = chunk.strip().split("\n")
-    assert len(lines) == 2
-    assert lines[0] == "event: braid"
-    assert lines[1].startswith(DATA_PREFIX)
-    buf = lines[1][len(DATA_PREFIX) :]
-    data = json.loads(buf)
-    return data
-
-def toggle_recording(start: bool, braid_url: str = "http://127.0.0.1:32935/"):
-    url = f"{braid_url}/callback"
-    payload = {
-        "DoRecordCsvTables": start
-    }
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
-    response = requests.post(url, data=json.dumps(payload), headers=headers)
-    
-    if response.status_code == 200:
-        print(f"{'Started' if start else 'Stopped'} recording successfully")
-    else:
-        print(f"Failed to {'start' if start else 'stop'} recording. Status code: {response.status_code}")
+    def close(self):
+        """
+        Closes the connection to the Braid proxy.
+        """
+        if self.stream:
+            self.stream.close()
+        self.session.close()

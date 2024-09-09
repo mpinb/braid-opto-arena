@@ -9,7 +9,7 @@ import yaml
 import contextlib
 from requests.exceptions import ChunkedEncodingError, ConnectionError
 
-from src.braid_proxy import connect_to_braid_proxy, parse_chunk, toggle_recording
+from src.braid_proxy import BraidProxy
 from src.devices.opto_trigger import OptoTrigger
 from src.devices.power_supply import PowerSupply
 from src.csv_writer import CsvWriter
@@ -91,7 +91,8 @@ def main(args):
     )
 
     # Connect to braid
-    braid_proxy = connect_to_braid_proxy(braid_url=config["braid"]["url"])
+    braid_proxy = BraidProxy(braid_url=config["braid"]["url"])
+    braid_proxy.connect()
 
     # Start processes
     sub_processes = {}
@@ -140,15 +141,14 @@ def main(args):
 
         logger.info("All resources initialized. Starting Braid recording loop.")
         if time_limit_seconds is not None:
-            logger.info(f"Experiment time limit: {time_limit_hours} seconds")
+            logger.info(f"with time limit: {time_limit_hours} hours")
         
         time.sleep(1)
-        toggle_recording(True, "http://127.0.0.1:32935")
+        braid_proxy.toggle_recording(True)
 
         # Set the start time
         start_time = time.time()
 
-        # Main loop
         try:
             while True:
                 # Check if time limit has been reached
@@ -158,20 +158,20 @@ def main(args):
 
                 try:
                     # Use a timeout to ensure we can check the time limit regularly
-                    chunk = next(braid_proxy.iter_content(chunk_size=None, decode_unicode=True, timeout=1))
+                    chunk = next(braid_proxy.iter_events(timeout=1))
                 except StopIteration:
                     # No data available, continue to next iteration
                     continue
                 except (ChunkedEncodingError, ConnectionError) as e:
                     logger.error(f"Connection error: {e}. Attempting to reconnect...")
                     # Attempt to reconnect
-                    braid_proxy = connect_to_braid_proxy(braid_url=config["braid"]["url"])
+                    braid_proxy.connect()
                     continue
 
-                data = parse_chunk(chunk)
                 try:
+                    data = braid_proxy.parse_chunk(chunk)
                     msg_dict = data["msg"]
-                except KeyError:
+                except (ValueError, KeyError):
                     continue
 
                 if "Birth" in msg_dict:
@@ -187,8 +187,10 @@ def main(args):
             logger.info("Keyboard interrupt received. Shutting down gracefully...")
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
+        finally:
+            braid_proxy.toggle_recording(False)
+            braid_proxy.close()
 
-    toggle_recording(False, "http://127.0.0.1:32935")        
     logger.info("Main loop completed. All resources have been closed.")
 
 if __name__ == "__main__":
