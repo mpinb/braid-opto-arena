@@ -183,7 +183,7 @@ class TriggerHandler:
                 + (msg_dict["y"] - self.config["radius"]["center"][1]) ** 2
             )
 
-            rad_condition = (rad <= self.config["radius"]["distance"])
+            rad_condition = rad <= self.config["radius"]["distance"]
             z_condition = (
                 self.config["radius"]["z"][0]
                 <= msg_dict["z"]

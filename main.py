@@ -7,9 +7,8 @@ import os
 import re
 import yaml
 import contextlib
-from requests.exceptions import ChunkedEncodingError, ConnectionError
 
-from src.braid_proxy import BraidProxy
+from src.braid_proxy import connect_to_braid_proxy, parse_chunk, toggle_recording
 from src.devices.opto_trigger import OptoTrigger
 from src.devices.power_supply import PowerSupply
 from src.csv_writer import CsvWriter
@@ -81,9 +80,11 @@ def main(args):
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    # get experiment time limit
     time_limit_hours = config.get("experiment", {}).get("time_limit_hours", None)
-    time_limit_seconds = time_limit_hours * 3600 if time_limit_hours is not None else None
+    time_limit_seconds = time_limit_hours * 3600 if time_limit_hours else None
+
+    # start up braid
+    toggle_recording(start=True)
 
     # Wait for .braid folder to be created
     braid_folder = wait_for_braid_folder(
@@ -91,8 +92,7 @@ def main(args):
     )
 
     # Connect to braid
-    braid_proxy = BraidProxy(braid_url=config["braid"]["url"])
-    braid_proxy.connect()
+    braid_proxy = connect_to_braid_proxy(braid_url=config["braid"]["url"])
 
     # Start processes
     sub_processes = {}
@@ -139,31 +139,23 @@ def main(args):
             )
         )
 
-        logger.info("All resources initialized. Starting Braid recording loop.")
-        if time_limit_seconds is not None:
-            logger.info(f"with time limit: {time_limit_hours} hours")
-        
-        time.sleep(1)
-        braid_proxy.toggle_recording(True)
-
-        # Set the start time
+        logger.info("All resources initialized. Starting main loop.")
         start_time = time.time()
+
+        if time_limit_seconds is not None:
+            logger.info(f"Time limit set to {time_limit_hours} hours.")
+
         # Main loop
         try:
-            for chunk in braid_proxy.iter_events(timeout=1.0):
-
-                # Check if time limit has been reached
-                if time_limit_seconds is not None and (time.time() - start_time) > time_limit_seconds:
-                    logger.info(f"Time limit of {time_limit_hours} hours reached. Stopping recording.")
+            for chunk in braid_proxy.iter_content(chunk_size=None, decode_unicode=True):
+                if time_limit_seconds and time.time() - start_time > time_limit_seconds:
+                    logger.info("Time limit reached. Shutting down gracefully...")
                     break
-                
-                if chunk is None:
-                    continue
-                
+
+                data = parse_chunk(chunk)
                 try:
-                    data = braid_proxy.parse_chunk(chunk)
                     msg_dict = data["msg"]
-                except (ValueError, KeyError):
+                except KeyError:
                     continue
 
                 if "Birth" in msg_dict:
@@ -175,22 +167,15 @@ def main(args):
                 else:
                     logger.debug(f"Got unknown message: {msg_dict}")
 
-                # Check for time limit again to ensure we don't process events past the time limit
-                if time_limit_seconds is not None and (time.time() - start_time) > time_limit_seconds:
-                    logger.info(f"Time limit of {time_limit_hours} hours reached after processing event. Stopping recording.")
-                    break
-
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received. Shutting down gracefully...")
-        except (ChunkedEncodingError, ConnectionError) as e:
-            logger.error(f"Connection error: {e}. Shutting down...")
         except Exception as e:
             logger.error(f"An unexpected error occurred: {e}")
         finally:
-            braid_proxy.toggle_recording(False)
-            braid_proxy.close()
+            toggle_recording(start=False)
 
     logger.info("Main loop completed. All resources have been closed.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

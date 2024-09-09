@@ -3,6 +3,7 @@ import serial
 import logging
 import random
 from typing import Optional, Type
+import time
 
 logging.basicConfig(level=logging.INFO)
 
@@ -78,11 +79,14 @@ class OptoTrigger:
 
     def trigger(self) -> None:
         if self._sham():
-            logging.debug("Sham trial")
+            logging.info("Sham trial")
         else:
             if self.device:
+                logging.debug(
+                    f"Triggering Arduino: {self.duration} {self.intensity} {self.frequency}"
+                )
                 self.device.write(
-                    f"<{self.duration} {self.intensity} {self.frequency}>".encode(
+                    f"<{self.duration},{self.intensity},{self.frequency}>".encode(
                         "utf-8"
                     )
                 )

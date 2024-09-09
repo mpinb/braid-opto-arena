@@ -17,14 +17,14 @@ trigger:
     z: [0.15, 0.25]
   radius:
     center: [0, 0]  # x, y coordinates of arena center in mm
-    distance: 0.05  # distance from center in m
+    distance: 0.02  # distance from center in m
     z: [0.10, 0.25]
   min_trajectory_time: 1.0  # seconds
-  min_trigger_interval: 10.0  # seconds
+  min_trigger_interval: 5.0  # seconds
 
 # Optogenetic light parameters
 optogenetic_light:
-  enabled: false
+  enabled: true
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
@@ -37,7 +37,7 @@ hardware:
     baudrate: 9600
   backlight:
     port: "/dev/powersupply"
-    voltage: 24
+    voltage: 0
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
@@ -61,7 +61,7 @@ visual_stimuli:
       enabled: true
 
     - type: looming
-      enabled: true
+      enabled: false
       start_radius: 5 # pixels
       end_radius: 64 # pixels
       duration: 300 # milliseconds
