@@ -59,7 +59,7 @@ def parse_chunk(chunk):
     data = json.loads(buf)
     return data
 
-def toggle_recording(start: bool, braid_url: str):
+def toggle_recording(start: bool, braid_url: str = "http://127.0.0.1:32935/"):
     url = f"{braid_url}/callback"
     payload = {
         "DoRecordCsvTables": start
