@@ -1,7 +1,6 @@
 name: flydra-env
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - python=3.8
   - pip:
@@ -10,3 +9,4 @@ dependencies:
     - mayavi
     - PyQt5
     - configobj
+    - multicamselfcal

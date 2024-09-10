@@ -1,75 +1,78 @@
-# ./src/braid_proxy.py
-
 import requests
 import json
+import logging
+from typing import Iterator
 
 DATA_PREFIX = "data: "
 
+class BraidProxy:
+    def __init__(self, base_url: str, event_port: int, control_port: int):
+        self.event_url = f"{base_url}:{event_port}/events"
+        self.control_url = f"{base_url}:{control_port}/callback"
+        self.session = requests.Session()
+        self.logger = logging.getLogger(__name__)
 
-def connect_to_braid_proxy(braid_url: str):
-    """
-    Connects to a Braid proxy server and retrieves the events stream.
+    def connect_to_event_stream(self):
+        """
+        Connects to the Braid proxy server and retrieves the events stream.
+        """
+        try:
+            r = self.session.get(self.event_url, stream=True, headers={"Accept": "text/event-stream"})
+            r.raise_for_status()
+            return r
+        except requests.RequestException as e:
+            self.logger.error(f"Failed to connect to event stream: {e}")
+            raise
 
-    Args:
-        braid_url (str): The URL of the Braid proxy server.
+    def toggle_recording(self, start: bool):
+        """
+        Toggles the recording on or off.
+        """
+        payload = {"DoRecordCsvTables": start}
+        headers = {"Content-Type": "application/json"}
 
-    Returns:
-        requests.Response: The response object containing the events stream.
+        try:
+            response = self.session.post(self.control_url, data=json.dumps(payload), headers=headers)
+            response.raise_for_status()
+            self.logger.info(f"{'Started' if start else 'Stopped'} recording successfully")
+        except requests.RequestException as e:
+            self.logger.error(f"Failed to {'start' if start else 'stop'} recording: {e}")
+            raise
 
-    Raises:
-        AssertionError: If the status code of the initial request is not OK.
-    """
-    # connect and check
-    session = requests.session()
-    r = session.get(braid_url)
-    assert r.status_code == requests.codes.ok
+    def iter_events(self) -> Iterator[dict]:
+        """
+        Iterates over events from the Braid proxy.
 
-    # start braid proxy
-    events_url = braid_url + "events"
-    r = session.get(
-        events_url,
-        stream=True,
-        headers={"Accept": "text/event-stream"},
-    )
+        Yields:
+            dict: The parsed event data.
+        """
+        stream = self.connect_to_event_stream()
+        for chunk in stream.iter_content(chunk_size=None, decode_unicode=True):
+            if chunk:
+                try:
+                    yield self.parse_chunk(chunk)
+                except (AssertionError, json.JSONDecodeError) as e:
+                    self.logger.error(f"Failed to parse chunk: {e}")
 
-    return r
+    @staticmethod
+    def parse_chunk(chunk: str) -> dict:
+        """
+        Parses a chunk of data and returns the parsed JSON object.
 
+        Args:
+            chunk (str): The chunk of data to be parsed.
 
-def parse_chunk(chunk):
-    """
-    Parses a chunk of data and returns the parsed JSON object.
+        Returns:
+            dict: The parsed JSON object.
 
-    Args:
-        chunk (str): The chunk of data to be parsed.
-
-    Returns:
-        dict: The parsed JSON object.
-
-    Raises:
-        AssertionError: If the number of lines in the chunk is not equal to 2.
-        AssertionError: If the first line of the chunk is not equal to "event: braid".
-        AssertionError: If the second line of the chunk does not start with the DATA_PREFIX.
-
-    """
-    lines = chunk.strip().split("\n")
-    assert len(lines) == 2
-    assert lines[0] == "event: braid"
-    assert lines[1].startswith(DATA_PREFIX)
-    buf = lines[1][len(DATA_PREFIX) :]
-    data = json.loads(buf)
-    return data
-
-
-def toggle_recording(start: bool, braid_url: str = "http://127.0.0.1:32935/"):
-    url = f"{braid_url}/callback"
-    payload = {"DoRecordCsvTables": start}
-    headers = {"Content-Type": "application/json"}
-
-    response = requests.post(url, data=json.dumps(payload), headers=headers)
-
-    if response.status_code == 200:
-        print(f"{'Started' if start else 'Stopped'} recording successfully")
-    else:
-        print(
-            f"Failed to {'start' if start else 'stop'} recording. Status code: {response.status_code}"
-        )
+        Raises:
+            AssertionError: If the chunk format is invalid.
+            json.JSONDecodeError: If JSON decoding fails.
+        """
+        lines = chunk.strip().split("\n")
+        assert len(lines) == 2, "Invalid chunk format"
+        assert lines[0] == "event: braid", "Invalid event type"
+        assert lines[1].startswith(DATA_PREFIX), "Invalid data prefix"
+        
+        buf = lines[1][len(DATA_PREFIX):]
+        return json.loads(buf)

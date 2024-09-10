@@ -1,6 +1,8 @@
 # Braid tracking system configuration
 braid:
-  url: "http://10.40.80.6:8397/"
+  url: "http://127.0.0.1"
+  event_port: 8397
+  control_port: 32935
   
 # Experiment setup
 experiment:
@@ -37,7 +39,7 @@ hardware:
     baudrate: 9600
   backlight:
     port: "/dev/powersupply"
-    voltage: 0
+    voltage: 24
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
