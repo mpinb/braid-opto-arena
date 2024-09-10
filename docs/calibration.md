@@ -1,24 +1,34 @@
 # Multi-Camera Calibration Guide
 
-## Table of Contents
-1. [Introduction](#introduction)
-2. [Prerequisites](#prerequisites)
-3. [Intrinsic Calibration](#intrinsic-calibration)
-    3.1 [Preparation](#preparation)
-    3.2 [Software Setup](#software-setup)
-    3.3 [Calibration Process](#calibration-process)
-    3.4 [Data Management](#data-management)
-4. [Extrinsic Calibration](#extrinsic-calibration)
-5. [Troubleshooting](#troubleshooting)
-6. [Validation](#validation)
-7. [Glossary](#glossary)
-8. [References](#references)
+- [Multi-Camera Calibration Guide](#multi-camera-calibration-guide)
+  - [1. Introduction](#1-introduction)
+  - [2. Prerequisites](#2-prerequisites)
+    - [Software](#software)
+    - [Hardware](#hardware)
+    - [Setup](#setup)
+  - [3. Intrinsic Calibration](#3-intrinsic-calibration)
+    - [3.1 Preparation](#31-preparation)
+    - [3.2 Software Setup](#32-software-setup)
+    - [3.3 Calibration Process](#33-calibration-process)
+    - [3.4 Data Management](#34-data-management)
+  - [4. Extrinsic Calibration](#4-extrinsic-calibration)
+    - [4.1 Preparation](#41-preparation)
+    - [4.2 Data Collection](#42-data-collection)
+    - [4.3 Software Setup](#43-software-setup)
+    - [4.4 Data Processing](#44-data-processing)
+    - [4.5 Arena Alignment](#45-arena-alignment)
+    - [4.6 Final Configuration](#46-final-configuration)
+  - [5. Troubleshooting](#5-troubleshooting)
+  - [6. Validation](#6-validation)
+  - [7. Glossary](#7-glossary)
+  - [8. References](#8-references)
 
 ## 1. Introduction
 
 Camera calibration is a crucial step in setting up a multi-camera system, especially after any physical changes to the setup (e.g., moving or rotating cameras). This guide will walk you through the process of performing a full calibration procedure using the `braid` system and additional tools.
 
 The calibration process consists of two main parts:
+
 1. Intrinsic calibration: Determines each camera's internal parameters.
 2. Extrinsic calibration: Establishes the spatial relationships between cameras.
 
@@ -27,11 +37,13 @@ The calibration process consists of two main parts:
 Before beginning the calibration process, ensure you have the following:
 
 ### Software
+
 - [Basler Pylon](https://www2.baslerweb.com/de/downloads/downloads-software/software-pylon-6-3-0-linux-x86-64bit-debian/) (version 6.3.0)
 - [ROS Noetic](https://wiki.ros.org/noetic/Installation/Ubuntu)
 - [pylon-ROS-camera package](https://github.com/basler/pylon-ros-camera/tree/master)
 
 ### Hardware
+
 - Multi-camera setup
 - Calibration board (8x6 checkerboard pattern, 25mm square size)
 - Large white plexiglass diffuser
@@ -39,6 +51,7 @@ Before beginning the calibration process, ensure you have the following:
 - Backlighting power supply
 
 ### Setup
+
 - Ensure all cameras are connected and recognized by the system
 - Verify that the calibration board is in good condition and matches the specified dimensions
 
@@ -55,9 +68,11 @@ Before beginning the calibration process, ensure you have the following:
 ### 3.2 Software Setup
 
 1. Open two terminals and in each run:
-   ```
+
+   ```sh
    source ~/catkin_ws/devel/setup.bash
    ```
+
    This allows you to run (a) a Basler ROS camera node and (b) the camera calibrator using the Pylon camera driver.
 
 2. Open the following in separate file explorers:
@@ -74,13 +89,17 @@ Repeat the following steps for each camera:
 1. Open `/home/buchsbaum/catkin_ws/src/pylon-ros-camera/pylon_camera/config/default.yaml`.
 2. Change the `device_user_id` to match one of the cameras listed in Pylon Viewer. Save the file.
 3. In one terminal, run:
-   ```
+
+   ```sh
    roslaunch pylon_camera pylon_camera_node.launch
    ```
+
 4. In the other terminal, run:
-   ```
+
+   ```sh
    rosrun camera_calibration cameracalibrator.py --size 8x6 --square 0.025 image:=/pylon_camera_node/image_raw camera:=/pylon_camera_node
    ```
+
    > Note: Adjust `--size` and `--square` parameters if using a different calibration board.
 
 5. Move the calibration board in front of the camera:
@@ -102,9 +121,11 @@ After calibrating all cameras:
 
 1. Navigate to `/home/buchsbaum/ros_camera_calibration/` in the terminal.
 2. Run the processing script:
-   ```
+
+   ```sh
    python ./process_files.py
    ```
+
    This processes and copies all files to the correct position for Braid to use them.
 
 ## 4. Extrinsic Calibration
@@ -120,12 +141,14 @@ Extrinsic calibration determines the spatial relationships between cameras in yo
 ### 4.2 Data Collection
 
 1. Navigate to the Braid configuration directory:
-   ```
+
+   ```sh
    cd ~/braid-configs/
    ```
 
 2. Run Braid with the laser calibration configuration:
-   ```
+
+   ```sh
    braid-run ./1_laser_calibration.toml
    ```
 
@@ -135,7 +158,8 @@ Extrinsic calibration determines the spatial relationships between cameras in yo
    - Continue until you believe you've captured sufficient data.
 
 4. Stop the recording. The data will be saved as a `.braidz` file in:
-   ```
+
+   ```sh
    /home/buchsbaum/mnt/DATA/Experiment/Calibration
    ```
 
@@ -144,20 +168,23 @@ Extrinsic calibration determines the spatial relationships between cameras in yo
 Ensure you have the following software installed:
 
 1. Octave (if not already installed):
-   ```
+
+   ```sh
    sudo apt-add-repository ppa:octave/stable
    sudo apt-get update
    sudo apt-get install octave
    ```
 
 2. Flydra environment:
-   ```
+
+   ```sh
    mamba env create -f flydra_env.yaml
    mamba activate flydra
    ```
 
 3. Clone necessary repositories:
-   ```
+
+   ```sh
    cd ~/src/
    git clone https://github.com/strawlab/flydra.git
    git clone https://github.com/strawlab/MultiCamSelfCal
@@ -167,22 +194,25 @@ Ensure you have the following software installed:
 ### 4.4 Data Processing
 
 1. Navigate to the Calibration folder:
-   ```
+
+   ```sh
    cd /home/buchsbaum/mnt/DATA/Experiment/Calibration
    ```
 
 2. Convert the `.braidz` file to `.h5` format:
-   ```
+
+   ```sh
    BRAIDZ_FILE=your_file_name.braidz
    DATAFILE="$BRAIDZ_FILE.h5"
    python ~/src/strand-braid/strand-braid-user/scripts/convert_braidz_to_flydra_h5.py --no-delete $BRAIDZ_FILE
    ```
 
 3. Run MultiCamSelfCal on the data:
-   ```
+
+   ```sh
    flydra_analysis_generate_recalibration --2d-data $DATAFILE --disable-kalman-objs $DATAFILE --undistort-intrinsics-yaml=$HOME/.config/strand-cam/camera_info  --run-mcsc --use-nth-observation=4
    ```
-   
+
    Note: Increase `--use-nth-observation` value to downsample data if needed.
 
 4. Check the output for reprojection errors:
@@ -190,7 +220,8 @@ Ensure you have the following software installed:
    - If errors are high (>1.0), re-record the tracking data and try again.
 
 5. Convert the calibration to Braid-compatible format:
-   ```
+
+   ```sh
    flydra_analysis_calibration_to_xml ${DATAFILE}.recal/result > new_calibration.xml
    ```
 
@@ -202,8 +233,9 @@ Ensure you have the following software installed:
    - Change `cal_fname` to the full path of your new calibration file.
 
 3. Run Braid with the updated configuration:
-   ```
-   braid-run ./braid-configs/2_laser_align.toml
+
+   ```sh
+   braid-run ~/braid-configs/2_laser_align.toml
    ```
 
 4. Record laser pointer movement:
@@ -213,7 +245,8 @@ Ensure you have the following software installed:
 5. Stop the recording and convert the new `.braidz` file to `.h5` format as before.
 
 6. Run the calibration alignment GUI:
-   ```
+
+   ```sh
    flydra_analysis_calibration_align_gui --stim-xml ~/src/flydra/flydra_analysis/flydra_analysis/a2/sample_bowl.xml your_new_file.braidz.h5
    ```
 
