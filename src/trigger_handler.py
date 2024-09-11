@@ -44,6 +44,7 @@ class TriggerHandler:
         self.csv_writer = csv_writer
         self.trigger_publisher = trigger_publisher
 
+        self.trigger_counter = 0
         self.trigger_time = 0.0
         self.obj_birth_times = {}
         self.obj_heading = {}
@@ -250,4 +251,5 @@ class TriggerHandler:
         if self.csv_writer is not None:
             self.csv_writer.write_row(msg_dict)
 
-        logging.info(f"Triggered action for object {msg_dict['obj_id']}")
+        logging.info(f"Triggered action #{self.trigger_counter} for object {msg_dict['obj_id']}")
+        self.trigger_counter += 1

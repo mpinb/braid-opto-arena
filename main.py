@@ -36,18 +36,6 @@ def wait_for_braid_folder(base_folder):
                 return full_path
         time.sleep(1)
 
-def time_limit_check(time_limit_seconds, stop_event):
-    """
-    Function to run in a separate thread to check for time limit.
-    """
-    start_time = time.time()
-    while not stop_event.is_set():
-        if time.time() - start_time > time_limit_seconds:
-            logger.info("Time limit reached. Signaling to stop.")
-            stop_event.set()
-            break
-        time.sleep(60)  # Check every second
-
 def main(args):
     # Load config
     with open(args.config, "r") as f:
