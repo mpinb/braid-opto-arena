@@ -2,8 +2,7 @@
 import serial
 import logging
 import random
-from typing import Optional, Type
-import time
+from typing import Optional
 
 logging.basicConfig(level=logging.INFO)
 

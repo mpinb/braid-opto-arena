@@ -5,7 +5,6 @@ import os
 import re
 import yaml
 import contextlib
-import threading
 
 from src.braid_proxy import BraidProxy
 from src.devices.opto_trigger import OptoTrigger

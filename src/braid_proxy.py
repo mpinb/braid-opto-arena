@@ -1,7 +1,6 @@
 import requests
 import json
 import logging
-import select
 from typing import Iterator
 
 DATA_PREFIX = "data: "
@@ -73,8 +72,8 @@ class BraidProxy:
             if chunk:
                 try:
                     yield self.parse_chunk(chunk)
-                except:
-                    self.logger.error(f"Failed to parse chunk: {chunk}")
+                except (AssertionError, json.JSONDecodeError) as e:
+                    self.logger.error(f"Failed to parse chunk: {e}")
 
         # if not self.raw_sock:
         #     self.logger.error("No socket connection available")
