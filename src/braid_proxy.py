@@ -1,6 +1,7 @@
 import requests
 import json
 import logging
+import select
 from typing import Iterator
 
 DATA_PREFIX = "data: "
@@ -47,12 +48,27 @@ class BraidProxy:
             dict: The parsed event data.
         """
         stream = self.connect_to_event_stream()
-        for chunk in stream.iter_content(chunk_size=None, decode_unicode=True):
-            if chunk:
-                try:
-                    yield self.parse_chunk(chunk)
-                except (AssertionError, json.JSONDecodeError) as e:
-                    self.logger.error(f"Failed to parse chunk: {e}")
+        # Retrieve the raw socket from the response object
+        raw_sock = stream.raw._fp.fp.raw
+
+        while True:
+            # Use select to wait until the socket is ready for reading
+            rlist, _, _ = select.select([raw_sock], [], [], 10)  # Timeout of 10 seconds
+
+            if rlist:
+                # Read data using iter_content in chunks
+                for chunk in stream.iter_content(chunk_size=None, decode_unicode=True):
+                    if chunk:
+                        try:
+                            yield self.parse_chunk(chunk)
+                        except (AssertionError, json.JSONDecodeError) as e:
+                            self.logger.error(f"Failed to parse chunk: {e}")
+                    else:
+                        # If no data is returned, yield None to indicate timeout or no data
+                        yield None
+            else:
+                # If select times out, yield None
+                yield None
 
     @staticmethod
     def parse_chunk(chunk: str) -> dict:

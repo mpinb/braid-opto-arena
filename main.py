@@ -101,19 +101,27 @@ def main(args):
         start_time = time.time()
         try:
             for event in braid_proxy.iter_events():
-                if (time_limit_hours is not None) and (time.time() - start_time > time_limit_seconds):
+
+                # Check for time limit
+                if (time_limit_seconds is not None) and (time.time() - start_time > time_limit_seconds):
                     logger.info("Time limit reached. Shutting down gracefully...")
                     break
 
-                msg_dict = event.get("msg", {})
-                if "Birth" in msg_dict:
-                    trigger_handler.handle_birth(msg_dict["Birth"]["obj_id"])
-                elif "Update" in msg_dict:
-                    trigger_handler.handle_update(msg_dict["Update"])
-                elif "Death" in msg_dict:
-                    trigger_handler.handle_death(msg_dict["Death"])
+                # continue the loop if event is None
+                if event is None:
+                    continue
+                
+                # handle event otherwise
                 else:
-                    logger.debug(f"Got unknown message: {msg_dict}")
+                    msg_dict = event.get("msg", {})
+                    if "Birth" in msg_dict:
+                        trigger_handler.handle_birth(msg_dict["Birth"]["obj_id"])
+                    elif "Update" in msg_dict:
+                        trigger_handler.handle_update(msg_dict["Update"])
+                    elif "Death" in msg_dict:
+                        trigger_handler.handle_death(msg_dict["Death"])
+                    else:
+                        logger.debug(f"Got unknown message: {msg_dict}")
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received. Shutting down gracefully...")
