@@ -9,7 +9,9 @@ from .devices.opto_trigger import OptoTrigger
 from .fly_heading_tracker import FlyHeadingTracker
 from .messages import Publisher
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(name="Trigger Handler")
 
 
@@ -251,5 +253,7 @@ class TriggerHandler:
         if self.csv_writer is not None:
             self.csv_writer.write_row(msg_dict)
 
-        logging.info(f"Triggered action #{self.trigger_counter} for object {msg_dict['obj_id']}")
+        logging.info(
+            f"Triggered action #{self.trigger_counter} for object {msg_dict['obj_id']}"
+        )
         self.trigger_counter += 1

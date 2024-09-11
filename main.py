@@ -19,8 +19,11 @@ from src.process_manager import (
     start_ximea_camera_process,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(name="Main")
+
 
 def wait_for_braid_folder(base_folder):
     """
@@ -36,31 +39,40 @@ def wait_for_braid_folder(base_folder):
                 return full_path
         time.sleep(1)
 
+
 def main(args):
     # Load config
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    time_limit_hours = config.get("experiment", {}).get("time_limit", None)  # Default to None hours if not specified
-    time_limit_seconds = time_limit_hours * 3600 if time_limit_hours is not None else None
+    time_limit_hours = config.get("experiment", {}).get(
+        "time_limit", None
+    )  # Default to None hours if not specified
+    time_limit_seconds = (
+        time_limit_hours * 3600 if time_limit_hours is not None else None
+    )
 
     # Initialize BraidProxy
     braid_proxy = BraidProxy(
         base_url=config["braid"]["url"],
         event_port=config["braid"]["event_port"],
-        control_port=config["braid"]["control_port"]
+        control_port=config["braid"]["control_port"],
     )
 
     # Start recording
     braid_proxy.toggle_recording(start=True)
 
     # Wait for .braid folder to be created
-    braid_folder = wait_for_braid_folder(base_folder=config["experiment"]["exp_base_path"])
+    braid_folder = wait_for_braid_folder(
+        base_folder=config["experiment"]["exp_base_path"]
+    )
 
     # Start processes
     sub_processes = {}
     if config["visual_stimuli"]["enabled"]:
-        sub_processes["visual_stimuli"] = start_visual_stimuli_process(args.config, braid_folder)
+        sub_processes["visual_stimuli"] = start_visual_stimuli_process(
+            args.config, braid_folder
+        )
     if config["high_speed_camera"]["enabled"]:
         sub_processes["ximea_camera"] = start_ximea_camera_process(
             config["experiment"]["video_base_path"], braid_folder
@@ -74,12 +86,16 @@ def main(args):
     # Set up resources
     with contextlib.ExitStack() as stack:
         # Set up PowerSupply
-        power_supply = stack.enter_context(PowerSupply(config["hardware"]["backlight"]["port"]))
+        power_supply = stack.enter_context(
+            PowerSupply(config["hardware"]["backlight"]["port"])
+        )
         power_supply.set_voltage(config["hardware"]["backlight"]["voltage"])
 
         # Set up OptoTrigger and csv if enabled
         if config["optogenetic_light"]["enabled"]:
-            csv_writer = stack.enter_context(CsvWriter(filename=os.path.join(braid_folder, "opto.csv")))
+            csv_writer = stack.enter_context(
+                CsvWriter(filename=os.path.join(braid_folder, "opto.csv"))
+            )
             opto_trigger = stack.enter_context(OptoTrigger(config))
         else:
             csv_writer = None
@@ -90,7 +106,9 @@ def main(args):
 
         # Set up TriggerHandler
         trigger_handler = stack.enter_context(
-            TriggerHandler(config["trigger"], opto_trigger, csv_writer, trigger_publisher)
+            TriggerHandler(
+                config["trigger"], opto_trigger, csv_writer, trigger_publisher
+            )
         )
 
         logger.info("All resources initialized. Starting main loop.")
@@ -101,16 +119,17 @@ def main(args):
         start_time = time.time()
         try:
             for event in braid_proxy.iter_events():
-
                 # Check for time limit
-                if (time_limit_seconds is not None) and (time.time() - start_time > time_limit_seconds):
+                if (time_limit_seconds is not None) and (
+                    time.time() - start_time > time_limit_seconds
+                ):
                     logger.info("Time limit reached. Shutting down gracefully...")
                     break
 
                 # continue the loop if event is None
                 if event is None:
                     continue
-                
+
                 # handle event otherwise
                 else:
                     msg_dict = event.get("msg", {})
@@ -132,10 +151,15 @@ def main(args):
 
     logger.info("Main loop completed. All resources have been closed.")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config.yaml", help="Path to the configuration file")
-    parser.add_argument("--debug", action="store_true", help="Run without active Braid tracking")
+    parser.add_argument(
+        "--config", default="config.yaml", help="Path to the configuration file"
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Run without active Braid tracking"
+    )
     args = parser.parse_args()
 
     main(args)
