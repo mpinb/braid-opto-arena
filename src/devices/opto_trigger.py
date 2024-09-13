@@ -76,9 +76,10 @@ class OptoTrigger:
         except Exception as e:
             logging.error(f"Could not connect to arduino: {e}")
 
-    def trigger(self) -> None:
+    def trigger(self) -> bool:
         if self._sham():
             logging.info("Sham trial")
+            return True
         else:
             if self.device:
                 logging.debug(
@@ -89,6 +90,7 @@ class OptoTrigger:
                         "utf-8"
                     )
                 )
+                return False
             else:
                 logging.error("Cannot trigger: device is not connected")
 

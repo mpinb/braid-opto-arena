@@ -232,13 +232,15 @@ class TriggerHandler:
             None
         """
         obj_id = msg_dict["obj_id"]
-
+        msg_dict["timestamp"] = time.time()
+        
         # save the trigger time
         self.trigger_time = time.time()
 
         # trigger opto if activated
         if self.opto_trigger is not None:
-            self.opto_trigger.trigger()
+            sham = self.opto_trigger.trigger()
+            msg_dict["sham"] = sham
 
         # add the heading to the data
         if obj_id in self.obj_heading:
