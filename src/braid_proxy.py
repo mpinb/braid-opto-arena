@@ -34,7 +34,7 @@ class BraidProxy:
                     self.event_url, stream=True, headers={"Accept": "text/event-stream"}
                 )
                 self.stream.raise_for_status()
-                #self.raw_sock = self.stream.raw._fp.fp.raw
+                # self.raw_sock = self.stream.raw._fp.fp.raw
             except requests.RequestException as e:
                 self.logger.error(f"Failed to connect to event stream: {e}")
                 raise
@@ -74,32 +74,6 @@ class BraidProxy:
                     yield self.parse_chunk(chunk)
                 except (AssertionError, json.JSONDecodeError) as e:
                     self.logger.error(f"Failed to parse chunk: {e}")
-
-        # if not self.raw_sock:
-        #     self.logger.error("No socket connection available")
-        #     yield None
-        #     return
-
-        # while True:
-        #     # Use select to wait until the socket is ready for reading
-        #     rlist, _, _ = select.select([self.raw_sock], [], [], timeout)
-
-        #     if rlist:
-        #         # Read data using iter_content in chunks
-        #         for chunk in self.stream.iter_content(
-        #             chunk_size=None, decode_unicode=True
-        #         ):
-        #             if chunk:
-        #                 try:
-        #                     yield self.parse_chunk(chunk)
-        #                 except (AssertionError, json.JSONDecodeError) as e:
-        #                     self.logger.error(f"Failed to parse chunk: {e}")
-        #             else:
-        #                 # Yield None if no data is available
-        #                 yield None
-        #     else:
-        #         # Yield None after timeout
-        #         yield None
 
     @staticmethod
     def parse_chunk(chunk: str) -> dict:
