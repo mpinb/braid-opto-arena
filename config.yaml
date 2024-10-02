@@ -24,13 +24,14 @@ trigger:
   min_trajectory_time: 1.0  # seconds
   min_trigger_interval: 5.0  # seconds
 
+
 # Optogenetic light parameters
 optogenetic_light:
-  enabled: true
+  enabled: false
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
-  sham_trial_percentage: 20  # %
+  sham_trial_percentage: 50  
 
 # Hardware settings
 hardware:
@@ -46,7 +47,7 @@ hardware:
 
 # High-speed camera settings
 high_speed_camera:
-  enabled: false
+  enabled: true
   type: "ximea"
   pre_trigger_record_time: 0.5  # seconds
   post_trigger_record_time: 1.5  # seconds
@@ -63,7 +64,7 @@ visual_stimuli:
       enabled: true
 
     - type: looming
-      enabled: false
+      enabled: true
       start_radius: 5 # pixels
       end_radius: 64 # pixels
       duration: 300 # milliseconds

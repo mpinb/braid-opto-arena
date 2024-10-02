@@ -82,23 +82,55 @@ def start_ximea_camera_process(videos_base_folder: str, braid_folder: str):
     return start_process(command)
 
 
-def start_liquid_lens_process(braid_url: str, lens_driver_port: str, braid_folder: str):
+# def start_liquid_lens_process(braid_url: str, lens_driver_port: str, braid_folder: str):
+#     """
+#     Start a new process to run the LiquidLens controller with the specified parameters.
+
+#     Args:
+#         braid_url (str): The URL of the Braid server.
+#         lens_driver_port (str): The port to connect to the lens driver.
+#         braid_folder (str): The folder containing the Braid data.
+
+#     Returns:
+#         subprocess.Popen: The Popen object representing the started process.
+
+#     Example:
+#         >>> start_liquid_lens_process('http://example.com', '1234', '/path/to/braid')
+#         <subprocess.Popen object at 0x7f955c005b10>
+#     """
+#     command = shlex.split(
+#         f"libs/lens_controller/target/release/lens_controller --braid-url {braid_url}:8397 --lens-driver-port {lens_driver_port} --max-update-interval-ms 20 --save-folder {braid_folder}"
+#     )
+#     return start_process(command)
+
+
+def start_liquid_lens_process(braid_url: str, lens_port: str, config_file: str, map_file: str, debug: bool = False):
     """
-    Start a new process to run the LiquidLens controller with the specified parameters.
+    Start a new process to run the tracking script with the specified parameters.
 
     Args:
-        braid_url (str): The URL of the Braid server.
-        lens_driver_port (str): The port to connect to the lens driver.
-        braid_folder (str): The folder containing the Braid data.
+        flydra2_url (str): The URL of the flydra2 server.
+        lens_port (str): The port to connect to the lens driver.
+        zone_file (str): Path to the YAML file defining the tracking zone.
+        map_file (str): Path to the CSV file mapping Z values to diopter values.
+        debug (bool): Enable debug logging if True.
 
     Returns:
         subprocess.Popen: The Popen object representing the started process.
 
     Example:
-        >>> start_liquid_lens_process('http://example.com', '1234', '/path/to/braid')
+        >>> start_tracking_process('http://example.com:8397', '/dev/ttyUSB0', 'zone.yaml', 'map.csv', True)
         <subprocess.Popen object at 0x7f955c005b10>
     """
-    command = shlex.split(
-        f"libs/lens_controller/target/release/lens_controller --braid-url {braid_url} --lens-driver-port {lens_driver_port} --update-interval-ms 20 --save-folder {braid_folder}"
-    )
-    return start_process(command)
+    command = [
+        "python", "src/lens_controller.py",
+        braid_url,
+        lens_port,
+        "--zone-file", config_file,
+        "--map-file", map_file
+    ]
+    
+    if debug:
+        command.append("--debug")
+    
+    return subprocess.Popen(command)
