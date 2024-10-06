@@ -6,7 +6,7 @@ braid:
   
 # Experiment setup
 experiment:
-  time_limit: 24 # hours
+  time_limit: 36 # hours
   exp_base_path: "/home/buchsbaum/mnt/DATA/Experiments"
   video_base_path: "/home/buchsbaum/mnt/DATA/Videos"
 
@@ -16,11 +16,11 @@ trigger:
   box:
     x: [-0.058, 0.033]  # [min, max] in m
     y: [-0.024, 0.066]
-    z: [0.15, 0.25]
+    z: [0.10, 0.25]
   radius:
     center: [0, 0]  # x, y coordinates of arena center in mm
     distance: 0.025  # distance from center in m
-    z: [0.10, 0.25]
+    z: [0.05, 0.25]
   min_trajectory_time: 1.0  # seconds
   min_trigger_interval: 5.0  # seconds
 

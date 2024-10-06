@@ -104,7 +104,13 @@ def start_ximea_camera_process(videos_base_folder: str, braid_folder: str):
 #     return start_process(command)
 
 
-def start_liquid_lens_process(braid_url: str, lens_port: str, config_file: str, map_file: str, debug: bool = False):
+def start_liquid_lens_process(
+    braid_url: str,
+    lens_port: str,
+    config_file: str = None,
+    map_file: str = None,
+    debug: bool = False,
+):
     """
     Start a new process to run the tracking script with the specified parameters.
 
@@ -123,14 +129,23 @@ def start_liquid_lens_process(braid_url: str, lens_port: str, config_file: str, 
         <subprocess.Popen object at 0x7f955c005b10>
     """
     command = [
-        "python", "src/lens_controller.py",
+        "python",
+        "src/lens_controller.py",
+        "--braid_url",
         braid_url,
+        "--lens_port",
         lens_port,
-        "--zone-file", config_file,
-        "--map-file", map_file
     ]
-    
+
+    if config_file:
+        command.append("--zone_file")
+        command.append(config_file)
+
+    if map_file:
+        command.append("--map_file")
+        command.append(map_file)
+
     if debug:
         command.append("--debug")
-    
+
     return subprocess.Popen(command)

@@ -77,9 +77,8 @@ def main(args):
             config["experiment"]["video_base_path"], braid_folder
         )
         sub_processes["liquid_lens"] = start_liquid_lens_process(
-            config["braid"]["url"],
+            f"{config['braid']['url']}:{config['braid']['event_port']}/",
             config["hardware"]["lensdriver"]["port"],
-            braid_folder,
         )
 
     # Set up resources
