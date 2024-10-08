@@ -12,11 +12,11 @@ experiment:
 
 # Trigger parameters
 trigger:
-  zone_type: "radius"  # can be "box" or "radius"
+  zone_type: "box"  # can be "box" or "radius"
   box:
-    x: [-0.058, 0.033]  # [min, max] in m
-    y: [-0.024, 0.066]
-    z: [0.10, 0.25]
+    x: [-0.038, 0.044]  # [min, max] in m
+    y: [-0.086, 0.035]
+    z: [0.05, 0.25]
   radius:
     center: [0, 0]  # x, y coordinates of arena center in mm
     distance: 0.025  # distance from center in m
@@ -79,7 +79,8 @@ visual_stimuli:
 
 # ZeroMQ communication settings
 zmq:
-  port: 5556
+  trigger_pub_port: 5556
+  braid_pub_port: 6667
 
 # Logging configuration
 logging:

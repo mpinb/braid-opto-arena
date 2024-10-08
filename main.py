@@ -5,12 +5,14 @@ import os
 import re
 import yaml
 import contextlib
+import json
+import threading
 
 from src.braid_proxy import BraidProxy
 from src.devices.opto_trigger import OptoTrigger
 from src.devices.power_supply import PowerSupply
 from src.csv_writer import CsvWriter
-from src.messages import Publisher
+from src.messages import Publisher, Subscriber
 from src.trigger_handler import TriggerHandler
 from src.process_manager import (
     start_liquid_lens_process,
@@ -44,9 +46,7 @@ def main(args):
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
-    time_limit_hours = config.get("experiment", {}).get(
-        "time_limit", None
-    )  # Default to None hours if not specified
+    time_limit_hours = config.get("experiment", {}).get("time_limit", None)
     time_limit_seconds = (
         time_limit_hours * 3600 if time_limit_hours is not None else None
     )
@@ -56,6 +56,7 @@ def main(args):
         base_url=config["braid"]["url"],
         event_port=config["braid"]["event_port"],
         control_port=config["braid"]["control_port"],
+        zmq_pub_port=config["zmq"]["braid_pub_port"],
     )
 
     # Start recording
@@ -81,6 +82,10 @@ def main(args):
             config["hardware"]["lensdriver"]["port"],
         )
 
+    # Set up ZMQ subscriber
+    subscriber = Subscriber("localhost", config["zmq"]["braid_pub_port"], "braid_event")
+    subscriber.initialize()
+
     # Set up resources
     with contextlib.ExitStack() as stack:
         # Set up PowerSupply
@@ -100,7 +105,9 @@ def main(args):
             opto_trigger = None
 
         # Set up Publisher
-        trigger_publisher = stack.enter_context(Publisher(config["zmq"]["port"]))
+        trigger_publisher = stack.enter_context(
+            Publisher(config["zmq"]["trigger_pub_port"])
+        )
 
         # Set up TriggerHandler
         trigger_handler = stack.enter_context(
@@ -113,10 +120,14 @@ def main(args):
         if time_limit_hours is not None:
             logger.info(f"Time limit set to {time_limit_hours} hours.")
 
+        # Start the BraidProxy event processing in a separate thread
+        braid_thread = threading.Thread(target=braid_proxy.process_events, daemon=True)
+        braid_thread.start()
+
         # Main loop
         start_time = time.time()
         try:
-            for event in braid_proxy.iter_events():
+            while True:
                 # Check for time limit
                 if (time_limit_seconds is not None) and (
                     time.time() - start_time > time_limit_seconds
@@ -124,21 +135,31 @@ def main(args):
                     logger.info("Time limit reached. Shutting down gracefully...")
                     break
 
-                # continue the loop if event is None
-                if event is None:
+                # Receive message from ZMQ subscriber
+                message = subscriber.receive(timeout=1.0, blocking=False)
+                if message is None:
                     continue
 
-                # handle event otherwise
+                # Parse the message
+                _, content = message
+                event = json.loads(content)
+
+                # Log the delay
+                receive_time = time.time()
+                logger.debug(
+                    f"Message delay: {receive_time - event['received_time']:.6f} seconds"
+                )
+
+                # Handle the event
+                msg_dict = event.get("msg", {})
+                if "Birth" in msg_dict:
+                    trigger_handler.handle_birth(msg_dict["Birth"]["obj_id"])
+                elif "Update" in msg_dict:
+                    trigger_handler.handle_update(msg_dict["Update"])
+                elif "Death" in msg_dict:
+                    trigger_handler.handle_death(msg_dict["Death"])
                 else:
-                    msg_dict = event.get("msg", {})
-                    if "Birth" in msg_dict:
-                        trigger_handler.handle_birth(msg_dict["Birth"]["obj_id"])
-                    elif "Update" in msg_dict:
-                        trigger_handler.handle_update(msg_dict["Update"])
-                    elif "Death" in msg_dict:
-                        trigger_handler.handle_death(msg_dict["Death"])
-                    else:
-                        logger.debug(f"Got unknown message: {msg_dict}")
+                    logger.debug(f"Got unknown message: {msg_dict}")
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received. Shutting down gracefully...")
@@ -146,6 +167,8 @@ def main(args):
             logger.error(f"An unexpected error occurred: {e}")
         finally:
             braid_proxy.toggle_recording(start=False)
+            braid_proxy.close()
+            subscriber.close()
 
     logger.info("Main loop completed. All resources have been closed.")
 

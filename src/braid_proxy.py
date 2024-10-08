@@ -1,10 +1,11 @@
 import requests
 import json
 import logging
+import time
 from typing import Iterator
+from src.messages import Publisher
 
 DATA_PREFIX = "data: "
-
 
 class BraidProxy:
     def __init__(
@@ -12,6 +13,7 @@ class BraidProxy:
         base_url: str,
         event_port: int,
         control_port: int,
+        zmq_pub_port: int,
         auto_connect: bool = True,
     ):
         self.event_url = f"{base_url}:{event_port}/events"
@@ -19,7 +21,10 @@ class BraidProxy:
         self.session = requests.Session()
         self.logger = logging.getLogger(__name__)
 
-        self.raw_sock = None
+        # Set up ZeroMQ publisher
+        self.publisher = Publisher(zmq_pub_port)
+        self.publisher.initialize()
+
         self.stream = None
         if auto_connect:
             self.connect_to_event_stream()
@@ -34,7 +39,6 @@ class BraidProxy:
                     self.event_url, stream=True, headers={"Accept": "text/event-stream"}
                 )
                 self.stream.raise_for_status()
-                # self.raw_sock = self.stream.raw._fp.fp.raw
             except requests.RequestException as e:
                 self.logger.error(f"Failed to connect to event stream: {e}")
                 raise
@@ -60,18 +64,22 @@ class BraidProxy:
             )
             raise
 
-    def iter_events(self, timeout=60) -> Iterator[dict]:
+    def process_events(self):
         """
-        Iterates over events from the Braid proxy.
-
-        Yields:
-            dict: The parsed event data.
+        Processes events from the Braid proxy and publishes them via ZMQ.
         """
-
         for chunk in self.stream.iter_content(chunk_size=None, decode_unicode=True):
             if chunk:
                 try:
-                    yield self.parse_chunk(chunk)
+                    parsed_data = self.parse_chunk(chunk)
+                    received_time = time.time()
+                    self.logger.debug(f"Received message at {received_time}")
+                    
+                    # Add timestamp to the message
+                    parsed_data['received_time'] = received_time
+                    
+                    # Publish the message
+                    self.publisher.send("braid_event", json.dumps(parsed_data))
                 except (AssertionError, json.JSONDecodeError) as e:
                     self.logger.error(f"Failed to parse chunk: {e}")
 
@@ -79,16 +87,6 @@ class BraidProxy:
     def parse_chunk(chunk: str) -> dict:
         """
         Parses a chunk of data and returns the parsed JSON object.
-
-        Args:
-            chunk (str): The chunk of data to be parsed.
-
-        Returns:
-            dict: The parsed JSON object.
-
-        Raises:
-            AssertionError: If the chunk format is invalid.
-            json.JSONDecodeError: If JSON decoding fails.
         """
         lines = chunk.strip().split("\n")
         assert len(lines) == 2, "Invalid chunk format"
@@ -97,3 +95,15 @@ class BraidProxy:
 
         buf = lines[1][len(DATA_PREFIX) :]
         return json.loads(buf)
+
+    def close(self):
+        """
+        Closes the publisher and terminates the ZMQ context.
+        """
+        self.publisher.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()

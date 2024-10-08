@@ -181,7 +181,9 @@ def main(config_file: str, braid_folder: str, standalone: bool):
     if not standalone:
         csv_writer = CsvWriter(os.path.join(braid_folder, "stim.csv"))
         subscriber = Subscriber(
-            address="127.0.0.1", port=config["zmq"]["port"], topics="trigger"
+            address="127.0.0.1",
+            port=config["zmq"]["trigger_pub_port"],
+            topics="trigger",
         )
         subscriber.initialize()
 

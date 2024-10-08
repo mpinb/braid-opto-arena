@@ -131,18 +131,18 @@ def start_liquid_lens_process(
     command = [
         "python",
         "src/lens_controller.py",
-        "--braid_url",
+        "--braid-url",
         braid_url,
-        "--lens_port",
+        "--lens-port",
         lens_port,
     ]
 
     if config_file:
-        command.append("--zone_file")
+        command.append("--config_file")
         command.append(config_file)
 
     if map_file:
-        command.append("--map_file")
+        command.append("--interp_file")
         command.append(map_file)
 
     if debug:
