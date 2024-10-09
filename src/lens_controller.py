@@ -11,27 +11,29 @@ from devices.lens_driver import LensDriver
 from messages import Subscriber  # Assume we have an async version of Subscriber
 from braid_proxy import BraidProxy
 from async_braid_proxy import AsyncBraidProxy
+import pandas as pd
+from sklearn.linear_model import LinearRegression
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-@lru_cache(maxsize=1000)
-def interp_dtp_from_z(z: float, z_values: np.ndarray, dtp_values: np.ndarray) -> float:
-    return np.interp(z, z_values, dtp_values)
 
-def update_lens_position(lens_driver: LensDriver, z: float, z_values: np.ndarray, dtp_values: np.ndarray) -> None:
-    diopter = interp_dtp_from_z(z, z_values, dtp_values)
-    lens_driver.set_diopter(diopter)
-
-async def run_tracking(braid_url: str, lens_port: str, config_file: str, interp_file: str, debug: bool) -> None:
+async def run_tracking(
+    braid_url: str, lens_port: str, config_file: str, interp_file: str, debug: bool
+) -> None:
     # Load config
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
-    
+
     # Load interpolation data
-    interp_data = np.loadtxt(interp_file, delimiter=',', skiprows=1)
-    z_values, dtp_values = interp_data[:, 0], interp_data[:, 1]
+    interp_data = pd.read_csv(interp_file)
+    z_values, dpt_values = interp_data["z"].values, interp_data["dpt"].values
+    model = LinearRegression().fit(z_values.reshape(-1, 1), dpt_values)
+    slope = model.coef_[0]
+    intercept = model.intercept_
 
     # Initialize AsyncBraidProxy
     async with AsyncBraidProxy(
@@ -39,7 +41,6 @@ async def run_tracking(braid_url: str, lens_port: str, config_file: str, interp_
         event_port=config["braid"]["event_port"],
         control_port=config["braid"]["control_port"],
     ) as braid_proxy:
-    
         # Connect to subscriber
         subscriber = Subscriber(
             address="127.0.0.1", port=config["zmq"]["port"], topics="trigger"
@@ -70,10 +71,17 @@ async def run_tracking(braid_url: str, lens_port: str, config_file: str, interp_
 
                 # Update lens position
                 async for event in braid_proxy.iter_events():
-                    if event["obj_id"] == obj_id:
-                        update_lens_position(lens_driver, event["z"], z_values, dtp_values)
-                        lens_updated = True
-                    
+                    if event is None:
+                        continue
+                    else:
+                        msg_dict = event["msg"]
+                        if "Update" in msg_dict:
+                            msg_dict = msg_dict["Update"]
+                            if msg_dict["obj_id"] == obj_id:
+                                z = msg_dict["z"]
+                                lens_driver.set_diopter(slope * z + intercept)
+                                lens_updated = True
+
                     if time.time() - start_time > lens_update_duration:
                         break
 
@@ -90,16 +98,32 @@ async def run_tracking(braid_url: str, lens_port: str, config_file: str, interp_
             await subscriber.close()
             lens_driver.disconnect()
 
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="3D Object Tracking and Lens Control")
-    parser.add_argument("--braid_url", help="URL for the braid server", default="http://127.0.0.1:8397/")
-    parser.add_argument("--lens_port", help="Port for the lens controller", default="/dev/optotune_ld")
-    parser.add_argument("--config-file", default="/home/buchsbaum/src/braid-opto-arena/config.yaml", help="YAML file defining the tracking zone")
-    parser.add_argument("--interp-file", default="/home/buchsbaum/liquid_lens_calibration_20241002.csv", help="CSV file mapping Z values to diopter values")
+    parser.add_argument(
+        "--braid_url", help="URL for the braid server", default="http://127.0.0.1:8397/"
+    )
+    parser.add_argument(
+        "--lens_port", help="Port for the lens controller", default="/dev/optotune_ld"
+    )
+    parser.add_argument(
+        "--config-file",
+        default="/home/buchsbaum/src/braid-opto-arena/config.yaml",
+        help="YAML file defining the tracking zone",
+    )
+    parser.add_argument(
+        "--interp-file",
+        default="/home/buchsbaum/liquid_lens_calibration_20241002.csv",
+        help="CSV file mapping Z values to diopter values",
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
-    await run_tracking(args.braid_url, args.lens_port, args.config_file, args.interp_file, args.debug)
+    await run_tracking(
+        args.braid_url, args.lens_port, args.config_file, args.interp_file, args.debug
+    )
+
 
 if __name__ == "__main__":
     asyncio.run(main())
