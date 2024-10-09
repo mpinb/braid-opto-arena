@@ -136,7 +136,7 @@ def main(args):
                     break
 
                 # Receive message from ZMQ subscriber
-                message = subscriber.receive(timeout=1.0, blocking=False)
+                message = subscriber.receive(blocking=False)
                 if message is None:
                     continue
 

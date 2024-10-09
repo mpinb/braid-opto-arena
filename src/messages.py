@@ -120,7 +120,7 @@ class Subscriber:
                 topic, content = message.split(" ", 1)
                 return topic, content
             except zmq.Again:
-                return None
+                return None, None
 
         if timeout is not None:
             if self.socket.poll(timeout * 1000) == 0:

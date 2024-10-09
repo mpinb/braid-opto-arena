@@ -7,6 +7,7 @@ from src.messages import Publisher
 
 DATA_PREFIX = "data: "
 
+
 class BraidProxy:
     def __init__(
         self,
@@ -74,10 +75,10 @@ class BraidProxy:
                     parsed_data = self.parse_chunk(chunk)
                     received_time = time.time()
                     self.logger.debug(f"Received message at {received_time}")
-                    
+
                     # Add timestamp to the message
-                    parsed_data['received_time'] = received_time
-                    
+                    parsed_data["received_time"] = received_time
+
                     # Publish the message
                     self.publisher.send("braid_event", json.dumps(parsed_data))
                 except (AssertionError, json.JSONDecodeError) as e:
@@ -107,3 +108,7 @@ class BraidProxy:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
+
+
+if __name__ == "__main__":
+    braidproxy = BraidProxy()
