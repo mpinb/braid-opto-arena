@@ -89,12 +89,11 @@ def process_zmq_messages(subscriber, stimuli, csv_writer):
     """
     try:
         # Use non-blocking receive
-        result = subscriber.receive(blocking=False)
-        if result is None:
+        topic, message = subscriber.receive(blocking=False)
+        if message is None:
             # No message available, just return
             return
 
-        topic, message = result
         logger.debug(f"Got message from subscriber: {message}")
 
         if message == "kill":

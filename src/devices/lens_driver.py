@@ -5,9 +5,11 @@ import logging
 from enum import Enum
 from typing import Tuple, Optional, Callable
 
+
 class LensMode(Enum):
     CURRENT = 1
     FOCAL_POWER = 5
+
 
 class LensDriver:
     def __init__(self, port: str, debug: bool = False, log_level: int = logging.INFO):
@@ -27,13 +29,15 @@ class LensDriver:
         self.mode: Optional[LensMode] = None
         self._refresh_active_mode()
 
-        self.logger.info("LensController initialization complete")
+        self.logger.debug("LensController initialization complete")
 
     def _setup_logger(self, log_level: int) -> logging.Logger:
         logger = logging.getLogger("LensController")
         logger.setLevel(log_level)
         handler = logging.StreamHandler()
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         return logger
@@ -46,9 +50,13 @@ class LensDriver:
             raise Exception("Lens Driver did not reply to handshake")
         self.logger.debug("Handshake successful")
 
-    def _send_command(self, command: str, reply_fmt: Optional[str] = None) -> Optional[Tuple]:
+    def _send_command(
+        self, command: str, reply_fmt: Optional[str] = None
+    ) -> Optional[Tuple]:
         command_bytes = command.encode("ascii") if isinstance(command, str) else command
-        command_with_crc = command_bytes + struct.pack("<H", self._crc_16(command_bytes))
+        command_with_crc = command_bytes + struct.pack(
+            "<H", self._crc_16(command_bytes)
+        )
         self.logger.debug(f"Sending command: {command_with_crc.hex()}")
         self.connection.write(command_with_crc)
 
@@ -95,7 +103,7 @@ class LensDriver:
         return temp
 
     def set_mode(self, mode: str) -> Optional[Tuple[float, float]]:
-        self.logger.info(f"Setting mode to {mode}")
+        self.logger.debug(f"Setting mode to {mode}")
         if mode == "current":
             self._send_command("MwDA", ">xxx")
             self.mode = LensMode.CURRENT
@@ -132,34 +140,42 @@ class LensDriver:
     def set_current(self, current: float) -> None:
         self.logger.debug(f"Setting current to {current} mA")
         if self.mode != LensMode.CURRENT:
-            raise ValueError(f"Cannot set current when not in current mode. Current mode: {self.get_mode()}")
+            raise ValueError(
+                f"Cannot set current when not in current mode. Current mode: {self.get_mode()}"
+            )
         raw_current = int(current * 4095 / self.max_output_current)
         self._send_command(b"Aw" + struct.pack(">h", raw_current))
 
     def get_diopter(self) -> float:
         self.logger.debug("Getting diopter")
         (raw_diopter,) = self._send_command(b"PrDA\x00\x00\x00\x00", ">xxh")
-        diopter = raw_diopter / 200 - 5 if self.firmware_type == "A" else raw_diopter / 200
+        diopter = (
+            raw_diopter / 200 - 5 if self.firmware_type == "A" else raw_diopter / 200
+        )
         self.logger.debug(f"Diopter: {diopter}")
         return diopter
 
     def set_diopter(self, diopter: float) -> None:
         self.logger.debug(f"Setting diopter to {diopter}")
         if self.mode != LensMode.FOCAL_POWER:
-            raise ValueError(f"Cannot set focal power when not in focal power mode. Current mode: {self.get_mode()}")
-        raw_diopter = int((diopter + 5) * 200 if self.firmware_type == "A" else diopter * 200)
+            raise ValueError(
+                f"Cannot set focal power when not in focal power mode. Current mode: {self.get_mode()}"
+            )
+        raw_diopter = int(
+            (diopter + 5) * 200 if self.firmware_type == "A" else diopter * 200
+        )
         self._send_command(b"PwDA" + struct.pack(">h", raw_diopter) + b"\x00\x00")
 
     def ramp_to_zero(self, duration: float = 1.0, steps: int = 50) -> None:
         """
         Ramp the lens setting to zero over a specified duration.
-        
+
         Args:
             duration (float): The time over which to ramp (in seconds).
             steps (int): The number of steps to use in the ramp.
         """
         self.logger.debug(f"Ramping to zero over {duration} seconds with {steps} steps")
-        
+
         if self.mode == LensMode.CURRENT:
             start_value = self.get_current()
             set_func = self.set_current
@@ -171,13 +187,19 @@ class LensDriver:
             return
 
         self._ramp(start_value, 0, duration, steps, set_func)
-        self.logger.info("Ramp to zero complete")
+        self.logger.debug("Ramp to zero complete")
 
-    def _ramp(self, start: float, end: float, duration: float, steps: int, 
-               set_func: Callable[[float], None]) -> None:
+    def _ramp(
+        self,
+        start: float,
+        end: float,
+        duration: float,
+        steps: int,
+        set_func: Callable[[float], None],
+    ) -> None:
         """
         General ramping function.
-        
+
         Args:
             start (float): Starting value.
             end (float): Ending value.
@@ -187,7 +209,7 @@ class LensDriver:
         """
         step_size = (end - start) / steps
         step_duration = duration / steps
-        
+
         for i in range(steps + 1):
             target_value = start + i * step_size
             set_func(target_value)
@@ -209,14 +231,15 @@ class LensDriver:
         self.disconnect()
 
     def disconnect(self):
-        self.logger.info("Disconnecting LensController")
+        self.logger.debug("Disconnecting LensController")
         try:
             self.ramp_to_zero()
         except Exception as e:
             self.logger.error(f"Error while ramping to zero: {e}")
         finally:
             self.connection.close()
-            self.logger.info("Serial connection closed")
+            self.logger.debug("Serial connection closed")
+
 
 if __name__ == "__main__":
     with LensDriver("/dev/optotune_ld", debug=True) as lens:
