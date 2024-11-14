@@ -51,7 +51,7 @@ def start_visual_stimuli_process(config_path: str, braid_folder: str):
     return start_process(command)
 
 
-def start_ximea_camera_process(videos_base_folder: str, braid_folder: str):
+def start_ximea_camera_process(videos_folder: str):
     """
     Start a new process to run the Ximea camera and save videos in the specified folder.
 
@@ -69,11 +69,11 @@ def start_ximea_camera_process(videos_base_folder: str, braid_folder: str):
         >>> start_ximea_camera_process('/path/to/videos', '/path/to/braid')
         <subprocess.Popen object at 0x7f955c005b10>
     """
-    # set and create videos folder
-    videos_folder = os.path.join(
-        videos_base_folder, os.path.basename(braid_folder)
-    ).split(".")[0]
-    os.makedirs(videos_folder, exist_ok=True)
+    # # set and create videos folder
+    # videos_folder = os.path.join(
+    #     videos_base_folder, os.path.basename(braid_folder)
+    # ).split(".")[0]
+    # os.makedirs(videos_folder, exist_ok=True)
 
     # run command
     command = shlex.split(
@@ -109,6 +109,7 @@ def start_liquid_lens_process(
     lens_port: str,
     config_file: str = None,
     map_file: str = None,
+    video_folder_path: str = None,
     debug: bool = False,
 ):
     """
@@ -144,6 +145,13 @@ def start_liquid_lens_process(
     if map_file:
         command.append("--map_file")
         command.append(map_file)
+
+    if video_folder_path:
+        command.append("--video_folder_path")
+        command.append(video_folder_path)
+
+    command.append("--mode")
+    command.append("current")
 
     if debug:
         command.append("--debug")

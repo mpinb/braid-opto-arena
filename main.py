@@ -72,13 +72,20 @@ def main(args):
         sub_processes["visual_stimuli"] = start_visual_stimuli_process(
             args.config, braid_folder
         )
+
+    # set and create videos folder
+    videos_folder = os.path.join(
+        config["experiment"]["video_base_path"], os.path.basename(braid_folder)
+    ).split(".")[0]
+    logging.info(f"Saving videos to {videos_folder}")
+    os.makedirs(videos_folder, exist_ok=True)
+
     if config["high_speed_camera"]["enabled"]:
-        sub_processes["ximea_camera"] = start_ximea_camera_process(
-            config["experiment"]["video_base_path"], braid_folder
-        )
+        sub_processes["ximea_camera"] = start_ximea_camera_process(videos_folder)
         sub_processes["liquid_lens"] = start_liquid_lens_process(
-            f"{config['braid']['url']}:{config['braid']['event_port']}/",
-            config["hardware"]["lensdriver"]["port"],
+            braid_url=f"{config['braid']['url']}:{config['braid']['event_port']}/",
+            lens_port=config["hardware"]["lensdriver"]["port"],
+            video_folder_path=videos_folder,
         )
 
     # Set up resources

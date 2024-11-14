@@ -24,6 +24,45 @@ class BraidProxy:
         if auto_connect:
             self.connect_to_event_stream()
 
+    def __enter__(self):
+        """
+        Context manager entry point. Ensures connection is established.
+
+        Returns:
+            BraidProxy: The instance itself.
+        """
+        if self.stream is None:
+            self.connect_to_event_stream()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Context manager exit point. Ensures proper cleanup of resources.
+
+        Args:
+            exc_type: The type of the exception that occurred, if any
+            exc_value: The instance of the exception that occurred, if any
+            traceback: The traceback of the exception that occurred, if any
+        """
+        self.close()
+
+    def close(self):
+        """
+        Closes all open resources and connections.
+        """
+        if self.stream is not None:
+            self.stream.close()
+            self.stream = None
+
+        if self.raw_sock is not None:
+            self.raw_sock = None
+
+        if self.session is not None:
+            self.session.close()
+            self.session = None
+
+        self.logger.debug("Closed all BraidProxy connections and resources")
+
     def connect_to_event_stream(self):
         """
         Connects to the Braid proxy server and retrieves the events stream.
@@ -36,7 +75,7 @@ class BraidProxy:
                 self.stream.raise_for_status()
                 # self.raw_sock = self.stream.raw._fp.fp.raw
             except requests.RequestException as e:
-                self.logger.error(f"Failed to connect to event stream: {e}")
+                self.logger.debug(f"Failed to connect to event stream: {e}")
                 raise
 
     def toggle_recording(self, start: bool):
@@ -67,7 +106,6 @@ class BraidProxy:
         Yields:
             dict: The parsed event data.
         """
-
         for chunk in self.stream.iter_content(chunk_size=None, decode_unicode=True):
             if chunk:
                 try:
