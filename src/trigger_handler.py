@@ -233,7 +233,7 @@ class TriggerHandler:
         """
         obj_id = msg_dict["obj_id"]
         msg_dict["timestamp"] = time.time()
-        
+
         # save the trigger time
         self.trigger_time = time.time()
 

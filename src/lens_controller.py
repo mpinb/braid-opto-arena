@@ -1,25 +1,24 @@
 import argparse
-import logging
-import time
-import yaml
+import csv
 import json
-from queue import Queue
-from threading import Thread, Event
-from typing import Dict, Any, Optional
+import logging
+import os
+import time
 from dataclasses import dataclass
+from queue import Empty, Queue
+from threading import Event, Thread
+from typing import Any, Dict, Optional
+
+import numpy as np
+import pandas as pd
+import yaml
+from sklearn.linear_model import LinearRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+
+from braid_proxy import BraidProxy
 from devices.lens_driver import LensDriver
 from messages import Subscriber
-from braid_proxy import BraidProxy
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import LinearRegression
-import csv
-import os
-from queue import Empty, Queue
-from threading import Thread, Event
-import traceback
 
 # Keep existing logging setup and constants
 logging.basicConfig(
