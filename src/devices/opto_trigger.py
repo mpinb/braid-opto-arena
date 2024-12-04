@@ -1,11 +1,18 @@
-# ./src/devices/opto_trigger.py
 import serial
 import logging
 import random
-from typing import Optional
+import time
+from typing import Optional, Tuple, NamedTuple
+from dataclasses import dataclass
 
 logging.basicConfig(level=logging.INFO)
 
+@dataclass
+class TriggerResult:
+    timestamp: int
+    execution_time: int
+    delay: int
+    is_sham: bool
 
 class OptoTrigger:
     def __init__(
@@ -13,42 +20,37 @@ class OptoTrigger:
         config: dict,
         connect_on_init: bool = True,
     ) -> None:
-        """
-        Initializes an instance of the OptoTrigger class.
-
-        Args:
-            config (Dict[str, Dict[str, Union[str, int]]]): A dictionary containing the configuration settings.
-            connect_on_init (bool, optional): Whether to connect to the Arduino upon initialization. Defaults to True.
-
-        Returns:
-            None
-
-        Initializes the instance variables of the OptoTrigger class with the values from the provided configuration.
-        Sets the port, baudrate, and device to the corresponding values from the configuration.
-        Sets the duration, intensity, and frequency to the corresponding values from the configuration.
-        Logs the connection information and the stimulation parameters.
-        If connect_on_init is True, calls the connect() method to establish the connection to the Arduino.
-        """
         self.config = config
-
         self.port: str = self.config["hardware"]["arduino"]["port"]
         self.baudrate: int = self.config["hardware"]["arduino"]["baudrate"]
         self.device: Optional[serial.Serial] = None
 
+        # Stimulation parameters
         self.duration: int = self.config["optogenetic_light"]["duration"]
         self.intensity: float = self.config["optogenetic_light"]["intensity"]
         self.frequency: float = self.config["optogenetic_light"]["frequency"]
+        self.sham_rate: int = self.config["optogenetic_light"]["sham_trial_percentage"]
+
+        # Timing synchronization variables
+        self.sync_offset = None
+        self.network_latency = None
 
         logging.info(f"Connecting to arduino at {self.port}")
         logging.debug(
-            f"Stim parameters: duration {self.duration} intensity {self.intensity} frequency {self.frequency}"
+            f"Stim parameters: duration {self.duration} intensity {self.intensity} "
+            f"frequency {self.frequency} sham_rate {self.sham_rate}"
         )
+        
         if connect_on_init:
             self.connect()
+            self.synchronize()
+            self.set_parameters()
 
     def __enter__(self) -> "OptoTrigger":
         if not self.device:
             self.connect()
+            self.synchronize()
+            self.set_parameters()
         return self
 
     def __exit__(
@@ -57,48 +59,110 @@ class OptoTrigger:
         exc_value,
         traceback,
     ) -> None:
-        """
-        Exit the context manager.
-
-        Args:
-            exc_type (Optional[Type[BaseException]]): The type of exception raised, if any.
-            exc_value (Optional[BaseException]): The exception raised, if any.
-            traceback (Optional[TracebackType]): The traceback of the exception, if any.
-
-        Returns:
-            None
-        """
         self.close()
 
     def connect(self) -> None:
         try:
             self.device = serial.Serial(self.port, self.baudrate)
+            time.sleep(2)  # Wait for Arduino reset
         except Exception as e:
             logging.error(f"Could not connect to arduino: {e}")
+            raise
 
-    def trigger(self) -> bool:
-        if self._sham():
-            logging.info("Sham trial")
-            return True
-        else:
-            if self.device:
-                logging.debug(
-                    f"Triggering Arduino: {self.duration} {self.intensity} {self.frequency}"
-                )
-                self.device.write(
-                    f"<{self.duration},{self.intensity},{self.frequency}>".encode(
-                        "utf-8"
-                    )
-                )
-                return False
-            else:
-                logging.error("Cannot trigger: device is not connected")
+    def synchronize(self) -> Tuple[int, int]:
+        """Synchronize time with Arduino"""
+        if not self.device:
+            raise RuntimeError("Device not connected")
 
-    def _sham(self) -> bool:
-        return (
-            random.randint(0, 100)
-            < self.config["optogenetic_light"]["sham_trial_percentage"]
-        )
+        try:
+            # Send sync message
+            self.device.write(b'SYNC\n')
+            t1 = int(time.time() * 1000)
+            
+            # Wait for Arduino response
+            response = self.device.readline().decode().strip()
+            t3 = int(time.time() * 1000)
+            
+            # Parse Arduino timestamp
+            arduino_time = int(response)
+            
+            # Calculate network latency and offset
+            self.network_latency = (t3 - t1) // 2
+            self.sync_offset = t1 - arduino_time + self.network_latency
+            
+            logging.info(f"Synchronized with Arduino. Offset: {self.sync_offset}ms, "
+                        f"Latency: {self.network_latency}ms")
+            
+            return self.sync_offset, self.network_latency
+        except Exception as e:
+            logging.error(f"Synchronization failed: {e}")
+            raise
+
+    def set_parameters(self) -> None:
+        """Set stimulation parameters on Arduino"""
+        if not self.device:
+            raise RuntimeError("Device not connected")
+
+        try:
+            # Validate parameters
+            if not (0 <= self.frequency <= 100 and 
+                   0 <= self.duration <= 1000 and 
+                   0 <= self.intensity <= 255 and
+                   0 <= self.sham_rate <= 100):
+                raise ValueError("Parameters out of range")
+                
+            # Send parameters
+            message = f"PARAM {self.frequency},{self.duration},"
+            message += f"{int(self.intensity)},{self.sham_rate}\n"
+            self.device.write(message.encode())
+            
+            # Wait for confirmation
+            response = self.device.readline().decode().strip()
+            if response != "OK":
+                raise RuntimeError(f"Failed to set parameters: {response}")
+            
+            logging.debug("Parameters set successfully")
+        except Exception as e:
+            logging.error(f"Failed to set parameters: {e}")
+            raise
+
+    def trigger(self) -> TriggerResult:
+        """
+        Trigger the stimulation
+        Returns: TriggerResult object containing timing information and sham status
+        """
+        if not self.device:
+            raise RuntimeError("Cannot trigger: device not connected")
+
+        try:
+            # Get current timestamp
+            detection_time = int(time.time() * 1000)
+            
+            # Send detection command with timestamp
+            message = f"DETECT {detection_time}\n"
+            self.device.write(message.encode())
+            
+            # Wait for execution confirmation
+            response = self.device.readline().decode().strip()
+            det_time, exec_time, sham_status = response.split(',')
+            
+            result = TriggerResult(
+                timestamp=int(det_time),
+                execution_time=int(exec_time),
+                delay=int(exec_time) - int(det_time),
+                is_sham=(sham_status == "SHAM")
+            )
+            
+            logging.info(
+                f"{'Sham' if result.is_sham else 'Real'} trigger executed with "
+                f"{result.delay}ms delay"
+            )
+            
+            return result
+            
+        except Exception as e:
+            logging.error(f"Trigger failed: {e}")
+            raise
 
     def close(self) -> None:
         if self.device:

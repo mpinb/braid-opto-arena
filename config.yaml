@@ -31,7 +31,7 @@ optogenetic_light:
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
-  sham_trial_percentage: 10  
+  sham_trial_percentage: 10
 
 # Hardware settings
 hardware:
