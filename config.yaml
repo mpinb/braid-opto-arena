@@ -37,7 +37,7 @@ optogenetic_light:
 hardware:
   arduino:
     port: "/dev/optotrigger"
-    baudrate: 9600
+    baudrate: 115200
   backlight:
     port: "/dev/powersupply"
     voltage: 24

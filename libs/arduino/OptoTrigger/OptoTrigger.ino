@@ -1,6 +1,6 @@
 // Arduino side
 const int OUTPUT_PIN = 13;  // Pin to trigger on detection
-unsigned long sync_offset = 0;
+uint32_t sync_offset = 0;
 
 // Control parameters
 struct Parameters {
@@ -11,9 +11,9 @@ struct Parameters {
 } params;
 
 // Timing variables for frequency control
-unsigned long last_toggle = 0;
+uint32_t last_toggle = 0;
 bool output_state = false;
-unsigned long trigger_start = 0;
+uint32_t trigger_start = 0;
 bool trigger_active = false;
 
 void setup() {
@@ -29,11 +29,11 @@ void setup() {
 }
 
 void handleTrigger() {
-  unsigned long current_time = millis();
+  uint32_t current_time = millis();
   
   if (trigger_active) {
     // Calculate period in milliseconds from frequency
-    unsigned long period = (1000.0 / params.frequency);
+    uint32_t period = (1000.0 / params.frequency);
     
     // Check if we should toggle based on frequency
     if (current_time - last_toggle >= period/2) {  // Divide by 2 for on/off cycle
@@ -88,7 +88,7 @@ void loop() {
     }
     else if (command.startsWith("DETECT ")) {
       // Extract detection timestamp
-      unsigned long detection_time = command.substring(7).toInt();
+      uint32_t detection_time = command.substring(7).toInt();
       
       // Determine if this should be a sham trial
       bool is_sham = (random(100) < params.sham_rate);
@@ -103,14 +103,14 @@ void loop() {
       }
       
       // Calculate execution time in same timebase as detection
-      unsigned long arduino_time = millis();
-      unsigned long execution_time = arduino_time + sync_offset;
+      uint32_t arduino_time = millis();
+      uint32_t execution_time = arduino_time + sync_offset;
       
       // Send back both timestamps and sham status
       Serial.print(detection_time);
       Serial.print(",");
       Serial.print(execution_time);
-      Serial.print(",");d
+      Serial.print(",");
       Serial.println(is_sham ? "SHAM" : "REAL");
     }
     else if (command == "GET_PARAMS") {
