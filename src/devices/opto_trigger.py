@@ -7,12 +7,14 @@ from dataclasses import dataclass
 
 logging.basicConfig(level=logging.INFO)
 
+
 @dataclass
 class TriggerResult:
     timestamp: int
     execution_time: int
     delay: int
     is_sham: bool
+
 
 class OptoTrigger:
     def __init__(
@@ -40,7 +42,7 @@ class OptoTrigger:
             f"Stim parameters: duration {self.duration} intensity {self.intensity} "
             f"frequency {self.frequency} sham_rate {self.sham_rate}"
         )
-        
+
         if connect_on_init:
             self.connect()
             self.synchronize()
@@ -76,23 +78,32 @@ class OptoTrigger:
 
         try:
             # Send sync message
-            self.device.write(b'SYNC\n')
+            self.device.write(b"SYNC\n")
             t1 = int(time.time() * 1000)
-            
+
             # Wait for Arduino response
             response = self.device.readline().decode().strip()
             t3 = int(time.time() * 1000)
-            
+
             # Parse Arduino timestamp
             arduino_time = int(response)
-            
+
             # Calculate network latency and offset
             self.network_latency = (t3 - t1) // 2
             self.sync_offset = t1 - arduino_time + self.network_latency
-            
-            logging.info(f"Synchronized with Arduino. Offset: {self.sync_offset}ms, "
-                        f"Latency: {self.network_latency}ms")
-            
+
+            offset_command = f"OFFSET {self.sync_offset}\n"
+            self.device.write(offset_command.encode())
+
+            confirmation = self.device.readline().decode().strip()
+            if confirmation != "OK":
+                raise RuntimeError(f"Failed to set offset: {confirmation}")
+
+            logging.debug(
+                f"Synchronized with Arduino. Offset: {self.sync_offset}ms, "
+                f"Latency: {self.network_latency}ms"
+            )
+
             return self.sync_offset, self.network_latency
         except Exception as e:
             logging.error(f"Synchronization failed: {e}")
@@ -105,28 +116,30 @@ class OptoTrigger:
 
         try:
             # Validate parameters
-            if not (0 <= self.frequency <= 100 and 
-                   0 <= self.duration <= 1000 and 
-                   0 <= self.intensity <= 255 and
-                   0 <= self.sham_rate <= 100):
+            if not (
+                0 <= self.frequency <= 100
+                and 0 <= self.duration <= 1000
+                and 0 <= self.intensity <= 255
+                and 0 <= self.sham_rate <= 100
+            ):
                 raise ValueError("Parameters out of range")
-                
+
             # Send parameters
             message = f"PARAM {self.frequency},{self.duration},"
             message += f"{int(self.intensity)},{self.sham_rate}\n"
             self.device.write(message.encode())
-            
+
             # Wait for confirmation
             response = self.device.readline().decode().strip()
             if response != "OK":
                 raise RuntimeError(f"Failed to set parameters: {response}")
-            
+
             logging.debug("Parameters set successfully")
         except Exception as e:
             logging.error(f"Failed to set parameters: {e}")
             raise
 
-    def trigger(self) -> TriggerResult:
+    def trigger(self, detection_time) -> TriggerResult:
         """
         Trigger the stimulation
         Returns: TriggerResult object containing timing information and sham status
@@ -136,30 +149,33 @@ class OptoTrigger:
 
         try:
             # Get current timestamp
-            detection_time = int(time.time() * 1000)
-            
+            detection_time = int(detection_time * 1000)
+
             # Send detection command with timestamp
             message = f"DETECT {detection_time}\n"
             self.device.write(message.encode())
-            
+
             # Wait for execution confirmation
             response = self.device.readline().decode().strip()
-            det_time, exec_time, sham_status = response.split(',')
-            
+            det_time, exec_time, sham_status = response.split(",")
+
+            # Parse response
             result = TriggerResult(
                 timestamp=int(det_time),
                 execution_time=int(exec_time),
                 delay=int(exec_time) - int(det_time),
-                is_sham=(sham_status == "SHAM")
+                is_sham=(sham_status == "SHAM"),
             )
-            
-            logging.info(
+
+            result.delay = int(time.time() * 1000) - detection_time
+
+            logging.debug(
                 f"{'Sham' if result.is_sham else 'Real'} trigger executed with "
                 f"{result.delay}ms delay"
             )
-            
+
             return result
-            
+
         except Exception as e:
             logging.error(f"Trigger failed: {e}")
             raise

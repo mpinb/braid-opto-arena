@@ -239,8 +239,10 @@ class TriggerHandler:
 
         # trigger opto if activated
         if self.opto_trigger is not None:
-            sham = self.opto_trigger.trigger()
-            msg_dict["sham"] = sham
+            result = self.opto_trigger.trigger(self.trigger_time)
+            msg_dict["execution_time"] = result.execution_time
+            msg_dict["delay"] = result.delay
+            msg_dict["is_sham"] = result.is_sham
 
         # add the heading to the data
         if obj_id in self.obj_heading:
