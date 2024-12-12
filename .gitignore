@@ -189,3 +189,4 @@ libs/lens_driver
 *.vsix
 
 documentation/book
+.ruff_cache

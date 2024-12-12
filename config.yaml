@@ -27,7 +27,7 @@ trigger:
 
 # Optogenetic light parameters
 optogenetic_light:
-  enabled: false
+  enabled: true
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
@@ -47,7 +47,7 @@ hardware:
 
 # High-speed camera settings
 high_speed_camera:
-  enabled: true
+  enabled: false
   type: "ximea"
   pre_trigger_record_time: 0.5  # seconds
   post_trigger_record_time: 1.5  # seconds
@@ -64,7 +64,7 @@ visual_stimuli:
       enabled: true
 
     - type: looming
-      enabled: true
+      enabled: false
       start_radius: 5 # pixels
       end_radius: 128 # pixels
       duration: 300 # milliseconds

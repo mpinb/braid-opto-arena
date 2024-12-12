@@ -58,7 +58,7 @@ BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 
 # Number of circles
-n = 10  # You can change this to any number you want
+n = 7  # You can change this to any number you want
 
 # Calculate the spacing between circles
 spacing = width // (n + 1)
