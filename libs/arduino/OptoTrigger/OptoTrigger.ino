@@ -12,9 +12,9 @@ struct Parameters
 } params;
 
 // Timing variables for frequency control
-unsigned long last_toggle = 0;
+uint32_t last_toggle = 0;
 bool output_state = false;
-unsigned long trigger_start = 0;
+uint32_t trigger_start = 0;
 bool trigger_active = false;
 
 void setup()
@@ -131,6 +131,7 @@ void loop()
       Serial.print(detection_time);
       Serial.print(",");
       Serial.print(execution_time);
+      Serial.print(",");
       Serial.print(",");
       Serial.println(is_sham ? "SHAM" : "REAL");
     }
