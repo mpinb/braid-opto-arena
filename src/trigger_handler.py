@@ -232,10 +232,11 @@ class TriggerHandler:
             None
         """
         obj_id = msg_dict["obj_id"]
-        # msg_dict["timestamp"] = time.time()
 
         # save the trigger time
         self.trigger_time = time.time()
+
+        msg_dict["timestamp"] = self.trigger_time
 
         # trigger opto if activated
         if self.opto_trigger is not None:
