@@ -27,7 +27,7 @@ trigger:
 
 # Optogenetic light parameters
 optogenetic_light:
-  enabled: true
+  enabled: false
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
@@ -40,14 +40,14 @@ hardware:
     baudrate: 115200
   backlight:
     port: "/dev/powersupply"
-    voltage: 0
+    voltage: 24
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
 
 # High-speed camera settings
 high_speed_camera:
-  enabled: false
+  enabled: true
   type: "ximea"
   pre_trigger_record_time: 0.5  # seconds
   post_trigger_record_time: 1.5  # seconds
@@ -64,9 +64,9 @@ visual_stimuli:
       enabled: true
 
     - type: looming
-      enabled: false
-      start_radius: 5 # pixels
-      end_radius: 128 # pixels
+      enabled: true
+      start_radius: 10 # pixels
+      end_radius: 90 # pixels
       duration: 300 # milliseconds
       position_type: closed-loop
       fixed_position: [400, 300]

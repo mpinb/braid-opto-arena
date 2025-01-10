@@ -258,7 +258,7 @@ class TriggerHandler:
         if self.csv_writer is not None:
             self.csv_writer.write_row(msg_dict)
 
-        logging.info(
+        logging.debug(
             f"Triggered action #{self.trigger_counter} for object {msg_dict['obj_id']}"
         )
         self.trigger_counter += 1

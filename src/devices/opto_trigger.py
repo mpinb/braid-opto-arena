@@ -169,7 +169,7 @@ class OptoTrigger:
 
             result.delay = int(time.time() * 1000) - detection_time
 
-            logging.debug(
+            logging.info(
                 f"{'Sham' if result.is_sham else 'Real'} trigger executed with "
                 f"{result.delay}ms delay"
             )
