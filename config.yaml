@@ -31,16 +31,16 @@ optogenetic_light:
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
-  sham_trial_percentage: 10  
+  sham_trial_percentage: 10
 
 # Hardware settings
 hardware:
   arduino:
     port: "/dev/optotrigger"
-    baudrate: 9600
+    baudrate: 115200
   backlight:
     port: "/dev/powersupply"
-    voltage: 24
+    voltage: 0
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
