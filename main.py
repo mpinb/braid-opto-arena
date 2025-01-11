@@ -19,7 +19,7 @@ from src.process_manager import (
 )
 
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
+    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.DEBUG
 )
 logger = logging.getLogger(name="Main")
 

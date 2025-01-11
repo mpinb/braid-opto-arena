@@ -1,8 +1,7 @@
 import serial
 import logging
-import random
 import time
-from typing import Optional, Tuple, NamedTuple
+from typing import Optional, Tuple
 from dataclasses import dataclass
 
 logging.basicConfig(level=logging.INFO)
