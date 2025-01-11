@@ -698,7 +698,7 @@ class LensController(Thread):
             self.start_new_tracking_session(update)
 
         # Process update if still within tracking window
-        if self.is_tracking() and not self.should_stop_tracking(time.perf_counter()):
+        if self.is_tracking():
             self._update_lens_position(update)
 
     def _update_lens_position(self, update: UpdateMessage) -> None:
