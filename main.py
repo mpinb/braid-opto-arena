@@ -181,14 +181,23 @@ def run_main_loop(
     time_limit_seconds: Optional[float],
 ) -> None:
     """Run the main experimental loop."""
+    shutdown_requested = False
+    
     try:
         for event in braid_proxy.iter_events():
+            if shutdown_requested:
+                break
+                
+            # Check process health
             if not processes.check_all_alive():
                 logger.error("One or more processes died unexpectedly")
+                shutdown_requested = True
                 break
 
+            # Check time limit
             if time_limit_seconds and (time.time() - start_time > time_limit_seconds):
                 logger.info("Time limit reached. Shutting down gracefully...")
+                shutdown_requested = True
                 break
 
             if event is None:
@@ -206,10 +215,31 @@ def run_main_loop(
 
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received. Shutting down gracefully...")
+        shutdown_requested = True
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
+        shutdown_requested = True
     finally:
-        braid_proxy.toggle_recording(start=False)
+        # Explicit shutdown sequence
+        try:
+            logger.info("Starting shutdown sequence...")
+            
+            # First stop recording
+            logger.info("Stopping Braid recording...")
+            braid_proxy.toggle_recording(start=False)
+            
+            # Then stop all processes in reverse order
+            logger.info("Stopping all processes...")
+            processes.stop_all()
+            
+            logger.info("Shutdown sequence completed successfully")
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
+            # In case of shutdown error, try to force stop processes
+            try:
+                processes.stop_all()
+            except:
+                pass
 
 
 if __name__ == "__main__":
