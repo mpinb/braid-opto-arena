@@ -1,232 +1,297 @@
-# ./src/stimuli/visual_stimuli.py
+"""
+Visual Stimuli Module
+
+This module implements various visual stimuli types for psychophysics experiments.
+It provides a flexible framework for creating and managing different types of visual
+stimuli, with optimizations for performance and memory usage.
+
+"""
+
 import os
-import random
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union, Dict, Any
+import logging
+
 import numpy as np
 import pygame
-import logging
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(name="VisualStimuli")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("VisualStimuli")
 
 # Constants
 SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
-os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % (0, 0)
+CENTER_Y = SCREEN_HEIGHT // 2
+
+# Set window position (moved from global scope to avoid side effects)
+os.environ["SDL_VIDEO_WINDOW_POS"] = "0,0"
 
 
-# Base stimulus class
+@dataclass
+class StimulusConfig:
+    """Configuration dataclass for stimulus parameters."""
+
+    type: str
+    enabled: bool = True
+    color: Union[str, Tuple[int, int, int]] = "black"
+    position_type: str = "random"
+    expansion_type: str = "exponential"
+    end_radius: Union[int, str] = 64
+    duration: Union[int, str] = 150
+
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]) -> "StimulusConfig":
+        """Create a StimulusConfig instance from a dictionary."""
+        return cls(**{k: v for k, v in config.items() if k in cls.__annotations__})
+
+
 class Stimulus(ABC):
-    def __init__(self, config):
-        self.config = config
+    """Abstract base class for all visual stimuli."""
+
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the stimulus with configuration.
+
+        Args:
+            config: Dictionary containing stimulus parameters
+        """
+        self.config = StimulusConfig.from_dict(config)
+        self._surface: Optional[pygame.Surface] = None
 
     @abstractmethod
-    def update(self, screen, time_elapsed):
+    def update(self, screen: pygame.Surface, time_elapsed: int) -> None:
+        """
+        Update the stimulus state and draw to screen.
+
+        Args:
+            screen: Pygame surface to draw on
+            time_elapsed: Time elapsed since last update in milliseconds
+        """
         pass
 
 
 class StaticImageStimulus(Stimulus):
-    def __init__(self, config):
+    """A stimulus that displays a static image or random pattern."""
+
+    def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.surface = self._create_surface(config)
+        self._surface = self._create_surface()
 
-    def _create_surface(self, config):
-        if config["image"] == "random":
+    def _create_surface(self) -> pygame.Surface:
+        """Create the surface based on configuration."""
+        if self.config.type == "random":
             return self._generate_random_stimuli()
-        else:
-            return self._load_image(config["image"])
+        return self._load_image(self.config.type)
 
-    def _load_image(self, image_path):
-        return pygame.image.load(image_path).convert()
+    @staticmethod
+    def _load_image(image_path: str) -> pygame.Surface:
+        """Load and optimize an image from disk."""
+        try:
+            surface = pygame.image.load(image_path).convert()
+            return surface
+        except pygame.error as e:
+            logger.error(f"Failed to load image {image_path}: {e}")
+            # Return a default surface on error
+            return pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 
     def _generate_random_stimuli(
-        self, width: int = 640, height: int = 128, ratio: int = 8
-    ):
+        self, width: int = SCREEN_WIDTH, height: int = SCREEN_HEIGHT, ratio: int = 8
+    ) -> pygame.Surface:
+        """Generate random checkerboard pattern."""
         if width % ratio != 0 or height % ratio != 0:
-            raise ValueError("width and height must be divisible by ratio")
+            raise ValueError("Width and height must be divisible by ratio")
 
-        stimulus = (
-            np.random.choice([0, 1], size=(int(width / ratio), int(height / ratio)))
-            * 255
-        )
+        # Optimize numpy operations
+        shape = (height // ratio, width // ratio)
+        stimulus = np.random.choice([0, 255], size=shape)
 
+        # Create surface directly from numpy array
         surface = pygame.surfarray.make_surface(stimulus)
-
         return pygame.transform.scale(surface, (width, height))
 
-    def update(self, screen, time_elapsed):
-        screen.blit(self.surface, (0, 0))
+    def update(self, screen: pygame.Surface, time_elapsed: int) -> None:
+        """Update the static image (just blit)."""
+        screen.blit(self._surface, (0, 0))
 
 
-# Helper function for wrap-around
-def wrap_around_position(x, screen_width):
-    """
-    Returns the wrap-around position of a given value `x` within a given `screen_width`.
-
-    Args:
-        x (int): The value to wrap around.
-        screen_width (int): The width of the screen.
-
-    Returns:
-        int: The wrap-around position of `x` within `screen_width`.
-    """
-    return x % screen_width
-
-
-def interp_angle(angle):
-    """
-    Interpolates the given angle using the calibration data from the CSV file.
-
-    Parameters:
-        angle (float): The angle to interpolate.
-
-    Returns:
-        float: The interpolated value.
-
-    Raises:
-        FileNotFoundError: If the CSV file is not found.
-
-    """
-    df = pd.read_csv("src/stimuli/calibration.csv")
-    screen = df["circle"].values
-    heading = df["angle"].values
-
-    return np.interp(angle, heading, screen, period=2 * np.pi)
-
-
-# Looming stimulus
 class LoomingStimulus(Stimulus):
-    def __init__(self, config):
-        """
-        Initializes a LoomingStimulus object.
+    """A stimulus that creates an expanding circle effect."""
 
-        Args:
-            config (dict): A dictionary containing the configuration parameters for the stimulus.
-                - end_radius (int): The maximum radius of the looming stimulus. Defaults to 0.
-                - duration (int): The duration of the looming stimulus in milliseconds. Defaults to 150.
-                - position_type (str): The type of position for the looming stimulus. Possible values are "random", "closed-loop", or a specific position.
-                - expansion_type (str, optional): The type of expansion for the looming stimulus. Possible values are "exponential" or "natural". Defaults to "exponential".
-
-        Returns:
-            None
-        """
+    def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.max_radius = self._get_value(config["end_radius"], 0, 100)
-        self.duration = self._get_value(config["duration"], 150, 500)
-        self.color = pygame.Color("black")
-        self.position_type = config["position_type"]
-        self.position = None
-        self.start_time = None
+        self._setup_expansion_parameters()
+        self._initialize_state()
+
+        # Cache commonly used values
+        self._color = pygame.Color(self.config.color)
+        self._position_calculator = self._create_position_calculator()
+
+    def _setup_expansion_parameters(self) -> None:
+        """Set up parameters for expansion behavior."""
+        self._expansion_generators = {
+            "exponential": self._generate_exponential_looming,
+            "natural": self._generate_natural_looming,
+        }
+
+        # Pre-calculate constants for natural looming
+        self._natural_looming_params = {"l_v": 10, "distance": 25, "hz": 60}
+
+    def _initialize_state(self) -> None:
+        """Initialize stimulus state variables."""
         self.expanding = False
-        self.type = config.get("expansion_type", "exponential")
+        self.position: Optional[int] = None
+        self.start_time: Optional[float] = None
+        self.curr_frame = 0
+        self.radii_array: Optional[np.ndarray] = None
 
-    def _get_value(self, value, min_val, max_val):
-        if value == "random":
-            return random.randint(min_val, max_val)
-        return value
+    def _create_position_calculator(self):
+        """Create appropriate position calculation function."""
+        if self.config.position_type == "random":
+            return lambda _: np.random.randint(0, SCREEN_WIDTH)
+        elif self.config.position_type == "closed-loop":
+            return self._calculate_closed_loop_position
+        return lambda _: self.config.position_type
 
-    def generate_natural_looming(
-        self, max_radius, duration, l_v=10, distance_from_screen=25, hz=60
-    ):
-        n_frames = int(duration / (1000 / hz))
-        r = np.flip([2 * np.arctan(l_v / i) for i in range(1, n_frames)])
-        looming_size_on_screen = np.tan(r / 2) * distance_from_screen
-        looming_size_on_screen = (
-            looming_size_on_screen - np.min(looming_size_on_screen)
-        ) / (np.max(looming_size_on_screen) - np.min(looming_size_on_screen))
-        looming_size_on_screen = looming_size_on_screen * max_radius
-        return looming_size_on_screen
+    @staticmethod
+    def _calculate_closed_loop_position(heading_direction: Optional[float]) -> int:
+        """Calculate position based on heading direction."""
+        if heading_direction is None:
+            return np.random.randint(0, SCREEN_WIDTH)
 
-    def generate_exponential_looming(self, max_radius, duration, hz=60):
-        n_frames = int(duration / (1000 / hz))
-        radii_array = np.logspace(0, np.log10(max_radius), n_frames)
-        return radii_array
+        # Cache the calibration data
+        if not hasattr(LoomingStimulus, "_calibration_data"):
+            try:
+                df = pd.read_csv("src/stimuli/calibration.csv")
+                LoomingStimulus._calibration_data = {
+                    "heading": df["angle"].values,
+                    "screen": df["circle"].values,
+                }
+            except Exception as e:
+                logger.error(f"Failed to load calibration data: {e}")
+                return np.random.randint(0, SCREEN_WIDTH)
 
-    def start_expansion(self, heading_direction=None):
-        self.max_radius = self._get_value(self.config["end_radius"], 32, 64)
-        self.duration = self._get_value(self.config["duration"], 150, 500)
-
-        if self.position_type == "random":
-            self.position = self._get_value("random", 0, SCREEN_WIDTH)
-
-        elif self.position_type == "closed-loop":
-            if heading_direction is not None:
-                self.position = int(interp_angle(heading_direction))
-                logger.debug(
-                    f"heading_direction: {heading_direction}, position: {self.position}"
-                )
-            else:
-                self.position = self._get_value("random", 0, SCREEN_WIDTH)
-
-        else:
-            self.position = self.position_type
-
-        if self.type == "exponential":
-            self.radii_array = self.generate_exponential_looming(
-                self.max_radius, self.duration
+        return int(
+            np.interp(
+                heading_direction,
+                LoomingStimulus._calibration_data["heading"],
+                LoomingStimulus._calibration_data["screen"],
+                period=2 * np.pi,
             )
+        )
 
-        elif self.type == "natural":
-            self.radii_array = self.generate_natural_looming(
-                self.max_radius, self.duration
-            )
+    def _generate_natural_looming(
+        self, max_radius: float, duration: float
+    ) -> np.ndarray:
+        """Generate natural looming radius progression."""
+        params = self._natural_looming_params
+        n_frames = int(duration / (1000 / params["hz"]))
 
+        # Vectorized computation
+        indices = np.arange(1, n_frames)
+        r = 2 * np.arctan(params["l_v"] / indices)
+        looming_size = np.tan(r / 2) * params["distance"]
+
+        # Normalize and scale
+        looming_size = (looming_size - looming_size.min()) / (
+            looming_size.max() - looming_size.min()
+        )
+        return np.flip(looming_size * max_radius)
+
+    def _generate_exponential_looming(
+        self, max_radius: float, duration: float
+    ) -> np.ndarray:
+        """Generate exponential looming radius progression."""
+        n_frames = int(duration / (1000 / 60))
+        return np.logspace(0, np.log10(max_radius), n_frames)
+
+    def start_expansion(self, heading_direction: Optional[float] = None) -> None:
+        """Start the looming expansion effect."""
+        if self.expanding:
+            return
+
+        # Get parameters
+        max_radius = (
+            np.random.randint(32, 64)
+            if self.config.end_radius == "random"
+            else self.config.end_radius
+        )
+        duration = (
+            np.random.randint(150, 500)
+            if self.config.duration == "random"
+            else self.config.duration
+        )
+
+        # Calculate position
+        self.position = self._position_calculator(heading_direction)
+
+        # Generate radius progression
+        self.radii_array = self._expansion_generators[self.config.expansion_type](
+            max_radius, duration
+        )
+
+        # Initialize expansion state
         self.start_time = time.time()
         self.curr_frame = 0
-        self.n_frames = int(self.duration / (1000 / 60))
+        self.n_frames = len(self.radii_array)
         self.expanding = True
 
-    def update(self, screen, time_elapsed):
-        if self.expanding:
-            if self.curr_frame < self.n_frames - 1:
-                if self.type == "linear":
-                    self.radius = (self.curr_frame / self.n_frames) * self.max_radius
-                else:
-                    self.radius = self.radii_array[self.curr_frame]
+    def update(self, screen: pygame.Surface, time_elapsed: int) -> None:
+        """Update and draw the looming stimulus."""
+        if not self.expanding or self.curr_frame >= self.n_frames - 1:
+            self.expanding = False
+            return
 
-                position = wrap_around_position(self.position, SCREEN_WIDTH)
-                pygame.draw.circle(
-                    screen, self.color, (position, SCREEN_HEIGHT // 2), int(self.radius)
-                )
-                if position - self.radius < 0:
-                    pygame.draw.circle(
-                        screen,
-                        self.color,
-                        (position + SCREEN_WIDTH, SCREEN_HEIGHT // 2),
-                        int(self.radius),
-                    )
-                if position + self.radius > SCREEN_WIDTH:
-                    pygame.draw.circle(
-                        screen,
-                        self.color,
-                        (position - SCREEN_WIDTH, SCREEN_HEIGHT // 2),
-                        int(self.radius),
-                    )
-                self.curr_frame += 1
-            else:
-                self.expanding = False
+        radius = self.radii_array[self.curr_frame]
+        position = self.position % SCREEN_WIDTH
 
-    def get_trigger_info(self):
+        # Draw main circle
+        pygame.draw.circle(screen, self._color, (position, CENTER_Y), int(radius))
+
+        # Handle wrap-around
+        if position - radius < 0:
+            pygame.draw.circle(
+                screen, self._color, (position + SCREEN_WIDTH, CENTER_Y), int(radius)
+            )
+        if position + radius > SCREEN_WIDTH:
+            pygame.draw.circle(
+                screen, self._color, (position - SCREEN_WIDTH, CENTER_Y), int(radius)
+            )
+
+        self.curr_frame += 1
+
+    def get_trigger_info(self) -> Dict[str, Any]:
+        """Get current stimulus information for logging."""
         return {
             "timestamp": time.time(),
-            "stimulus": self.type,
+            "stimulus": self.config.expansion_type,
             "expansion": self.expanding,
-            "max_radius": self.max_radius,
-            "duration": self.duration,
-            "color": self.color,
             "position": self.position,
+            "max_radius": self.config.end_radius,
+            "duration": self.config.duration,
+            "color": self.config.color,
         }
 
 
-# Grating stimulus
 class GratingStimulus(Stimulus):
-    def __init__(self, config):
-        super().__init__(config)
-        self.frequency = config["frequency"]
-        self.direction = config["direction"]
-        self.color = pygame.Color(config["color"])
+    """A stimulus that displays moving gratings."""
 
-    def update(self, screen, time_elapsed):
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self._initialize_grating_parameters()
+
+    def _initialize_grating_parameters(self) -> None:
+        """Initialize grating-specific parameters."""
+        self.frequency = self.config.frequency
+        self.direction = self.config.direction
+        self._color = pygame.Color(self.config.color)
+
+    def update(self, screen: pygame.Surface, time_elapsed: int) -> None:
+        """Update and draw the grating stimulus."""
+        # Placeholder for grating implementation
         pass

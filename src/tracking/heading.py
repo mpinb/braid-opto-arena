@@ -1,4 +1,3 @@
-# ./src/fly_heading_tracker.py
 from collections import deque
 
 import numpy as np

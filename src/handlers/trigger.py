@@ -1,4 +1,3 @@
-# ./src/trigger_handler.py
 import json
 import logging
 import time
@@ -6,10 +5,10 @@ from numba import jit
 from typing import Optional
 
 import numpy as np
-from .csv_writer import CsvWriter
-from .devices.opto_trigger import OptoTrigger
-from .fly_heading_tracker import FlyHeadingTracker
-from .messages import Publisher
+from ..core.csv_writer import CsvWriter
+from ..devices.opto_trigger import OptoTrigger
+from ..tracking.heading import FlyHeadingTracker
+from ..core.messages import Publisher
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO

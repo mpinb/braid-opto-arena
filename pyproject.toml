@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.10.*"
 dependencies = [
-    "gitpython>=3.1.43",
+    "gitpython>=3.1.44",
     "ipykernel>=6.29.5",
     "jupyter>=1.1.1",
     "matplotlib>=3.9.3",
@@ -19,9 +19,11 @@ dependencies = [
     "pyyaml>=6.0.2",
     "pyzmq>=26.2.0",
     "requests>=2.32.3",
-    "ruff>=0.8.2",
-    "scipy>=1.14.1",
+    "ruff>=0.9.1",
+    "scikit-learn>=1.6.1",
+    "scipy>=1.15.1",
     "tqdm>=4.67.1",
+    "ujson>=5.10.0",
 ]
 
 [dependency-groups]
