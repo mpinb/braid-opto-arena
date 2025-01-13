@@ -1,5 +1,5 @@
 from typing import List, Optional
-from base import ProcessManager
+from src.process.base import ProcessManager
 import subprocess
 import os
 from src.process.configs import RustProcessConfig
@@ -32,11 +32,34 @@ class RustProcessManager(ProcessManager):
 
         return [self.config.executable_path] + self.config.args
 
+    def _cleanup_process(self) -> None:
+        """Clean up the subprocess resources."""
+        if not self._process:
+            return
+
+        try:
+            if self._process.poll() is None:  # Process is still running
+                print(f"Stopping {self.name} process...")
+                self._process.terminate()
+                try:
+                    self._process.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    print(f"Force-killing {self.name} process...")
+                    self._process.kill()
+                    self._process.wait(timeout=3.0)
+
+        except Exception as e:
+            print(f"Error stopping {self.name} process: {e}")
+        finally:
+            if self._process.stdout:
+                self._process.stdout.close()
+            self._process = None
+
     def _run_process(self) -> None:
         """Run the Rust process."""
         try:
             command = self._build_command()
-            self._logger.info(f"Starting Rust process: {' '.join(command)}")
+            print(f"Starting {self.name} process: {' '.join(command)}")
 
             # Start the Rust process
             self._process = subprocess.Popen(
@@ -44,67 +67,46 @@ class RustProcessManager(ProcessManager):
                 cwd=self.config.working_dir,
                 env={**os.environ, **(self.config.env or {})},
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # Redirect stderr to stdout
                 text=True,
-                bufsize=1,  # Line buffered
+                bufsize=0,  # Unbuffered
             )
 
             # Monitor the process output
-            while self._process.poll() is None and not self.shutdown_event.is_set():
-                # Read output and error streams
-                stdout_line = (
-                    self._process.stdout.readline() if self._process.stdout else ""
-                )
-                stderr_line = (
-                    self._process.stderr.readline() if self._process.stderr else ""
-                )
+            while self._process and self._process.poll() is None and not self.shutdown_event.is_set():
+                try:
+                    line = self._process.stdout.readline()
+                    if line:
+                        print(f"{self.name}: {line.strip()}")
+                except KeyboardInterrupt:
+                    print(f"\nGracefully shutting down {self.name}...")
+                    break
+                except Exception as e:
+                    print(f"Error reading output from {self.name}: {e}")
+                    break
 
-                if stdout_line:
-                    self._logger.info(f"{self.name} output: {stdout_line.strip()}")
-                if stderr_line:
-                    self._logger.error(f"{self.name} error: {stderr_line.strip()}")
+            # Only check return code if process wasn't stopped intentionally
+            if (self._process and 
+                not self.shutdown_event.is_set() and 
+                self._process.returncode is not None and  # Add this check
+                self._process.returncode != 0):
+                raise subprocess.CalledProcessError(self._process.returncode or 1, command)  # Provide default
 
-            # Process terminated
-            if self._process.returncode != 0 and not self.shutdown_event.is_set():
-                raise subprocess.CalledProcessError(self._process.returncode, command)
 
+        except KeyboardInterrupt:
+            print(f"\nGracefully shutting down {self.name}...")
+            return  # Add explicit return to avoid raising error
         except Exception as e:
-            self._logger.error(f"Rust process failed: {e}")
+            print(f"{self.name} process failed: {str(e)}")  # Use str() to avoid formatting issues
             raise
         finally:
-            if self._process:
-                self._process.stdout.close()
-                self._process.stderr.close()
+            self._cleanup_process()
 
     def stop(self) -> None:
         """Stop the Rust process with proper cleanup."""
-        if not self._process:
-            return
-
-        if self._process.poll() is None:  # Process is still running
-            self._logger.info(f"Stopping {self.name} process...")
-
-            # Signal the process to shut down gracefully
-            self.shutdown_event.set()
-
-            try:
-                # Send SIGTERM
-                self._process.terminate()
-                try:
-                    self._process.wait(timeout=5.0)
-                except subprocess.TimeoutExpired:
-                    self._logger.warning(f"Force-killing {self.name} process...")
-                    self._process.kill()
-                    self._process.wait(timeout=3.0)
-            except Exception as e:
-                self._logger.error(f"Error stopping process: {e}")
-            finally:
-                self._process = None
-                super().stop()
-
-    def is_alive(self) -> bool:
-        """Check if the Rust process is currently running."""
-        return bool(self._process and self._process.poll() is None)
+        # Signal the process to shut down gracefully
+        self.shutdown_event.set()
+        super().stop()
 
 
 class XimeaCameraProcess(RustProcessManager):

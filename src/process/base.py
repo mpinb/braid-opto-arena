@@ -55,7 +55,7 @@ class ProcessManager(ABC):
         self.shutdown_event.clear()
         self.process = Process(target=self._run_process, name=self.name)
         self.process.start()
-        self._logger.info(f"Started {self.name} process (PID: {self.process.pid})")
+        self._logger.debug(f"Started {self.name} process (PID: {self.process.pid})")
 
     def stop(self) -> None:
         """Stop the managed process with graceful shutdown."""
@@ -63,7 +63,7 @@ class ProcessManager(ABC):
             return
 
         if self.is_alive():
-            self._logger.info(f"Stopping {self.name} process...")
+            self._logger.debug(f"Stopping {self.name} process...")
 
             # Signal the process to shut down gracefully
             self.shutdown_event.set()

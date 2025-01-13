@@ -74,7 +74,7 @@ def setup_processes(config: ConfigManager, braid_folder: str) -> ProcessGroup:
     # Initialize visual stimuli process if enabled
     if config.get("visual_stimuli", "enabled"):
         display_config = DisplayControllerConfig(
-            config_path=config.get("visual_stimuli", "config_file"),
+            config_path=config.config_path,
             braid_folder=braid_folder,
         )
         processes.add_process("visual_stimuli", DisplayProcess(display_config))
@@ -88,8 +88,8 @@ def setup_processes(config: ConfigManager, braid_folder: str) -> ProcessGroup:
         lens_config = LensControllerConfig(
             braid_url=f"{config.get('braid', 'url')}:{config.get('braid', 'event_port')}/",
             lens_port=config.get("hardware", "lensdriver", "port"),
-            config_file=config.get("lens_controller", "config_file"),
-            interp_file=config.get("lens_controller", "interp_file"),
+            config_file=config.config_path,
+            interp_file=config.get("hardware", "lensdriver", "calibration_file"),
             video_folder_path=videos_folder,
         )
         processes.add_process("liquid_lens", LensControllerProcess(lens_config))

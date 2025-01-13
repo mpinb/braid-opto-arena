@@ -1,5 +1,5 @@
-from base import ProcessManager
-from configs import DisplayControllerConfig
+from src.process.base import ProcessManager
+from src.process.configs import DisplayControllerConfig
 import signal
 import sys
 
@@ -22,7 +22,7 @@ class DisplayProcess(ProcessManager):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         try:
-            from stimuli.visual_controller import DisplayController
+            from src.stimuli.visual_controller import DisplayController
 
             controller = DisplayController(
                 config_path=self.config.config_path,

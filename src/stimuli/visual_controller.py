@@ -8,11 +8,11 @@ based on the position and heading direction of tracked objects.
 
 import argparse
 import json
+import logging
 import os
+import sys
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Type
-import logging
-import sys
 
 # Performance optimization: Use ujson if available
 try:
@@ -32,7 +32,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.core.csv_writer import CsvWriter
 from src.core.messages import Subscriber
-from visual_stimuli import (
+from src.stimuli.visual_stimuli import (
     GratingStimulus,
     LoomingStimulus,
     StaticImageStimulus,

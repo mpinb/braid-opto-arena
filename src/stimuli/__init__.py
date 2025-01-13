@@ -10,6 +10,12 @@ from .visual_stimuli import (
     LoomingStimulus,
     GratingStimulus,
 )
+from .stimulus_config import (
+    StimulusConfig,
+    StaticImageStimulusConfig,
+    LoomingStimulusConfig,
+    GratingStimulusConfig,
+)
 
 __all__ = [
     "DisplayController",

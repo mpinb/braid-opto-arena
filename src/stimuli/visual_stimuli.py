@@ -4,19 +4,24 @@ Visual Stimuli Module
 This module implements various visual stimuli types for psychophysics experiments.
 It provides a flexible framework for creating and managing different types of visual
 stimuli, with optimizations for performance and memory usage.
-
 """
 
 import os
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional, Tuple, Union, Dict, Any
+from typing import Optional, Dict, Any
 import logging
 
 import numpy as np
 import pygame
 import pandas as pd
+
+from .stimulus_config import (
+    StimulusConfig,
+    StaticImageStimulusConfig,
+    LoomingStimulusConfig,
+    GratingStimulusConfig
+)
 
 # Configure logging
 logging.basicConfig(
@@ -29,26 +34,8 @@ SCREEN_WIDTH = 640
 SCREEN_HEIGHT = 128
 CENTER_Y = SCREEN_HEIGHT // 2
 
-# Set window position (moved from global scope to avoid side effects)
+# Set window position
 os.environ["SDL_VIDEO_WINDOW_POS"] = "0,0"
-
-
-@dataclass
-class StimulusConfig:
-    """Configuration dataclass for stimulus parameters."""
-
-    type: str
-    enabled: bool = True
-    color: Union[str, Tuple[int, int, int]] = "black"
-    position_type: str = "random"
-    expansion_type: str = "exponential"
-    end_radius: Union[int, str] = 64
-    duration: Union[int, str] = 150
-
-    @classmethod
-    def from_dict(cls, config: Dict[str, Any]) -> "StimulusConfig":
-        """Create a StimulusConfig instance from a dictionary."""
-        return cls(**{k: v for k, v in config.items() if k in cls.__annotations__})
 
 
 class Stimulus(ABC):
@@ -80,12 +67,12 @@ class StaticImageStimulus(Stimulus):
     """A stimulus that displays a static image or random pattern."""
 
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
+        self.config = StaticImageStimulusConfig.from_dict(config)
         self._surface = self._create_surface()
 
     def _create_surface(self) -> pygame.Surface:
         """Create the surface based on configuration."""
-        if self.config.type == "random":
+        if self.config.image == "random":
             return self._generate_random_stimuli()
         return self._load_image(self.config.type)
 
@@ -124,7 +111,7 @@ class LoomingStimulus(Stimulus):
     """A stimulus that creates an expanding circle effect."""
 
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
+        self.config = LoomingStimulusConfig.from_dict(config)
         self._setup_expansion_parameters()
         self._initialize_state()
 
@@ -149,6 +136,7 @@ class LoomingStimulus(Stimulus):
         self.start_time: Optional[float] = None
         self.curr_frame = 0
         self.radii_array: Optional[np.ndarray] = None
+        self.n_frames: Optional[int] = None
 
     def _create_position_calculator(self):
         """Create appropriate position calculation function."""
@@ -156,7 +144,7 @@ class LoomingStimulus(Stimulus):
             return lambda _: np.random.randint(0, SCREEN_WIDTH)
         elif self.config.position_type == "closed-loop":
             return self._calculate_closed_loop_position
-        return lambda _: self.config.position_type
+        return lambda _: int(self.config.position_type)
 
     @staticmethod
     def _calculate_closed_loop_position(heading_direction: Optional[float]) -> int:
@@ -282,7 +270,7 @@ class GratingStimulus(Stimulus):
     """A stimulus that displays moving gratings."""
 
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
+        self.config = GratingStimulusConfig.from_dict(config)
         self._initialize_grating_parameters()
 
     def _initialize_grating_parameters(self) -> None:
@@ -293,5 +281,5 @@ class GratingStimulus(Stimulus):
 
     def update(self, screen: pygame.Surface, time_elapsed: int) -> None:
         """Update and draw the grating stimulus."""
-        # Placeholder for grating implementation
+        # Implementation for grating stimulus would go here
         pass

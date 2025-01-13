@@ -45,6 +45,7 @@ hardware:
     baudrate: 9600
   lensdriver:
     port: "/dev/optotune_ld"
+    calibration_file: "~/liquid_lens_calibration_20250110.csv"
 
 # High-speed camera settings
 high_speed_camera:
