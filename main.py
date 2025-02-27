@@ -6,6 +6,7 @@ import re
 import yaml
 import contextlib
 
+from src.config_manager import setup_config_with_cli_overrides
 from src.braid_proxy import BraidProxy
 from src.devices.opto_trigger import OptoTrigger
 from src.devices.power_supply import PowerSupply
@@ -39,10 +40,9 @@ def wait_for_braid_folder(base_folder):
         time.sleep(1)
 
 
-def main(args):
+def main():
     # Load config
-    with open(args.config, "r") as f:
-        config = yaml.safe_load(f)
+    config, debug_mode = setup_config_with_cli_overrides("config.yaml")
 
     time_limit_hours = config.get("experiment", {}).get(
         "time_limit", None
@@ -70,7 +70,7 @@ def main(args):
     sub_processes = {}
     if config["visual_stimuli"]["enabled"]:
         sub_processes["visual_stimuli"] = start_visual_stimuli_process(
-            args.config, braid_folder
+            config, braid_folder
         )
 
     # set and create videos folder
@@ -158,13 +158,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config", default="config.yaml", help="Path to the configuration file"
-    )
-    parser.add_argument(
-        "--debug", action="store_true", help="Run without active Braid tracking"
-    )
-    args = parser.parse_args()
-
-    main(args)
+    main()

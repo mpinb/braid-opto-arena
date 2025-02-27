@@ -36,22 +36,25 @@ braid-opto-arena/
 ## Installation
 
 1. Clone the repository:
-   ```
-   git clone https://github.com/your-username/braid-opto-trigger.git
-   cd braid-opto-arena
-   ```
+
+  ```
+  git clone https://github.com/your-username/braid-opto-trigger.git
+  cd braid-opto-arena
+  ```
 
 2. Create a virtual environment and activate it (**mamba**/conda):
-   ```
-   mamba env create -f environment.yaml
-   mamba activate braid-opto-arena-env
-   ```
+
+  ```
+  mamba env create -f environment.yaml
+  mamba activate braid-opto-arena-env
+  ```
 
 ## Configuration
 
 The project uses a YAML configuration file (`config.yaml`) to set various parameters. Make sure to adjust the configuration file according to your setup before running the program.
 
 Key configuration sections include:
+
 - Hardware settings (Arduino, power supply)
 - Braid connection details
 - Optogenetic light parameters
@@ -67,6 +70,7 @@ python main.py --config config.yaml
 ```
 
 Additional command-line arguments:
+
 - `--debug`: Run without active Braid tracking
 
 For running the visual stimuli controller separately:
@@ -74,6 +78,187 @@ For running the visual stimuli controller separately:
 ```
 python src/stimuli/visual_controller.py --config_file config.yaml --braid_folder /path/to/braid/folder
 ```
+
+# Configuration Options
+
+## Command Line Usage
+
+The configuration can be modified at runtime using the `--set` flag. The general format is:
+
+```bash
+python main.py --set key.subkey=value
+```
+
+Multiple settings can be modified using multiple `--set` flags:
+
+```bash
+python main.py --set experiment.time_limit=48 --set trigger.radius.distance=0.03
+```
+
+## Available Configuration Options
+
+### Braid System Settings
+
+```bash
+# Base URL for the Braid system
+--set braid.url=http://127.0.0.1
+
+# Event and control ports
+--set braid.event_port=8397
+--set braid.control_port=32935
+```
+
+### Experiment Settings
+
+```bash
+# Duration of experiment in hours (use 0 for unlimited)
+--set experiment.time_limit=24
+
+# Base paths for experiment data and videos
+--set experiment.exp_base_path=/path/to/experiments
+--set experiment.video_base_path=/path/to/videos
+```
+
+### Trigger Settings
+
+```bash
+# Trigger zone type (can be "box" or "radius")
+--set trigger.zone_type=radius
+
+# Box trigger settings (in meters)
+--set trigger.box.x=[-0.058,0.033]
+--set trigger.box.y=[-0.024,0.066]
+--set trigger.box.z=[0.10,0.25]
+
+# Radius trigger settings
+--set trigger.radius.center=[0,0]      # x,y coordinates in mm
+--set trigger.radius.distance=0.025     # distance from center in meters
+--set trigger.radius.z=[0.05,0.25]     # z-axis bounds in meters
+
+# Timing parameters (in seconds)
+--set trigger.min_trajectory_time=1.0
+--set trigger.min_trigger_interval=5.0
+```
+
+### Optogenetic Light Settings
+
+```bash
+# Enable/disable optogenetic light
+--set optogenetic_light.enabled=true
+
+# Light parameters
+--set optogenetic_light.duration=300       # milliseconds
+--set optogenetic_light.intensity=255      # absolute PWM value
+--set optogenetic_light.frequency=0        # Hz
+--set optogenetic_light.sham_trial_percentage=10
+```
+
+### Hardware Settings
+
+```bash
+# Arduino settings
+--set hardware.arduino.port=/dev/optotrigger
+--set hardware.arduino.baudrate=115200
+
+# Backlight settings
+--set hardware.backlight.port=/dev/powersupply
+--set hardware.backlight.voltage=24
+--set hardware.backlight.baudrate=9600
+
+# Lens driver settings
+--set hardware.lensdriver.port=/dev/optotune_ld
+```
+
+### High-Speed Camera Settings
+
+```bash
+# Enable/disable high-speed camera
+--set high_speed_camera.enabled=false
+
+# Camera configuration
+--set high_speed_camera.type=ximea
+--set high_speed_camera.pre_trigger_record_time=0.5     # seconds
+--set high_speed_camera.post_trigger_record_time=1.5    # seconds
+--set high_speed_camera.framerate=500                   # fps
+--set high_speed_camera.exposure_time=2000             # microseconds
+```
+
+### Visual Stimuli Settings
+
+```bash
+# Enable/disable visual stimuli
+--set visual_stimuli.enabled=true
+--set visual_stimuli.refresh_rate=60    # Hz
+
+# Static stimulus
+--set visual_stimuli.stimuli[0].type=static
+--set visual_stimuli.stimuli[0].image=random
+--set visual_stimuli.stimuli[0].enabled=true
+
+# Looming stimulus
+--set visual_stimuli.stimuli[1].type=looming
+--set visual_stimuli.stimuli[1].enabled=false
+--set visual_stimuli.stimuli[1].start_radius=5
+--set visual_stimuli.stimuli[1].end_radius=128
+--set visual_stimuli.stimuli[1].duration=300
+--set visual_stimuli.stimuli[1].position_type=closed-loop
+--set visual_stimuli.stimuli[1].fixed_position=[400,300]
+
+# Grating stimulus
+--set visual_stimuli.stimuli[2].type=grating
+--set visual_stimuli.stimuli[2].enabled=false
+--set visual_stimuli.stimuli[2].bar_width=20
+--set visual_stimuli.stimuli[2].frequency=2
+--set visual_stimuli.stimuli[2].direction=right   # can be 'left' or 'right'
+```
+
+### ZMQ Communication Settings
+
+```bash
+--set zmq.port=5556
+```
+
+### Logging Settings
+
+```bash
+--set logging.trigger_data_file=trigger_data.csv
+--set logging.log_level=INFO
+```
+
+## Examples
+
+Here are some common use cases:
+
+1. Change experiment duration and trigger settings:
+
+  ```bash
+  python main.py --set experiment.time_limit=48 --set trigger.radius.distance=0.03
+  ```
+
+2. Modify camera settings:
+
+  ```bash
+  python main.py --set high_speed_camera.enabled=true --set high_speed_camera.framerate=1000
+  ```
+
+3. Update optogenetic light parameters:
+
+  ```bash
+  python main.py --set optogenetic_light.duration=500 --set optogenetic_light.intensity=200
+  ```
+
+4. Change hardware ports:
+
+  ```bash
+  python main.py --set hardware.arduino.port=/dev/ttyUSB0 --set hardware.backlight.port=/dev/ttyUSB1
+  ```
+
+## Notes
+
+- Boolean values should be specified as `true` or `false` (lowercase)
+- Lists should be specified in square brackets with comma separation: `[value1,value2]`
+- String values don't need quotes unless they contain special characters
+- Numbers can be integers or floating-point values
 
 ## Components
 
@@ -128,28 +313,32 @@ The `visual_stimuli.py` file defines various visual stimuli classes used in the 
 #### Key Classes and Methods
 
 1. `Stimulus` (Abstract Base Class)
-   - `__init__(self, config)`: Initializes the stimulus with a configuration dictionary.
-   - `update(self, screen, time_elapsed)`: Abstract method to update the stimulus on the screen.
+
+  - `__init__(self, config)`: Initializes the stimulus with a configuration dictionary.
+  - `update(self, screen, time_elapsed)`: Abstract method to update the stimulus on the screen.
 
 2. `StaticImageStimulus`
-   - `__init__(self, config)`: Initializes the static image stimulus.
-   - `_create_surface(self, config)`: Creates the surface based on the configuration.
-   - `_load_image(self, image_path)`: Loads an image from a file.
-   - `_generate_random_stimuli(self, width, height, ratio)`: Generates a random stimulus pattern.
-   - `update(self, screen, time_elapsed)`: Blits the static image onto the screen.
+
+  - `__init__(self, config)`: Initializes the static image stimulus.
+  - `_create_surface(self, config)`: Creates the surface based on the configuration.
+  - `_load_image(self, image_path)`: Loads an image from a file.
+  - `_generate_random_stimuli(self, width, height, ratio)`: Generates a random stimulus pattern.
+  - `update(self, screen, time_elapsed)`: Blits the static image onto the screen.
 
 3. `LoomingStimulus`
-   - `__init__(self, config)`: Initializes the looming stimulus with configurable parameters.
-   - `_get_value(self, value, min_val, max_val)`: Helper method to get random or fixed values.
-   - `generate_natural_looming(self, max_radius, duration, l_v, distance_from_screen, hz)`: Generates a natural looming pattern.
-   - `generate_exponential_looming(self, max_radius, duration, hz)`: Generates an exponential looming pattern.
-   - `start_expansion(self, heading_direction)`: Starts the expansion of the looming stimulus.
-   - `update(self, screen, time_elapsed)`: Updates the looming stimulus on the screen.
-   - `get_trigger_info(self)`: Returns information about the current state of the stimulus.
+
+  - `__init__(self, config)`: Initializes the looming stimulus with configurable parameters.
+  - `_get_value(self, value, min_val, max_val)`: Helper method to get random or fixed values.
+  - `generate_natural_looming(self, max_radius, duration, l_v, distance_from_screen, hz)`: Generates a natural looming pattern.
+  - `generate_exponential_looming(self, max_radius, duration, hz)`: Generates an exponential looming pattern.
+  - `start_expansion(self, heading_direction)`: Starts the expansion of the looming stimulus.
+  - `update(self, screen, time_elapsed)`: Updates the looming stimulus on the screen.
+  - `get_trigger_info(self)`: Returns information about the current state of the stimulus.
 
 4. `GratingStimulus`
-   - `__init__(self, config)`: Initializes the grating stimulus.
-   - `update(self, screen, time_elapsed)`: Updates the grating stimulus on the screen (currently not implemented).
+
+  - `__init__(self, config)`: Initializes the grating stimulus.
+  - `update(self, screen, time_elapsed)`: Updates the grating stimulus on the screen (currently not implemented).
 
 #### Adding New Stimulus Types
 
@@ -175,7 +364,7 @@ class RotatingShapeStimulus(Stimulus):
     def update(self, screen, time_elapsed):
         self.angle += self.rotation_speed * time_elapsed / 1000
         center = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        
+
         if self.shape == "circle":
             pygame.draw.circle(screen, self.color, center, self.size)
         elif self.shape == "square":
@@ -200,7 +389,7 @@ STIMULUS_TYPES = {
 }
 ```
 
-2. Update your configuration file to include the new stimulus type:
+1. Update your configuration file to include the new stimulus type:
 
 ```yaml
 stimuli:

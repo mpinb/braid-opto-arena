@@ -211,7 +211,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Stimulus Display Program")
     parser.add_argument(
         "--config_file",
-        default="config.yaml",
+        default="/home/buchsbaum/src/braid-opto-arena/config.yaml",
         type=str,
         help="Path to the configuration file (.yaml)",
     )

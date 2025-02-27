@@ -27,7 +27,7 @@ trigger:
 
 # Optogenetic light parameters
 optogenetic_light:
-  enabled: true
+  enabled: false
   duration: 300  # milliseconds
   intensity: 255 # abs. PWM value
   frequency: 0  # Hz
@@ -64,11 +64,11 @@ visual_stimuli:
       enabled: true
 
     - type: looming
-      enabled: false
-      start_radius: 5 # pixels
+      enabled: true
+      start_radius: 16 # pixels
       end_radius: 128 # pixels
       duration: 300 # milliseconds
-      position_type: closed-loop
+      position_type: closed-loop both
       fixed_position: [400, 300]
 
     - type: grating

@@ -46,7 +46,7 @@ def start_visual_stimuli_process(config_path: str, braid_folder: str):
         None
     """
     command = shlex.split(
-        f"/home/buchsbaum/miniforge3/envs/braid-opto-arena-env/bin/python src/stimuli/visual_controller.py --config_file {config_path} --braid_folder {braid_folder}"
+        f"/home/buchsbaum/miniforge3/envs/braid-opto-arena-env/bin/python src/stimuli/visual_controller.py --braid_folder {braid_folder}"
     )
     return start_process(command)
 

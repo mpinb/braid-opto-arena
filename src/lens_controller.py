@@ -51,39 +51,62 @@ class UpdateMessage:
 
 
 class LensCalibration:
-    def __init__(self, z_values, dpt_values, method="poly", degree=2):
+    def __init__(self, z_values, dpt_values, n_elements=1000):
+        """
+        Initializes the LensCalibration class.
+
+        Args:
+          z_values: Array of z position values.
+          dpt_values: Array of corresponding diopter values.
+          n_elements: Number of elements in the lookup table.
+        """
         self.z_values = np.array(z_values)
         self.dpt_values = np.array(dpt_values)
-        self.method = method
+        self.n_elements = n_elements
+        self.create_lookup_table()
 
-        if method == "poly":
-            self.model = make_pipeline(PolynomialFeatures(degree), LinearRegression())
-            self.model.fit(z_values.reshape(-1, 1), dpt_values)
-        else:
-            raise ValueError("Method must be 'poly'")
+    def create_lookup_table(self):
+        """Creates a lookup table for diopter values."""
+        # Generate evenly spaced z values for the lookup table
+        self.z_table = np.linspace(self.z_values.min(), self.z_values.max(), self.n_elements)
 
-        # Calculate and log fit metrics
-        pred_values = self.get_dpt(self.z_values)
-        residuals = self.dpt_values - pred_values
-        metrics = {
-            "rmse": np.sqrt(np.mean(residuals**2)),
-            "max_error": np.max(np.abs(residuals)),
-            "mean_error": np.mean(np.abs(residuals)),
-        }
-        logger.debug(f"Lens calibration metrics: {metrics}")
+        # Interpolate dpt values for the lookup table using polynomial regression
+        self.model = make_pipeline(PolynomialFeatures(2), LinearRegression())  # Using degree 2
+        self.model.fit(self.z_values.reshape(-1, 1), self.dpt_values)
+        self.dpt_table = self.model.predict(self.z_table.reshape(-1, 1))
 
     def get_dpt(self, z):
-        """Get diopter value for given z position(s)."""
+        """
+        Gets the diopter value for a given z position by finding the closest
+        value in the lookup table.
+
+        Args:
+          z: The z position.
+
+        Returns:
+          The corresponding diopter value from the lookup table.
+        """
         z = np.asarray(z)
-        return self.model.predict(z.reshape(-1, 1))[0]
+        # Find the index of the closest z value in the lookup table
+        idx = np.abs(self.z_table - z).argmin()
+        return self.dpt_table[idx]
 
 
-def setup_lens_calibration(interp_file: str) -> LensCalibration:
-    """Set up the lens calibration model."""
+def setup_lens_calibration(interp_file: str, n_elements=1000) -> LensCalibration:
+    """
+    Sets up the lens calibration model.
+
+    Args:
+      interp_file: Path to the CSV file containing calibration data.
+      n_elements: Number of elements in the lookup table.
+
+    Returns:
+      A LensCalibration object.
+    """
     try:
         interp_data = pd.read_csv(interp_file)
         z_values, dpt_values = interp_data["z"].values, interp_data["dpt"].values
-        return LensCalibration(z_values, dpt_values, method="poly", degree=2)
+        return LensCalibration(z_values, dpt_values, n_elements)
     except Exception as e:
         logger.error(f"Error setting up lens calibration: {e}")
         raise
@@ -367,7 +390,6 @@ class LensController(Thread):
                                 value,
                             ]
                         )
-                        self.current_csv_file.flush()
 
                 except Exception as e:
                     logger.error(f"Error in lens control: {e}")
@@ -417,6 +439,7 @@ class LensController(Thread):
             logger.info(f"Tracking session lasted {elapsed_time:.2f} seconds")
 
         if self.current_csv_file:
+            self.current_csv_file.flush()
             self.current_csv_file.close()
             self.current_csv_file = None
             self.current_csv_writer = None
@@ -441,7 +464,7 @@ class LensController(Thread):
                 self.stop_tracking()
 
             if hasattr(self, "lens_driver") and self.lens_driver:
-                self.lens_driver.close()
+                self.lens_driver.disconnect()
 
         except Exception as e:
             logger.error(f"Error during LensController cleanup: {e}")

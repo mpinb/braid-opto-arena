@@ -96,6 +96,31 @@ def interp_angle(angle):
     return np.interp(angle, heading, screen, period=2 * np.pi)
 
 
+class PositionInterpolator:
+    def __init__(self):
+        df = pd.read_csv("src/stimuli/calibration.csv")
+        self.screen = df["circle"].values
+        self.heading = df["angle"].values
+
+    def heading2screen(self, heading):
+        return np.interp(heading, self.heading, self.screen, period=2 * np.pi)
+
+    def screen2heading(self, screen):
+        return np.interp(screen, self.screen, self.heading, period=640)
+
+
+def random_int_in_ranges():
+    # Randomly choose which range to sample from (0 or 1)
+    range_choice = np.random.randint(0, 2)
+
+    if range_choice == 0:
+        # Sample an integer from [-160, -80] (inclusive of -160, exclusive of -79)
+        return np.random.randint(-160, -79)
+    else:
+        # Sample an integer from [80, 160] (inclusive of 80, exclusive of 161)
+        return np.random.randint(80, 161)
+
+
 # Looming stimulus
 class LoomingStimulus(Stimulus):
     def __init__(self, config):
@@ -121,6 +146,7 @@ class LoomingStimulus(Stimulus):
         self.start_time = None
         self.expanding = False
         self.type = config.get("expansion_type", "exponential")
+        self.position_interpolator = PositionInterpolator()
 
     def _get_value(self, value, min_val, max_val):
         if value == "random":
@@ -151,9 +177,42 @@ class LoomingStimulus(Stimulus):
         if self.position_type == "random":
             self.position = self._get_value("random", 0, SCREEN_WIDTH)
 
-        elif self.position_type == "closed-loop":
+        elif "closed-loop" in self.position_type:
+            bias = 0
+
+            if "sides" in self.position_type:
+                bias = random_int_in_ranges()
+
+            elif "both" in self.position_type:
+                bias = random.randint(-160, 160)
+
+            if bias > 80:
+                self.position_relative_to_fly = "left"
+            elif bias < -80:
+                self.position_relative_to_fly = "right"
+            else:
+                self.position_relative_to_fly = "center"
+
             if heading_direction is not None:
-                self.position = int(interp_angle(heading_direction))
+                self.heading_direction = heading_direction  # original heading direction
+                self.position = int(
+                    (
+                        self.position_interpolator.heading2screen(
+                            self.heading_direction
+                        )
+                        + bias
+                    )
+                    % 640
+                )  # new position modulo 640 for the bias, so it doesn't go above 640
+
+                self.position_in_degrees = self.position_interpolator.screen2heading(
+                    self.position
+                )  # convert the position back to degrees
+
+                self.difference_in_position = np.arctan2(
+                    np.sin(self.heading_direction - self.position_in_degrees),
+                    np.cos(self.heading_direction - self.position_in_degrees),
+                )  # calculate the difference in position in radians
                 logger.debug(
                     f"heading_direction: {heading_direction}, position: {self.position}"
                 )
@@ -217,6 +276,9 @@ class LoomingStimulus(Stimulus):
             "duration": self.duration,
             "color": self.color,
             "position": self.position,
+            "position_relative_to_fly": self.position_relative_to_fly,
+            "heading_direction": self.heading_direction,
+            "heading_vs_actual_stimulus_position": self.difference_in_position,
         }
 
 

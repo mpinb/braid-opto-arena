@@ -6,15 +6,23 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "gitpython>=3.1.44",
+    "ipython>=8.31.0",
     "matplotlib>=3.10.0",
     "numpy>=2.2.1",
     "pandas>=2.2.3",
     "pre-commit>=4.0.1",
     "pygame>=2.6.1",
     "pyserial>=3.5",
+    "pyvisa-py>=0.7.2",
+    "pyvisa>=1.14.1",
     "pyzmq>=26.2.0",
     "requests>=2.32.3",
     "ruff>=0.9.0",
     "scipy>=1.15.0",
     "tqdm>=4.67.1",
+    "psutil>=6.1.1",
+    "zeroconf>=0.142.0",
+    "pyusb>=1.3.1",
+    "python-xlib>=0.33",
+    "ipykernel>=6.29.5",
 ]
